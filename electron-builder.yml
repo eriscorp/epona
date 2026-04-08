@@ -1,0 +1,23 @@
+appId: com.darkages.epona
+productName: Epona
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - 'packages/da-win32/build/**/*'
+asarUnpack:
+  - resources/**
+  - packages/da-win32/build/**
+win:
+  executableName: Epona
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+npmRebuild: false
+beforeBuild: npx @electron/rebuild -f -w da-win32

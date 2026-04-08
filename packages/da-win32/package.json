@@ -1,0 +1,14 @@
+{
+  "name": "da-win32",
+  "version": "1.0.0",
+  "description": "Win32 process interop for Dark Ages tooling",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "build:electron": "electron-rebuild -f -w da-win32"
+  },
+  "gypfile": true,
+  "devDependencies": {
+    "node-addon-api": "^8.0.0"
+  }
+}
