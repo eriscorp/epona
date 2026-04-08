@@ -41,14 +41,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  let userDataPath
-  if (process.platform === 'win32') {
-    userDataPath = join(app.getPath('home'), 'AppData', 'Local', 'Erisco', 'Epona')
-  } else {
-    userDataPath = join(app.getPath('appData'), 'Erisco', 'Epona')
-  }
-  app.setPath('userData', userDataPath)
-  settingsManager = createSettingsManager(userDataPath)
+  // Settings in %APPDATA%/Erisco/Epona (roaming), cache in %LOCALAPPDATA%/Erisco/Epona (local)
+  const settingsPath = join(app.getPath('appData'), 'Erisco', 'Epona')
+  const cachePath = join(app.getPath('cache'), 'Erisco', 'Epona')
+  app.setPath('userData', cachePath)
+  settingsManager = createSettingsManager(settingsPath)
 
   if (process.platform === 'win32') {
     app.setAppUserModelId(app.isPackaged ? 'com.darkages.epona' : process.execPath)
