@@ -43,9 +43,9 @@ function createWindow() {
 app.whenReady().then(() => {
   let userDataPath
   if (process.platform === 'win32') {
-    userDataPath = join(app.getPath('home'), 'AppData', 'Local', 'DarkAges', 'Spark')
+    userDataPath = join(app.getPath('home'), 'AppData', 'Local', 'Erisco', 'Epona')
   } else {
-    userDataPath = join(app.getPath('appData'), 'DarkAges', 'Spark')
+    userDataPath = join(app.getPath('appData'), 'Erisco', 'Epona')
   }
   app.setPath('userData', userDataPath)
   settingsManager = createSettingsManager(userDataPath)
@@ -75,9 +75,9 @@ app.whenReady().then(() => {
   })
 
   // Launch + test
-  ipcMain.handle('client:launch', async (_, settings) => {
+  ipcMain.handle('client:launch', async (_, settings, profile) => {
     if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
-    return launch(settings)
+    return launch(settings, profile)
   })
   ipcMain.handle('client:testConnection', async (_, hostname, port, version) =>
     testConnection(hostname, port, version)

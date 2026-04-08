@@ -20,10 +20,10 @@ const chadulTheme = responsiveFontSizes(createTheme({
       paper:   'rgba(4,14,6,0.90)',
     },
     text: {
-      primary:   '#a8d8a0',
-      secondary: '#6a9870',
-      disabled:  '#3a5840',
-      button:    '#a8d8a0',
+      primary:   '#c0e8b8',
+      secondary: '#88b880',
+      disabled:  '#4a6850',
+      button:    '#caffc1',
       dark:      '#020804',
     },
     divider: 'rgba(46,122,58,0.28)',
@@ -48,6 +48,13 @@ const chadulTheme = responsiveFontSizes(createTheme({
   shape: { borderRadius: 2 },
 
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          textShadow: '0 0 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5)',
+        },
+      },
+    },
     MuiPaper: {
       styleOverrides: {
         root: {
@@ -96,7 +103,7 @@ const chadulTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.1em',
-          color: '#3a5840', borderBottom: '1px solid rgba(46,122,58,0.08)',
+          color: '#88b880', borderBottom: '1px solid rgba(46,122,58,0.08)',
           '&.Mui-selected': { backgroundColor: 'rgba(46,122,58,0.14)', borderLeft: '2px solid #2e7a3a', color: '#4ab858' },
           '&:hover': { backgroundColor: 'rgba(46,122,58,0.1)', paddingLeft: '20px' },
         },
@@ -116,7 +123,7 @@ const chadulTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.65rem', letterSpacing: '0.1em',
-          backgroundColor: 'rgba(46,122,58,0.14)', color: '#2e7a3a', border: '1px solid rgba(46,122,58,0.3)',
+          backgroundColor: 'rgba(46,122,58,0.14)', color: '#4ab858', border: '1px solid rgba(46,122,58,0.3)',
         },
       },
     },
@@ -124,7 +131,7 @@ const chadulTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.7rem',
-          border: '1px solid rgba(46,122,58,0.2)', color: '#3a5840', borderRadius: 2,
+          border: '1px solid rgba(46,122,58,0.2)', color: '#88b880', borderRadius: 2,
           '&.Mui-selected': { backgroundColor: 'rgba(46,122,58,0.2)', borderColor: '#2e7a3a', color: '#4ab858' },
         },
       },
@@ -132,12 +139,37 @@ const chadulTheme = responsiveFontSizes(createTheme({
     MuiTab: {
       styleOverrides: {
         root: {
-          fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.14em', color: '#3a5840',
+          fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.14em', color: '#88b880',
           '&.Mui-selected': { color: '#4ab858' },
         },
       },
     },
     MuiTabs: { styleOverrides: { indicator: { backgroundColor: '#2e7a3a' } } },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          color: '#88b880',
+          '&.Mui-focused': { color: '#4ab858' },
+        },
+      },
+    },
+    MuiCheckbox: {
+      styleOverrides: {
+        root: {
+          color: 'rgba(46,122,58,0.5)',
+          '&.Mui-checked': { color: '#4ab858' },
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(46,122,58,0.35)' },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(46,122,58,0.6)' },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#4ab858' },
+        },
+      },
+    },
   },
 }));
 

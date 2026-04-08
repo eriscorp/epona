@@ -4,7 +4,6 @@ import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
 
 const OPTIONS = [
-  { key: 'redirectServer', label: 'Redirect Server' },
   { key: 'skipIntro', label: 'Skip Intro' },
   { key: 'multipleInstances', label: 'Multiple Instances' },
   { key: 'hideWalls', label: 'Hide Walls' }
@@ -13,7 +12,7 @@ const OPTIONS = [
 export default function OptionsPanel({ settings, onChange }) {
   return (
     <Box>
-      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+      <Typography variant="caption" color="text.button" sx={{ mb: 0.5, display: 'block' }}>
         Options
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0 }}>

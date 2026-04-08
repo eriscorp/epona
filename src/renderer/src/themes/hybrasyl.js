@@ -22,7 +22,7 @@ const hybrasylTheme = responsiveFontSizes(createTheme({
     text: {
       primary:   '#f0e6cc',
       secondary: '#a8b8c4',
-      disabled:  '#506070',
+      disabled:  '#607888',
       button:    '#f0e6cc',
       dark:      '#0c1018',
     },
@@ -48,6 +48,13 @@ const hybrasylTheme = responsiveFontSizes(createTheme({
   shape: { borderRadius: 2 },
 
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          textShadow: '0 0 4px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.4)',
+        },
+      },
+    },
     MuiPaper: {
       styleOverrides: {
         root: {
@@ -123,7 +130,7 @@ const hybrasylTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.7rem',
-          border: '1px solid rgba(58,158,144,0.2)', color: '#506070', borderRadius: 2,
+          border: '1px solid rgba(58,158,144,0.2)', color: '#8aa8b8', borderRadius: 2,
           '&.Mui-selected': { backgroundColor: 'rgba(58,158,144,0.18)', borderColor: '#3a9e90', color: '#5ecfbe' },
         },
       },
@@ -131,7 +138,7 @@ const hybrasylTheme = responsiveFontSizes(createTheme({
     MuiTab: {
       styleOverrides: {
         root: {
-          fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.14em', color: '#506070',
+          fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.14em', color: '#8aa8b8',
           '&.Mui-selected': { color: '#5ecfbe' },
         },
       },

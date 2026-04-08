@@ -23,7 +23,7 @@ const danaanTheme = responsiveFontSizes(createTheme({
       primary:   '#2a1e08',
       secondary: '#4a3c20',
       disabled:  '#9a8860',
-      button:    '#2a1e08',
+      button:    '#0c0902',
       dark:      '#1a1008',
     },
     divider: 'rgba(184,146,42,0.3)',
@@ -48,6 +48,13 @@ const danaanTheme = responsiveFontSizes(createTheme({
   shape: { borderRadius: 2 },
 
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          textShadow: '0 0 2px rgba(255,248,225,0.6), 0 0 4px rgba(184,146,42,0.2)',
+        },
+      },
+    },
     MuiPaper: {
       styleOverrides: {
         root: {
@@ -139,6 +146,31 @@ const danaanTheme = responsiveFontSizes(createTheme({
       },
     },
     MuiTabs: { styleOverrides: { indicator: { backgroundColor: '#b8922a' } } },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          color: '#5a4828',
+          '&.Mui-focused': { color: '#7a5e18' },
+        },
+      },
+    },
+    MuiCheckbox: {
+      styleOverrides: {
+        root: {
+          color: 'rgba(184,146,42,0.5)',
+          '&.Mui-checked': { color: '#b8922a' },
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(184,146,42,0.4)' },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(184,146,42,0.7)' },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#b8922a' },
+        },
+      },
+    },
   },
 }));
 

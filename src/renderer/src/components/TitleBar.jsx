@@ -1,34 +1,60 @@
-import Box from '@mui/material/Box'
-import IconButton from '@mui/material/IconButton'
-import Typography from '@mui/material/Typography'
-import RemoveIcon from '@mui/icons-material/Remove'
-import CloseIcon from '@mui/icons-material/Close'
+import { Toolbar, IconButton, Tooltip, Box, Typography } from '@mui/material'
+import { GiContract, GiExpand, GiDeathSkull } from 'react-icons/gi'
+
+const iconSx = {
+  '& svg': {
+    fontSize: '1.4em',
+    stroke: 'rgba(0,0,0,0.25)',
+    strokeWidth: 44
+  }
+}
+
+const winBtnSx = {
+  WebkitAppRegion: 'no-drag',
+  color: 'text.button',
+  ...iconSx,
+  '&:hover': {
+    backgroundColor: 'info.main',
+    color: 'text.dark'
+  }
+}
 
 export default function TitleBar() {
   return (
-    <Box
+    <Toolbar
+      variant="dense"
       sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: 36,
+        bgcolor: 'secondary.main',
+        minHeight: 36,
         px: 1.5,
-        bgcolor: 'background.paper',
         WebkitAppRegion: 'drag',
         flexShrink: 0
       }}
     >
-      <Typography variant="caption" sx={{ color: 'text.secondary', letterSpacing: 1 }}>
-        EPONA
+      <Typography variant="h6" sx={{ fontWeight: 'bold', flexGrow: 0, fontSize: '1.5rem' }}>
+        Epona
       </Typography>
-      <Box sx={{ WebkitAppRegion: 'no-drag', display: 'flex' }}>
-        <IconButton size="small" onClick={() => window.sparkAPI.minimizeWindow()} sx={{ p: 0.5 }}>
-          <RemoveIcon fontSize="small" />
+
+      <Box sx={{ flexGrow: 1 }} />
+
+      <Tooltip title="Minimize">
+        <IconButton
+          size="small"
+          sx={winBtnSx}
+          onClick={() => window.sparkAPI.minimizeWindow()}
+        >
+          <GiContract />
         </IconButton>
-        <IconButton size="small" onClick={() => window.sparkAPI.closeWindow()} sx={{ p: 0.5 }}>
-          <CloseIcon fontSize="small" />
+      </Tooltip>
+      <Tooltip title="Close">
+        <IconButton
+          size="small"
+          sx={{ ...winBtnSx, '&:hover': { backgroundColor: 'info.main', color: 'warning.main' } }}
+          onClick={() => window.sparkAPI.closeWindow()}
+        >
+          <GiDeathSkull />
         </IconButton>
-      </Box>
-    </Box>
+      </Tooltip>
+    </Toolbar>
   )
 }

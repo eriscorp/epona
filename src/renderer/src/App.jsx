@@ -1,34 +1,38 @@
 import { useState, useEffect } from 'react'
 import { ThemeProvider, CssBaseline } from '@mui/material'
 import Box from '@mui/material/Box'
+import Divider from '@mui/material/Divider'
 import hybrasylTheme from './themes/hybrasyl'
 import chadulTheme from './themes/chadul'
 import danaanTheme from './themes/danaan'
 import grinnealTheme from './themes/grinneal'
+import sparkTheme from './themes/spark'
 import TitleBar from './components/TitleBar'
-import ClientPathPicker from './components/ClientPathPicker'
-import VersionSelector from './components/VersionSelector'
-import ServerConfig from './components/ServerConfig'
+import NavToolbar from './components/NavToolbar'
+import ProfileSelector from './components/ProfileSelector'
 import OptionsPanel from './components/OptionsPanel'
 import ActionButtons from './components/ActionButtons'
+import SettingsDrawer from './components/SettingsDrawer'
 
 const themes = {
   hybrasyl: hybrasylTheme,
   chadul: chadulTheme,
   danaan: danaanTheme,
-  grinneal: grinnealTheme
+  grinneal: grinnealTheme,
+  spark: sparkTheme
 }
 
 const defaultSettings = {
   clientPath: '',
   version: 'auto',
-  serverHostname: 'da0.kru.com',
-  serverPort: 2610,
-  redirectServer: true,
   skipIntro: true,
   multipleInstances: true,
   hideWalls: false,
-  theme: 'hybrasyl'
+  theme: 'hybrasyl',
+  activeProfile: 'official',
+  profiles: [
+    { id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }
+  ]
 }
 
 export default function App() {
@@ -36,11 +40,17 @@ export default function App() {
   const [versions, setVersions] = useState([])
   const [detectedVersion, setDetectedVersion] = useState(null)
   const [themeName, setThemeName] = useState('hybrasyl')
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     window.sparkAPI.loadSettings().then((s) => {
       setSettings((prev) => ({ ...prev, ...s }))
       if (s.theme && themes[s.theme]) setThemeName(s.theme)
+      if (s.clientPath) {
+        window.sparkAPI.detectVersion(s.clientPath).then((result) => {
+          setDetectedVersion(result.found ? result.name : null)
+        })
+      }
     })
     window.sparkAPI.listVersions().then(setVersions)
   }, [])
@@ -52,6 +62,25 @@ export default function App() {
       if (patch.theme && themes[patch.theme]) setThemeName(patch.theme)
       return next
     })
+
+    if (patch.clientPath !== undefined) {
+      if (patch.clientPath) {
+        window.sparkAPI.detectVersion(patch.clientPath).then((result) => {
+          setDetectedVersion(result.found ? result.name : null)
+        })
+      } else {
+        setDetectedVersion(null)
+      }
+    }
+  }
+
+  function getActiveProfile() {
+    return settings.profiles.find((p) => p.id === settings.activeProfile) || settings.profiles[0]
+  }
+
+  async function handleLocateClient() {
+    const path = await window.sparkAPI.openExeDialog()
+    if (path) update({ clientPath: path })
   }
 
   const currentTheme = themes[themeName] || hybrasylTheme
@@ -70,39 +99,32 @@ export default function App() {
         }}
       >
         <TitleBar />
+        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+        <NavToolbar
+          detectedVersion={detectedVersion}
+          onLocateClient={handleLocateClient}
+          onToggleSettings={() => setSettingsOpen((o) => !o)}
+        />
+        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-          <ClientPathPicker
-            clientPath={settings.clientPath}
-            detectedVersion={detectedVersion}
-            onPathChange={(path) => {
-              update({ clientPath: path })
-              if (path) {
-                window.sparkAPI.detectVersion(path).then((result) => {
-                  setDetectedVersion(result.found ? result.name : null)
-                  if (result.found && settings.version === 'auto') {
-                    update({ version: result.versionCode })
-                  }
-                })
-              } else {
-                setDetectedVersion(null)
-              }
-            }}
-          />
-          <VersionSelector
-            versions={versions}
-            value={settings.version}
-            onChange={(v) => update({ version: v })}
+          <ProfileSelector
+            profiles={settings.profiles}
+            activeProfile={settings.activeProfile}
+            onChange={(id) => update({ activeProfile: id })}
           />
           <OptionsPanel settings={settings} onChange={update} />
-          <ServerConfig
-            hostname={settings.serverHostname}
-            port={settings.serverPort}
-            disabled={!settings.redirectServer}
-            onChange={update}
-          />
-          <ActionButtons settings={settings} />
+          <ActionButtons settings={settings} getActiveProfile={getActiveProfile} />
         </Box>
       </Box>
+
+      <SettingsDrawer
+        open={settingsOpen}
+        settings={settings}
+        versions={versions}
+        onClose={() => setSettingsOpen(false)}
+        onChange={update}
+      />
     </ThemeProvider>
   )
 }

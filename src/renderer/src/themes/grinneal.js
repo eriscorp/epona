@@ -13,17 +13,17 @@ const grinnealTheme = responsiveFontSizes(createTheme({
       main:        '#907858',
       light:       '#b89870',
       dark:        '#604830',
-      contrastText:'#1a1408',
+      contrastText:'#f0e0c8',
     },
     background: {
       default: '#27221c',
       paper:   'rgba(22,18,14,0.88)',
     },
     text: {
-      primary:   '#d4c4a8',
-      secondary: '#9a8a70',
-      disabled:  '#5a4e3c',
-      button:    '#d4c4a8',
+      primary:   '#e0d0b4',
+      secondary: '#b8a888',
+      disabled:  '#6a5e4c',
+      button:    '#e0d0b4',
       dark:      '#1a1408',
     },
     divider: 'rgba(122,106,80,0.25)',
@@ -48,6 +48,13 @@ const grinnealTheme = responsiveFontSizes(createTheme({
   shape: { borderRadius: 2 },
 
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          textShadow: '0 0 2px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.4)',
+        },
+      },
+    },
     MuiPaper: {
       styleOverrides: {
         root: {
@@ -64,12 +71,12 @@ const grinnealTheme = responsiveFontSizes(createTheme({
         root: {
           borderRadius: 2,
           border: '1px solid #6a7a50',
-          color:  '#8a9a68',
+          color:  '#a8b880',
           '&:hover': { backgroundColor: 'rgba(106,122,80,0.14)', borderColor: '#8a9a68' },
         },
         contained: {
           backgroundColor: 'rgba(106,122,80,0.22)',
-          color: '#d4c4a8',
+          color: '#e0d0b4',
           '&:hover': { backgroundColor: 'rgba(106,122,80,0.36)' },
         },
       },
@@ -96,8 +103,8 @@ const grinnealTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.1em',
-          color: '#5a4e3c', borderBottom: '1px solid rgba(122,106,80,0.08)',
-          '&.Mui-selected': { backgroundColor: 'rgba(106,122,80,0.12)', borderLeft: '2px solid #6a7a50', color: '#8a9a68' },
+          color: '#b8a888', borderBottom: '1px solid rgba(122,106,80,0.08)',
+          '&.Mui-selected': { backgroundColor: 'rgba(106,122,80,0.12)', borderLeft: '2px solid #6a7a50', color: '#a8b880' },
           '&:hover': { backgroundColor: 'rgba(122,106,80,0.1)', paddingLeft: '20px' },
         },
       },
@@ -116,7 +123,7 @@ const grinnealTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.65rem', letterSpacing: '0.1em',
-          backgroundColor: 'rgba(106,122,80,0.14)', color: '#6a7a50', border: '1px solid rgba(122,106,80,0.3)',
+          backgroundColor: 'rgba(106,122,80,0.14)', color: '#a8b880', border: '1px solid rgba(122,106,80,0.3)',
         },
       },
     },
@@ -124,20 +131,45 @@ const grinnealTheme = responsiveFontSizes(createTheme({
       styleOverrides: {
         root: {
           fontFamily: '"Cinzel", serif', fontSize: '0.7rem',
-          border: '1px solid rgba(122,106,80,0.2)', color: '#5a4e3c', borderRadius: 2,
-          '&.Mui-selected': { backgroundColor: 'rgba(106,122,80,0.18)', borderColor: '#6a7a50', color: '#8a9a68' },
+          border: '1px solid rgba(122,106,80,0.2)', color: '#b8a888', borderRadius: 2,
+          '&.Mui-selected': { backgroundColor: 'rgba(106,122,80,0.18)', borderColor: '#6a7a50', color: '#a8b880' },
         },
       },
     },
     MuiTab: {
       styleOverrides: {
         root: {
-          fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.14em', color: '#5a4e3c',
-          '&.Mui-selected': { color: '#8a9a68' },
+          fontFamily: '"Cinzel", serif', fontSize: '0.7rem', letterSpacing: '0.14em', color: '#b8a888',
+          '&.Mui-selected': { color: '#a8b880' },
         },
       },
     },
     MuiTabs: { styleOverrides: { indicator: { backgroundColor: '#6a7a50' } } },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: {
+          color: '#b8a888',
+          '&.Mui-focused': { color: '#a8b880' },
+        },
+      },
+    },
+    MuiCheckbox: {
+      styleOverrides: {
+        root: {
+          color: 'rgba(122,106,80,0.5)',
+          '&.Mui-checked': { color: '#a8b880' },
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(122,106,80,0.35)' },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(122,106,80,0.6)' },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#a8b880' },
+        },
+      },
+    },
   },
 }));
 

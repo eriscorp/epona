@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   listVersions: () => ipcRenderer.invoke('versions:list'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: () => ipcRenderer.invoke('dialog:openExe'),
-  launch: (settings) => ipcRenderer.invoke('client:launch', settings),
+  launch: (settings, profile) => ipcRenderer.invoke('client:launch', settings, profile),
   testConnection: (hostname, port, version) =>
     ipcRenderer.invoke('client:testConnection', hostname, port, version),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),

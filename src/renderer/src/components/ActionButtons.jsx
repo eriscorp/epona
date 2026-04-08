@@ -5,25 +5,31 @@ import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 
-export default function ActionButtons({ settings }) {
+export default function ActionButtons({ settings, getActiveProfile }) {
   const [launching, setLaunching] = useState(false)
   const [testing, setTesting] = useState(false)
   const [snack, setSnack] = useState(null)
 
   async function handleLaunch() {
-    if (!settings.clientPath) return setSnack({ severity: 'warning', message: 'No client path set' })
+    if (!settings.clientPath)
+      return setSnack({ severity: 'warning', message: 'No client path set — open Settings' })
+    const profile = getActiveProfile()
     setLaunching(true)
-    const result = await window.sparkAPI.launch(settings)
+    const result = await window.sparkAPI.launch(settings, profile)
     setLaunching(false)
     if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Launch failed' })
   }
 
   async function handleTest() {
-    if (!settings.serverHostname) return setSnack({ severity: 'warning', message: 'No hostname set' })
+    const profile = getActiveProfile()
+    if (!profile.redirect)
+      return setSnack({ severity: 'info', message: 'Official server — no redirect to test' })
+    if (!profile.hostname)
+      return setSnack({ severity: 'warning', message: 'No hostname set for this profile' })
     setTesting(true)
     const result = await window.sparkAPI.testConnection(
-      settings.serverHostname,
-      settings.serverPort,
+      profile.hostname,
+      profile.port,
       settings.version === 'auto' ? 741 : settings.version
     )
     setTesting(false)
@@ -38,11 +44,12 @@ export default function ActionButtons({ settings }) {
     <>
       <Box sx={{ display: 'flex', gap: 1, mt: 'auto' }}>
         <Button
-          variant="outlined"
+          variant="contained"
           fullWidth
-          disabled={testing || !settings.redirectServer}
+          disabled={testing}
           onClick={handleTest}
           startIcon={testing ? <CircularProgress size={14} /> : null}
+          sx={{color: 'text.button'}}
         >
           {testing ? 'Testing…' : 'Test Connection'}
         </Button>
@@ -52,6 +59,7 @@ export default function ActionButtons({ settings }) {
           disabled={launching}
           onClick={handleLaunch}
           startIcon={launching ? <CircularProgress size={14} color="inherit" /> : null}
+          sx={{color: 'text.button'}}
         >
           {launching ? 'Launching…' : 'Launch Client'}
         </Button>

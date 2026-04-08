@@ -8,19 +8,10 @@ const win32 =
     ? createRequire(import.meta.url)('da-win32')
     : null
 
-export async function launch(settings) {
+export async function launch(settings, profile) {
   if (!win32) return { success: false, error: 'Windows only' }
 
-  const {
-    clientPath,
-    version: versionSetting,
-    redirectServer,
-    serverHostname,
-    serverPort,
-    skipIntro,
-    multipleInstances,
-    hideWalls
-  } = settings
+  const { clientPath, version: versionSetting, skipIntro, multipleInstances, hideWalls } = settings
 
   // Resolve 'auto' by detecting from the exe, otherwise use the selected version code
   let versionCode = versionSetting
@@ -47,8 +38,8 @@ export async function launch(settings) {
     memHandle = win32.openProcess(proc.processId, PROCESS_VM_WRITE | PROCESS_VM_OPERATION)
 
     // 3. Apply patches
-    if (redirectServer && serverHostname) {
-      const { address } = await lookup(serverHostname)
+    if (profile.redirect && profile.hostname) {
+      const { address } = await lookup(profile.hostname)
       const ip = address.split('.').map(Number)
       const hostnameBytes = Buffer.from([
         0x6a, ip[3], 0x6a, ip[2], 0x6a, ip[1], 0x6a, ip[0]
@@ -63,8 +54,7 @@ export async function launch(settings) {
         )
       }
 
-      const port = serverPort
-      const portBytes = Buffer.from([port & 0xff, (port >> 8) & 0xff])
+      const portBytes = Buffer.from([profile.port & 0xff, (profile.port >> 8) & 0xff])
       win32.writeProcessMemory(memHandle, version.portPatchAddress, portBytes)
     }
 
