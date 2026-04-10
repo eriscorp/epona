@@ -15,7 +15,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     frame: false,
-    icon: join(__dirname, '../../resources/icon.png'),
+    icon: join(__dirname, '../../resources/epona.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

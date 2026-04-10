@@ -14,10 +14,11 @@ asarUnpack:
   - packages/da-win32/build/**
 win:
   executableName: Epona
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  target:
+    - target: portable
+      arch:
+        - x64
+portable:
+  artifactName: ${name}-${version}-portable.${ext}
 npmRebuild: false
 beforeBuild: npx @electron/rebuild -f -w da-win32

@@ -1,5 +1,6 @@
 import { Toolbar, IconButton, Tooltip, Box, Typography } from '@mui/material'
 import { GiContract, GiExpand, GiDeathSkull } from 'react-icons/gi'
+import eponaLogo from '../assets/epona.png'
 
 const iconSx = {
   '& svg': {
@@ -31,6 +32,7 @@ export default function TitleBar() {
         flexShrink: 0
       }}
     >
+      <img src={eponaLogo} alt="Epona" style={{ height: 28, marginRight: 8 }} />
       <Typography variant="h6" sx={{ fontWeight: 'bold', flexGrow: 0, fontSize: '1.5rem' }}>
         Epona
       </Typography>

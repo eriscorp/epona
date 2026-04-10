@@ -15,7 +15,8 @@
     "postinstall": "electron-builder install-app-deps",
     "rebuild": "npx @electron/rebuild -f -w da-win32",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win"
+    "build:win": "npm run build && electron-builder --win",
+    "build:portable": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
