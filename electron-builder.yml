@@ -8,9 +8,11 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - 'packages/da-win32/build/**/*'
+  - '!packages/da-win32/src/**'
+  - '!packages/da-win32/binding.gyp'
 asarUnpack:
   - resources/**
+  - node_modules/da-win32/build/**
   - packages/da-win32/build/**
 win:
   executableName: Epona
