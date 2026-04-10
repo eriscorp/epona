@@ -7,14 +7,14 @@ Built with Electron + React + MUI.
 ## Features
 
 - **In-memory patching** — patches the DA client process at launch using Win32 kernel32 APIs (`CreateProcess`, `WriteProcessMemory`, `ResumeThread`), no files on disk are modified
-- **Server redirect** — point the client at any hostname and port via DNS resolution and address patching
+- **Server profiles** — define and switch between named server configurations (official, localhost, custom servers); each profile carries its own hostname, port, and redirect toggle
 - **Skip intro** — bypass the intro video sequence
 - **Multiple instances** — allow more than one client to run simultaneously
 - **Hide walls** — toggle wall visibility
 - **Auto-detect client version** — MD5 hash detection for 7.37, 7.39, 7.40, and 7.41
 - **Server connection tester** — validates server reachability using the DA wire protocol handshake
-- **Settings persistence** — all options saved to `%LOCALAPPDATA%\DarkAges\Spark\settings.json`
-- **Theme support** — four themes shared with Creidhne and Taliesin (Hybrasyl, Chadul, Danaan, Grinneal)
+- **Settings persistence** — settings saved to `%APPDATA%\Erisco\Epona\settings.json` (roaming), Chromium cache to `%LOCALAPPDATA%\Erisco\Epona\` (local). Atomic writes with backup rotation.
+- **Theme support** — five themes (Hybrasyl, Chadul, Danaan, Grinneal — shared with Creidhne and Taliesin — plus Spark, a faithful port of the original WPF launcher's dark theme)
 
 ## Supported client versions
 
@@ -43,7 +43,7 @@ All handles are exposed as `BigInt` — never coerced to `Number`.
 
 ## Installation
 
-Pre-built releases for Windows are available on the [releases page](../../releases).
+Pre-built portable releases for Windows are available on the [releases page](../../releases). Download the `Epona-x.y.z-portable.exe` and run it directly — no installer, no admin rights required.
 
 ## Building from source
 
@@ -51,12 +51,14 @@ Requires Visual Studio Build Tools with the C++ workload (for the native addon).
 
 ```bash
 npm install
-npm run rebuild      # compile da-win32 against Electron's Node
-npm run dev          # development
-npm run build:win    # Windows installer
+npm run rebuild         # compile da-win32 against Electron's Node
+npm run dev             # development
+npm run build:portable  # Windows portable .exe
 ```
 
 Node.js 18+ required; development is done on Node 24.
+
+Releases are produced via GitHub Actions on `v*` tag push — see [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 ## Project structure
 
@@ -65,8 +67,8 @@ Node.js 18+ required; development is done on Node 24.
 | `packages/da-win32/` | Reusable N-API native addon for Win32 process interop |
 | `src/main/` | Electron main process — IPC handlers, launcher, server tester |
 | `src/preload/` | Context bridge exposing `sparkAPI` to the renderer |
-| `src/renderer/src/components/` | UI components — title bar, path picker, options, action buttons |
-| `src/renderer/src/themes/` | MUI themes shared with Creidhne and Taliesin |
+| `src/renderer/src/components/` | UI components — title bar, nav toolbar, profile selector, options, action buttons, settings drawer |
+| `src/renderer/src/themes/` | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark) |
 
 ## Contributing
 
