@@ -36,7 +36,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@eslint/js": "^9.39.4",
     "@vitejs/plugin-react": "^4.7.0",
-    "electron": "41.1.0",
+    "electron": "^41.1.0",
     "electron-builder": "^26.8.1",
     "@electron/rebuild": "^4.0.1",
     "electron-vite": "^5.0.0",
