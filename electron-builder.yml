@@ -16,6 +16,7 @@ asarUnpack:
   - packages/da-win32/build/**
 win:
   executableName: Epona
+  icon: resources/epona.png
   target:
     - target: portable
       arch:
