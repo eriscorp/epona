@@ -11,7 +11,7 @@ const DEFAULT_PROFILES = [
   }
 ]
 
-const DEFAULT_CHAOS_TARGET = {
+const DEFAULT_HYBRASYL_TARGET = {
   clientPath: '',
   dataPath: 'E:\\Games\\Dark Ages',
   showConsole: false
@@ -27,7 +27,7 @@ const DEFAULTS = {
   theme: 'hybrasyl',
   activeProfile: 'official',
   profiles: DEFAULT_PROFILES,
-  targets: { chaos: DEFAULT_CHAOS_TARGET }
+  targets: { hybrasyl: DEFAULT_HYBRASYL_TARGET }
 }
 
 function validate(data) {
@@ -57,8 +57,20 @@ function migrateProfiles(data) {
   return data
 }
 
+// Rename settings.targets.chaos (stage-2 key) to settings.targets.hybrasyl.
+// The downstream project is being renamed; we keep the old key readable for
+// one pass, move its contents, then drop it.
+function migrateHybrasylTarget(data) {
+  if (data?.targets && data.targets.chaos && !data.targets.hybrasyl) {
+    data.targets.hybrasyl = data.targets.chaos
+    delete data.targets.chaos
+  }
+  return data
+}
+
 function withDefaults(data) {
   data = migrateProfiles(data)
+  data = migrateHybrasylTarget(data)
   return {
     targetKind: typeof data?.targetKind === 'string' ? data.targetKind : DEFAULTS.targetKind,
     clientPath: typeof data?.clientPath === 'string' ? data.clientPath : DEFAULTS.clientPath,
@@ -75,19 +87,19 @@ function withDefaults(data) {
       ? data.profiles
       : DEFAULTS.profiles,
     targets: {
-      chaos: {
+      hybrasyl: {
         clientPath:
-          typeof data?.targets?.chaos?.clientPath === 'string'
-            ? data.targets.chaos.clientPath
-            : DEFAULT_CHAOS_TARGET.clientPath,
+          typeof data?.targets?.hybrasyl?.clientPath === 'string'
+            ? data.targets.hybrasyl.clientPath
+            : DEFAULT_HYBRASYL_TARGET.clientPath,
         dataPath:
-          typeof data?.targets?.chaos?.dataPath === 'string'
-            ? data.targets.chaos.dataPath
-            : DEFAULT_CHAOS_TARGET.dataPath,
+          typeof data?.targets?.hybrasyl?.dataPath === 'string'
+            ? data.targets.hybrasyl.dataPath
+            : DEFAULT_HYBRASYL_TARGET.dataPath,
         showConsole:
-          typeof data?.targets?.chaos?.showConsole === 'boolean'
-            ? data.targets.chaos.showConsole
-            : DEFAULT_CHAOS_TARGET.showConsole
+          typeof data?.targets?.hybrasyl?.showConsole === 'boolean'
+            ? data.targets.hybrasyl.showConsole
+            : DEFAULT_HYBRASYL_TARGET.showConsole
       }
     }
   }
@@ -125,7 +137,7 @@ export function createSettingsManager(userDataPath) {
     return {
       ...DEFAULTS,
       profiles: [...DEFAULT_PROFILES],
-      targets: { chaos: { ...DEFAULT_CHAOS_TARGET } }
+      targets: { hybrasyl: { ...DEFAULT_HYBRASYL_TARGET } }
     }
   }
 

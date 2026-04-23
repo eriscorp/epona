@@ -13,8 +13,17 @@ body {
   -webkit-user-select: none;
 }
 
+html,
+body,
 #root {
-  width: 480px;
-  height: 640px;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+#root {
   overflow: hidden;
 }

@@ -175,11 +175,11 @@ describe('targetKind', () => {
   })
 
   it('preserves a non-default targetKind already in settings', async () => {
-    const future = { targetKind: 'chaos', clientPath: '' }
+    const future = { targetKind: 'hybrasyl', clientPath: '' }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(future), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targetKind).toBe('chaos')
+    expect(settings.targetKind).toBe('hybrasyl')
   })
 
   it('replaces a non-string targetKind with the legacy default', async () => {
@@ -191,15 +191,15 @@ describe('targetKind', () => {
   })
 })
 
-describe('targets.chaos', () => {
+describe('targets.hybrasyl', () => {
   it('defaults to empty clientPath, the game data path, and a hidden console', async () => {
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.chaos.clientPath).toBe('')
-    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
-    expect(settings.targets.chaos.showConsole).toBe(false)
+    expect(settings.targets.hybrasyl.clientPath).toBe('')
+    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.showConsole).toBe(false)
   })
 
-  it('fills in chaos defaults when pre-Stage-2 settings lack a targets key', async () => {
+  it('fills in hybrasyl defaults when pre-Stage-2 settings lack a targets key', async () => {
     const preStage2 = {
       targetKind: 'legacy',
       clientPath: 'C:/Darkages.exe',
@@ -209,44 +209,44 @@ describe('targets.chaos', () => {
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(preStage2), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.chaos.clientPath).toBe('')
-    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.clientPath).toBe('')
+    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
   })
 
-  it('preserves existing chaos settings on round-trip', async () => {
+  it('preserves existing hybrasyl settings on round-trip', async () => {
     const mgr = createSettingsManager(dir)
     const base = await mgr.load()
     await mgr.save({
       ...base,
-      targets: { chaos: { clientPath: 'D:/client-repo/bin/Release/net10.0/client.exe', dataPath: 'D:/DA' } }
+      targets: { hybrasyl: { clientPath: 'D:/client-repo/bin/Release/net10.0/client.exe', dataPath: 'D:/DA' } }
     })
 
     const reloaded = await createSettingsManager(dir).load()
-    expect(reloaded.targets.chaos.clientPath).toBe('D:/client-repo/bin/Release/net10.0/client.exe')
-    expect(reloaded.targets.chaos.dataPath).toBe('D:/DA')
+    expect(reloaded.targets.hybrasyl.clientPath).toBe('D:/client-repo/bin/Release/net10.0/client.exe')
+    expect(reloaded.targets.hybrasyl.dataPath).toBe('D:/DA')
   })
 
-  it('fills in only the missing field when targets.chaos is partial', async () => {
+  it('fills in only the missing field when targets.hybrasyl is partial', async () => {
     const partial = {
-      targets: { chaos: { clientPath: 'D:/client.exe' } }
+      targets: { hybrasyl: { clientPath: 'D:/client.exe' } }
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(partial), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.chaos.clientPath).toBe('D:/client.exe')
-    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.clientPath).toBe('D:/client.exe')
+    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
   })
 
-  it('replaces wrong-typed chaos fields with defaults', async () => {
+  it('replaces wrong-typed hybrasyl fields with defaults', async () => {
     const garbage = {
-      targets: { chaos: { clientPath: 42, dataPath: null, showConsole: 'yes' } }
+      targets: { hybrasyl: { clientPath: 42, dataPath: null, showConsole: 'yes' } }
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(garbage), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.chaos.clientPath).toBe('')
-    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
-    expect(settings.targets.chaos.showConsole).toBe(false)
+    expect(settings.targets.hybrasyl.clientPath).toBe('')
+    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.showConsole).toBe(false)
   })
 
   it('round-trips a showConsole=true preference', async () => {
@@ -254,11 +254,36 @@ describe('targets.chaos', () => {
     const base = await mgr.load()
     await mgr.save({
       ...base,
-      targets: { chaos: { ...base.targets.chaos, showConsole: true } }
+      targets: { hybrasyl: { ...base.targets.hybrasyl, showConsole: true } }
     })
 
     const reloaded = await createSettingsManager(dir).load()
-    expect(reloaded.targets.chaos.showConsole).toBe(true)
+    expect(reloaded.targets.hybrasyl.showConsole).toBe(true)
+  })
+
+  it('migrates settings.targets.chaos (legacy stage-2 key) to .hybrasyl', async () => {
+    const stage2 = {
+      targets: {
+        chaos: {
+          clientPath: 'D:/client.exe',
+          dataPath: 'D:/DA',
+          showConsole: true
+        }
+      }
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(stage2), 'utf-8')
+
+    const mgr = createSettingsManager(dir)
+    const settings = await mgr.load()
+
+    expect(settings.targets.hybrasyl.clientPath).toBe('D:/client.exe')
+    expect(settings.targets.hybrasyl.dataPath).toBe('D:/DA')
+    expect(settings.targets.hybrasyl.showConsole).toBe(true)
+
+    await mgr.save(settings)
+    const onDisk = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
+    expect(onDisk.targets.chaos).toBeUndefined()
+    expect(onDisk.targets.hybrasyl.clientPath).toBe('D:/client.exe')
   })
 })
 

@@ -5,6 +5,9 @@ import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
+import TerminalIcon from '@mui/icons-material/Terminal'
 
 function kindLabel(kind) {
   if (kind === 'exe') return { label: 'Prebuilt .exe', color: 'success' }
@@ -13,33 +16,40 @@ function kindLabel(kind) {
   return { label: 'Not set', color: 'default' }
 }
 
-export default function ChaosOptionsPanel({ chaos, onChange }) {
+export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, onToggleLogPane }) {
   const [resolution, setResolution] = useState({ kind: null })
   const [runtime, setRuntime] = useState({ dotnetFound: null, netCoreApp10: null })
 
   useEffect(() => {
-    if (chaos.clientPath) {
-      window.sparkAPI.detectChaosPath(chaos.clientPath).then(setResolution)
+    if (hybrasyl.clientPath) {
+      window.sparkAPI.detectHybrasylPath(hybrasyl.clientPath).then(setResolution)
     } else {
       setResolution({ kind: null })
     }
-  }, [chaos.clientPath])
+  }, [hybrasyl.clientPath])
 
   useEffect(() => {
     window.sparkAPI.checkDotnetRuntime().then(setRuntime)
   }, [])
 
   async function pickClientPath() {
-    const path = await window.sparkAPI.pickChaosPath()
-    if (path) onChange({ targets: { chaos: { ...chaos, clientPath: path } } })
+    const path = await window.sparkAPI.pickHybrasylPath()
+    if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, clientPath: path } } })
   }
 
   async function pickDataPath() {
-    const path = await window.sparkAPI.pickChaosDataDir()
-    if (path) onChange({ targets: { chaos: { ...chaos, dataPath: path } } })
+    const path = await window.sparkAPI.pickHybrasylDataDir()
+    if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, dataPath: path } } })
   }
 
   const kind = kindLabel(resolution.kind)
+  // Console pane is only meaningful for source/dotnet-run launches — exe
+  // launches are fire-and-forget with no stdio pipes (multi-instance allowed).
+  const consoleAvailable = resolution.kind === 'repo'
+  const consoleTooltip = consoleAvailable
+    ? logPaneOpen ? 'Hide console' : 'Show console'
+    : 'Console output is only available for source (.csproj) launches'
+
   const runtimeOk = runtime.netCoreApp10 === true
   const runtimeChip =
     runtime.dotnetFound === null
@@ -67,10 +77,10 @@ export default function ChaosOptionsPanel({ chaos, onChange }) {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              opacity: chaos.clientPath ? 1 : 0.5
+              opacity: hybrasyl.clientPath ? 1 : 0.5
             }}
           >
-            {chaos.clientPath || '(none — pick a client .exe or .csproj)'}
+            {hybrasyl.clientPath || '(none — pick a client .exe or .csproj)'}
           </Typography>
           <Button size="small" variant="outlined" onClick={pickClientPath}>
             Browse…
@@ -99,7 +109,7 @@ export default function ChaosOptionsPanel({ chaos, onChange }) {
               textOverflow: 'ellipsis'
             }}
           >
-            {chaos.dataPath}
+            {hybrasyl.dataPath}
           </Typography>
           <Button size="small" variant="outlined" onClick={pickDataPath}>
             Browse…
@@ -110,15 +120,28 @@ export default function ChaosOptionsPanel({ chaos, onChange }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Typography variant="caption" color="text.button">Runtime</Typography>
         <Chip size="small" label={runtimeChip.label} color={runtimeChip.color} variant="outlined" />
+        <Box sx={{ flex: 1 }} />
+        <Tooltip title={consoleTooltip}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onToggleLogPane}
+              disabled={!consoleAvailable}
+              color={logPaneOpen ? 'primary' : 'default'}
+            >
+              <TerminalIcon fontSize="inherit" />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Box>
 
       <FormControlLabel
         control={
           <Checkbox
             size="small"
-            checked={!!chaos.showConsole}
+            checked={!!hybrasyl.showConsole}
             onChange={(e) =>
-              onChange({ targets: { chaos: { ...chaos, showConsole: e.target.checked } } })
+              onChange({ targets: { hybrasyl: { ...hybrasyl, showConsole: e.target.checked } } })
             }
           />
         }

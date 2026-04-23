@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { resolvePath, buildSpawnArgs } from './chaosLauncher.js'
+import { resolvePath, buildSpawnArgs } from './hybrasylLauncher.js'
 
 let dir
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'epona-chaos-launcher-'))
+  dir = await fs.mkdtemp(join(tmpdir(), 'epona-hybrasyl-launcher-'))
 })
 
 afterEach(async () => {
@@ -75,11 +75,11 @@ describe('resolvePath', () => {
 
 describe('buildSpawnArgs', () => {
   it('returns the exe path as the command with no args for exe kind', () => {
-    const args = buildSpawnArgs({ kind: 'exe', exePath: 'C:/chaos/client.exe', cwd: 'C:/chaos' })
+    const args = buildSpawnArgs({ kind: 'exe', exePath: 'C:/client/client.exe', cwd: 'C:/client' })
     expect(args).toEqual({
-      command: 'C:/chaos/client.exe',
+      command: 'C:/client/client.exe',
       args: [],
-      cwd: 'C:/chaos'
+      cwd: 'C:/client'
     })
   })
 

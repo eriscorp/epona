@@ -9,14 +9,25 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   listVersions: () => ipcRenderer.invoke('versions:list'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: () => ipcRenderer.invoke('dialog:openExe'),
-  pickChaosPath: () => ipcRenderer.invoke('dialog:openChaosPath'),
-  pickChaosDataDir: () => ipcRenderer.invoke('dialog:openChaosDataDir'),
-  detectChaosPath: (path) => ipcRenderer.invoke('chaos:detectPath', path),
-  checkDotnetRuntime: () => ipcRenderer.invoke('chaos:checkRuntime'),
+  pickHybrasylPath: () => ipcRenderer.invoke('dialog:openHybrasylPath'),
+  pickHybrasylDataDir: () => ipcRenderer.invoke('dialog:openHybrasylDataDir'),
+  detectHybrasylPath: (path) => ipcRenderer.invoke('hybrasyl:detectPath', path),
+  checkDotnetRuntime: () => ipcRenderer.invoke('hybrasyl:checkRuntime'),
   launch: (targetKind, settings, profile) =>
     ipcRenderer.invoke('client:launch', targetKind, settings, profile),
   testConnection: (hostname, port, version) =>
     ipcRenderer.invoke('client:testConnection', hostname, port, version),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
-  closeWindow: () => ipcRenderer.send('window:close')
+  closeWindow: () => ipcRenderer.send('window:close'),
+  resizeWindow: (width, height) => ipcRenderer.send('window:resize', { width, height }),
+  onHybrasylLog: (cb) => {
+    const listener = (_, payload) => cb(payload)
+    ipcRenderer.on('hybrasyl:log', listener)
+    return () => ipcRenderer.removeListener('hybrasyl:log', listener)
+  },
+  onHybrasylChildExit: (cb) => {
+    const listener = (_, payload) => cb(payload)
+    ipcRenderer.on('hybrasyl:childExit', listener)
+    return () => ipcRenderer.removeListener('hybrasyl:childExit', listener)
+  }
 })

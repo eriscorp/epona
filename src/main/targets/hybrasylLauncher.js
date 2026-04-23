@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { dirname } from 'path'
-import { writeCfg } from '../chaosConfig.js'
+import { writeCfg } from '../hybrasylConfig.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -47,38 +47,46 @@ export function buildSpawnArgs(resolved) {
 }
 
 // Orchestration: write Darkages.cfg with the profile endpoint, then spawn the
-// client (exe or `dotnet run`). Detaches so closing Epona doesn't kill it.
-// When chaosConfig.showConsole is false (default), the Windows console window
-// is suppressed via windowsHide — matters mostly for the repo path where
-// `dotnet run` would otherwise pop a cmd window.
-export async function launch(chaosConfig, profile) {
-  const resolved = await resolvePath(chaosConfig.clientPath)
+// client. Two launch modes by kind:
+//   exe  → fire-and-forget, stdio ignored, multiple instances allowed.
+//          `child` is not returned; main does no tracking.
+//   repo → stdio piped so the LogPane can tail `dotnet run` output. Singleton
+//          — main kills a previous repo child before starting a new one.
+// Windows-specific: no `detached: true`, which would otherwise attach the
+// child to a new console group (dodges windowsHide and disconnects our pipes).
+// Children survive Epona's exit by default on Windows, which is what we want.
+export async function launch(config, profile) {
+  const resolved = await resolvePath(config.clientPath)
   if (resolved.kind === 'invalid') {
     return { success: false, error: `Client path invalid: ${resolved.reason}` }
   }
 
   try {
-    await writeCfg(chaosConfig.dataPath, {
+    await writeCfg(config.dataPath, {
       LobbyHost: profile.hostname,
       LobbyPort: String(profile.port)
     })
   } catch (err) {
     return {
       success: false,
-      error: `Failed to write Darkages.cfg in ${chaosConfig.dataPath}: ${err.message}`
+      error: `Failed to write Darkages.cfg in ${config.dataPath}: ${err.message}`
     }
   }
 
+  const isRepo = resolved.kind === 'repo'
   const { command, args, cwd } = buildSpawnArgs(resolved)
   try {
     const child = spawn(command, args, {
       cwd,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: !chaosConfig.showConsole
+      stdio: isRepo ? ['ignore', 'pipe', 'pipe'] : 'ignore',
+      windowsHide: !config.showConsole
     })
-    child.unref()
-    return { success: true, pid: child.pid }
+    return {
+      success: true,
+      pid: child.pid,
+      kind: resolved.kind,
+      child: isRepo ? child : null
+    }
   } catch (err) {
     return { success: false, error: `Failed to spawn client: ${err.message}` }
   }

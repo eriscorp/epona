@@ -13,8 +13,8 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
   async function handleLaunch() {
     if (targetKind === 'legacy' && !settings.clientPath)
       return setSnack({ severity: 'warning', message: 'No client path set — open Settings' })
-    if (targetKind === 'chaos' && !settings.targets?.chaos?.clientPath)
-      return setSnack({ severity: 'warning', message: 'No Chaos client path set' })
+    if (targetKind === 'hybrasyl' && !settings.targets?.hybrasyl?.clientPath)
+      return setSnack({ severity: 'warning', message: 'No Hybrasyl client path set' })
 
     const profile = getActiveProfile()
     setLaunching(true)

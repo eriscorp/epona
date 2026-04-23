@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ThemeProvider, CssBaseline } from '@mui/material'
+import { ThemeProvider, CssBaseline, GlobalStyles, alpha } from '@mui/material'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
@@ -13,15 +13,21 @@ import TitleBar from './components/TitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
 import OptionsPanel from './components/OptionsPanel'
-import ChaosOptionsPanel from './components/ChaosOptionsPanel'
+import HybrasylClientPanel from './components/HybrasylClientPanel'
 import ActionButtons from './components/ActionButtons'
 import SettingsDrawer from './components/SettingsDrawer'
+import LogPane from './components/LogPane'
 
-const TAB_ORDER = ['legacy', 'chaos']
+const TAB_ORDER = ['legacy', 'hybrasyl']
 const kindToIndex = (k) => {
   const i = TAB_ORDER.indexOf(k)
   return i >= 0 ? i : 0
 }
+
+const MAIN_W = 480
+const PANE_W = 360
+const WINDOW_H = 640
+const LOG_CAP = 2000
 
 const themes = {
   hybrasyl: hybrasylTheme,
@@ -43,7 +49,7 @@ const defaultSettings = {
   profiles: [
     { id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }
   ],
-  targets: { chaos: { clientPath: '', dataPath: 'E:\\Games\\Dark Ages', showConsole: false } }
+  targets: { hybrasyl: { clientPath: '', dataPath: 'E:\\Games\\Dark Ages', showConsole: false } }
 }
 
 export default function App() {
@@ -53,6 +59,8 @@ export default function App() {
   const [themeName, setThemeName] = useState('hybrasyl')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
+  const [logPaneOpen, setLogPaneOpen] = useState(false)
+  const [hybrasylLog, setHybrasylLog] = useState([])
 
   useEffect(() => {
     window.sparkAPI.loadSettings().then((s) => {
@@ -67,6 +75,30 @@ export default function App() {
     })
     window.sparkAPI.listVersions().then(setVersions)
   }, [])
+
+  useEffect(() => {
+    const offLog = window.sparkAPI.onHybrasylLog(({ stream, line }) => {
+      setHybrasylLog((prev) => {
+        const next = prev.concat({ stream, text: line })
+        return next.length > LOG_CAP ? next.slice(next.length - LOG_CAP) : next
+      })
+    })
+    const offExit = window.sparkAPI.onHybrasylChildExit(({ pid, code, signal }) => {
+      const label = signal ? `signal ${signal}` : `exit code ${code}`
+      setHybrasylLog((prev) =>
+        prev.concat({ stream: 'exit', text: `— process ${pid} ended (${label}) —` })
+      )
+    })
+    return () => {
+      offLog?.()
+      offExit?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    const width = logPaneOpen ? MAIN_W + PANE_W : MAIN_W
+    window.sparkAPI.resizeWindow(width, WINDOW_H)
+  }, [logPaneOpen])
 
   function update(patch) {
     setSettings((prev) => {
@@ -101,10 +133,31 @@ export default function App() {
   return (
     <ThemeProvider theme={currentTheme}>
       <CssBaseline />
+      <GlobalStyles
+        styles={(theme) => ({
+          '::-webkit-scrollbar': { width: 16, height: 12 },
+          '::-webkit-scrollbar-track': {
+            background: alpha(theme.palette.background.default, 0.4),
+            borderLeft: '8px solid transparent',
+            backgroundClip: 'padding-box'
+          },
+          '::-webkit-scrollbar-thumb': {
+            backgroundColor: alpha(theme.palette.primary.main, 0.5),
+            borderRadius: 6,
+            borderLeft: '8px solid transparent',
+            backgroundClip: 'padding-box'
+          },
+          '::-webkit-scrollbar-thumb:hover': {
+            backgroundColor: alpha(theme.palette.primary.main, 0.8)
+          },
+          '::-webkit-scrollbar-corner': { background: 'transparent' }
+        })}
+      />
+      <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', height: WINDOW_H, bgcolor: 'background.default' }}>
       <Box
         sx={{
-          width: 480,
-          height: 640,
+          flex: `0 0 ${MAIN_W}px`,
+          height: WINDOW_H,
           display: 'flex',
           flexDirection: 'column',
           bgcolor: 'background.default',
@@ -152,9 +205,11 @@ export default function App() {
 
         {activeTab === 1 && (
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-            <ChaosOptionsPanel
-              chaos={settings.targets.chaos}
+            <HybrasylClientPanel
+              hybrasyl={settings.targets.hybrasyl}
               onChange={update}
+              logPaneOpen={logPaneOpen}
+              onToggleLogPane={() => setLogPaneOpen((o) => !o)}
             />
             <ProfileSelector
               profiles={settings.profiles}
@@ -162,12 +217,22 @@ export default function App() {
               onChange={(id) => update({ activeProfile: id })}
             />
             <ActionButtons
-              targetKind="chaos"
+              targetKind="hybrasyl"
               settings={settings}
               getActiveProfile={getActiveProfile}
             />
           </Box>
         )}
+      </Box>
+
+      {logPaneOpen && (
+        <LogPane
+          title="Hybrasyl Client"
+          lines={hybrasylLog}
+          onClear={() => setHybrasylLog([])}
+          onClose={() => setLogPaneOpen(false)}
+        />
+      )}
       </Box>
 
       <SettingsDrawer

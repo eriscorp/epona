@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { parseLines, mergeCfg, readCfg, writeCfg } from './chaosConfig.js'
+import { parseLines, mergeCfg, readCfg, writeCfg } from './hybrasylConfig.js'
 
 describe('parseLines (parity with the sibling client DarkagesCfg parser)', () => {
   it('returns empty object for empty input', () => {
@@ -113,7 +113,7 @@ describe('file I/O', () => {
   let dir
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'epona-chaoscfg-'))
+    dir = await fs.mkdtemp(join(tmpdir(), 'epona-hybrasylcfg-'))
   })
 
   afterEach(async () => {
