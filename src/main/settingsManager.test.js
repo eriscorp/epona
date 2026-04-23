@@ -191,6 +191,77 @@ describe('targetKind', () => {
   })
 })
 
+describe('targets.chaos', () => {
+  it('defaults to empty clientPath, the game data path, and a hidden console', async () => {
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targets.chaos.clientPath).toBe('')
+    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.chaos.showConsole).toBe(false)
+  })
+
+  it('fills in chaos defaults when pre-Stage-2 settings lack a targets key', async () => {
+    const preStage2 = {
+      targetKind: 'legacy',
+      clientPath: 'C:/Darkages.exe',
+      profiles: [{ id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }],
+      activeProfile: 'official'
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(preStage2), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targets.chaos.clientPath).toBe('')
+    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
+  })
+
+  it('preserves existing chaos settings on round-trip', async () => {
+    const mgr = createSettingsManager(dir)
+    const base = await mgr.load()
+    await mgr.save({
+      ...base,
+      targets: { chaos: { clientPath: 'D:/client-repo/bin/Release/net10.0/client.exe', dataPath: 'D:/DA' } }
+    })
+
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded.targets.chaos.clientPath).toBe('D:/client-repo/bin/Release/net10.0/client.exe')
+    expect(reloaded.targets.chaos.dataPath).toBe('D:/DA')
+  })
+
+  it('fills in only the missing field when targets.chaos is partial', async () => {
+    const partial = {
+      targets: { chaos: { clientPath: 'D:/client.exe' } }
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(partial), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targets.chaos.clientPath).toBe('D:/client.exe')
+    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
+  })
+
+  it('replaces wrong-typed chaos fields with defaults', async () => {
+    const garbage = {
+      targets: { chaos: { clientPath: 42, dataPath: null, showConsole: 'yes' } }
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(garbage), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targets.chaos.clientPath).toBe('')
+    expect(settings.targets.chaos.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.chaos.showConsole).toBe(false)
+  })
+
+  it('round-trips a showConsole=true preference', async () => {
+    const mgr = createSettingsManager(dir)
+    const base = await mgr.load()
+    await mgr.save({
+      ...base,
+      targets: { chaos: { ...base.targets.chaos, showConsole: true } }
+    })
+
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded.targets.chaos.showConsole).toBe(true)
+  })
+})
+
 describe('withDefaults field coercion', () => {
   it('fills in missing fields without losing valid user values', async () => {
     const partial = {

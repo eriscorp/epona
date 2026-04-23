@@ -11,6 +11,12 @@ const DEFAULT_PROFILES = [
   }
 ]
 
+const DEFAULT_CHAOS_TARGET = {
+  clientPath: '',
+  dataPath: 'E:\\Games\\Dark Ages',
+  showConsole: false
+}
+
 const DEFAULTS = {
   targetKind: 'legacy',
   clientPath: '',
@@ -20,7 +26,8 @@ const DEFAULTS = {
   hideWalls: false,
   theme: 'hybrasyl',
   activeProfile: 'official',
-  profiles: DEFAULT_PROFILES
+  profiles: DEFAULT_PROFILES,
+  targets: { chaos: DEFAULT_CHAOS_TARGET }
 }
 
 function validate(data) {
@@ -66,7 +73,23 @@ function withDefaults(data) {
     activeProfile: typeof data?.activeProfile === 'string' ? data.activeProfile : DEFAULTS.activeProfile,
     profiles: Array.isArray(data?.profiles) && data.profiles.length > 0
       ? data.profiles
-      : DEFAULTS.profiles
+      : DEFAULTS.profiles,
+    targets: {
+      chaos: {
+        clientPath:
+          typeof data?.targets?.chaos?.clientPath === 'string'
+            ? data.targets.chaos.clientPath
+            : DEFAULT_CHAOS_TARGET.clientPath,
+        dataPath:
+          typeof data?.targets?.chaos?.dataPath === 'string'
+            ? data.targets.chaos.dataPath
+            : DEFAULT_CHAOS_TARGET.dataPath,
+        showConsole:
+          typeof data?.targets?.chaos?.showConsole === 'boolean'
+            ? data.targets.chaos.showConsole
+            : DEFAULT_CHAOS_TARGET.showConsole
+      }
+    }
   }
 }
 
@@ -99,7 +122,11 @@ export function createSettingsManager(userDataPath) {
     }
 
     console.warn('No valid settings found, using defaults')
-    return { ...DEFAULTS, profiles: [...DEFAULT_PROFILES] }
+    return {
+      ...DEFAULTS,
+      profiles: [...DEFAULT_PROFILES],
+      targets: { chaos: { ...DEFAULT_CHAOS_TARGET } }
+    }
   }
 
   let saveQueue = Promise.resolve()

@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   listVersions: () => ipcRenderer.invoke('versions:list'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: () => ipcRenderer.invoke('dialog:openExe'),
+  pickChaosPath: () => ipcRenderer.invoke('dialog:openChaosPath'),
+  pickChaosDataDir: () => ipcRenderer.invoke('dialog:openChaosDataDir'),
+  detectChaosPath: (path) => ipcRenderer.invoke('chaos:detectPath', path),
+  checkDotnetRuntime: () => ipcRenderer.invoke('chaos:checkRuntime'),
   launch: (targetKind, settings, profile) =>
     ipcRenderer.invoke('client:launch', targetKind, settings, profile),
   testConnection: (hostname, port, version) =>

@@ -4,6 +4,8 @@ import { createSettingsManager } from './settingsManager.js'
 import { launch } from './launcher.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
+import { launch as launchChaos, resolvePath as resolveChaosPath } from './targets/chaosLauncher.js'
+import { checkDotnetRuntime } from './runtimeCheck.js'
 
 let settingsManager
 
@@ -61,7 +63,7 @@ app.whenReady().then(() => {
   ipcMain.handle('versions:list', () => listVersions())
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
-  // File dialog
+  // File dialogs
   ipcMain.handle('dialog:openExe', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Dark Ages Executable',
@@ -70,11 +72,39 @@ app.whenReady().then(() => {
     })
     return result.canceled ? null : result.filePaths[0]
   })
+  ipcMain.handle('dialog:openChaosPath', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Hybrasyl client .exe or .csproj',
+      filters: [
+        { name: 'Hybrasyl client (.exe or .csproj)', extensions: ['exe', 'csproj'] },
+        { name: 'Executable', extensions: ['exe'] },
+        { name: 'C# Project', extensions: ['csproj'] }
+      ],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+  ipcMain.handle('dialog:openChaosDataDir', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Dark Ages Data Directory',
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // Chaos validation
+  ipcMain.handle('chaos:detectPath', async (_, path) => resolveChaosPath(path))
+  ipcMain.handle('chaos:checkRuntime', async () => checkDotnetRuntime())
 
   // Launch + test
   ipcMain.handle('client:launch', async (_, targetKind, settings, profile) => {
-    if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
-    if (targetKind === 'legacy') return launch(settings, profile)
+    if (targetKind === 'legacy') {
+      if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
+      return launch(settings, profile)
+    }
+    if (targetKind === 'chaos') {
+      return launchChaos(settings.targets.chaos, profile)
+    }
     return { success: false, error: `Unknown targetKind: ${targetKind}` }
   })
   ipcMain.handle('client:testConnection', async (_, hostname, port, version) =>

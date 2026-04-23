@@ -13,8 +13,15 @@ import TitleBar from './components/TitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
 import OptionsPanel from './components/OptionsPanel'
+import ChaosOptionsPanel from './components/ChaosOptionsPanel'
 import ActionButtons from './components/ActionButtons'
 import SettingsDrawer from './components/SettingsDrawer'
+
+const TAB_ORDER = ['legacy', 'chaos']
+const kindToIndex = (k) => {
+  const i = TAB_ORDER.indexOf(k)
+  return i >= 0 ? i : 0
+}
 
 const themes = {
   hybrasyl: hybrasylTheme,
@@ -35,7 +42,8 @@ const defaultSettings = {
   activeProfile: 'official',
   profiles: [
     { id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }
-  ]
+  ],
+  targets: { chaos: { clientPath: '', dataPath: 'E:\\Games\\Dark Ages', showConsole: false } }
 }
 
 export default function App() {
@@ -50,6 +58,7 @@ export default function App() {
     window.sparkAPI.loadSettings().then((s) => {
       setSettings((prev) => ({ ...prev, ...s }))
       if (s.theme && themes[s.theme]) setThemeName(s.theme)
+      if (s.targetKind) setActiveTab(kindToIndex(s.targetKind))
       if (s.clientPath) {
         window.sparkAPI.detectVersion(s.clientPath).then((result) => {
           setDetectedVersion(result.found ? result.name : null)
@@ -113,11 +122,15 @@ export default function App() {
 
         <Tabs
           value={activeTab}
-          onChange={(_, v) => setActiveTab(v)}
+          onChange={(_, v) => {
+            setActiveTab(v)
+            update({ targetKind: TAB_ORDER[v] })
+          }}
           variant="fullWidth"
           sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
         >
           <Tab label="Legacy Client" />
+          <Tab label="Hybrasyl Client" />
         </Tabs>
         <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
 
@@ -129,7 +142,30 @@ export default function App() {
               onChange={(id) => update({ activeProfile: id })}
             />
             <OptionsPanel settings={settings} onChange={update} />
-            <ActionButtons settings={settings} getActiveProfile={getActiveProfile} />
+            <ActionButtons
+              targetKind="legacy"
+              settings={settings}
+              getActiveProfile={getActiveProfile}
+            />
+          </Box>
+        )}
+
+        {activeTab === 1 && (
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <ChaosOptionsPanel
+              chaos={settings.targets.chaos}
+              onChange={update}
+            />
+            <ProfileSelector
+              profiles={settings.profiles}
+              activeProfile={settings.activeProfile}
+              onChange={(id) => update({ activeProfile: id })}
+            />
+            <ActionButtons
+              targetKind="chaos"
+              settings={settings}
+              getActiveProfile={getActiveProfile}
+            />
           </Box>
         )}
       </Box>

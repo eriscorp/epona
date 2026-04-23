@@ -5,24 +5,27 @@ import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 
-export default function ActionButtons({ settings, getActiveProfile }) {
+export default function ActionButtons({ targetKind = 'legacy', settings, getActiveProfile }) {
   const [launching, setLaunching] = useState(false)
   const [testing, setTesting] = useState(false)
   const [snack, setSnack] = useState(null)
 
   async function handleLaunch() {
-    if (!settings.clientPath)
+    if (targetKind === 'legacy' && !settings.clientPath)
       return setSnack({ severity: 'warning', message: 'No client path set — open Settings' })
+    if (targetKind === 'chaos' && !settings.targets?.chaos?.clientPath)
+      return setSnack({ severity: 'warning', message: 'No Chaos client path set' })
+
     const profile = getActiveProfile()
     setLaunching(true)
-    const result = await window.sparkAPI.launch(settings.targetKind ?? 'legacy', settings, profile)
+    const result = await window.sparkAPI.launch(targetKind, settings, profile)
     setLaunching(false)
     if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Launch failed' })
   }
 
   async function handleTest() {
     const profile = getActiveProfile()
-    if (!profile.redirect)
+    if (targetKind === 'legacy' && !profile.redirect)
       return setSnack({ severity: 'info', message: 'Official server — no redirect to test' })
     if (!profile.hostname)
       return setSnack({ severity: 'warning', message: 'No hostname set for this profile' })
