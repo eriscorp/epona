@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { ThemeProvider, CssBaseline } from '@mui/material'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
+import Tabs from '@mui/material/Tabs'
+import Tab from '@mui/material/Tab'
 import hybrasylTheme from './themes/hybrasyl'
 import chadulTheme from './themes/chadul'
 import danaanTheme from './themes/danaan'
@@ -23,6 +25,7 @@ const themes = {
 }
 
 const defaultSettings = {
+  targetKind: 'legacy',
   clientPath: '',
   version: 'auto',
   skipIntro: true,
@@ -41,6 +44,7 @@ export default function App() {
   const [detectedVersion, setDetectedVersion] = useState(null)
   const [themeName, setThemeName] = useState('hybrasyl')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState(0)
 
   useEffect(() => {
     window.sparkAPI.loadSettings().then((s) => {
@@ -107,15 +111,27 @@ export default function App() {
         />
         <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
 
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-          <ProfileSelector
-            profiles={settings.profiles}
-            activeProfile={settings.activeProfile}
-            onChange={(id) => update({ activeProfile: id })}
-          />
-          <OptionsPanel settings={settings} onChange={update} />
-          <ActionButtons settings={settings} getActiveProfile={getActiveProfile} />
-        </Box>
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          variant="fullWidth"
+          sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
+        >
+          <Tab label="Legacy Client" />
+        </Tabs>
+        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+
+        {activeTab === 0 && (
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <ProfileSelector
+              profiles={settings.profiles}
+              activeProfile={settings.activeProfile}
+              onChange={(id) => update({ activeProfile: id })}
+            />
+            <OptionsPanel settings={settings} onChange={update} />
+            <ActionButtons settings={settings} getActiveProfile={getActiveProfile} />
+          </Box>
+        )}
       </Box>
 
       <SettingsDrawer

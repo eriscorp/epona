@@ -72,9 +72,10 @@ app.whenReady().then(() => {
   })
 
   // Launch + test
-  ipcMain.handle('client:launch', async (_, settings, profile) => {
+  ipcMain.handle('client:launch', async (_, targetKind, settings, profile) => {
     if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
-    return launch(settings, profile)
+    if (targetKind === 'legacy') return launch(settings, profile)
+    return { success: false, error: `Unknown targetKind: ${targetKind}` }
   })
   ipcMain.handle('client:testConnection', async (_, hostname, port, version) =>
     testConnection(hostname, port, version)

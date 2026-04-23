@@ -12,6 +12,7 @@ const DEFAULT_PROFILES = [
 ]
 
 const DEFAULTS = {
+  targetKind: 'legacy',
   clientPath: '',
   version: 'auto',
   skipIntro: true,
@@ -52,6 +53,7 @@ function migrateProfiles(data) {
 function withDefaults(data) {
   data = migrateProfiles(data)
   return {
+    targetKind: typeof data?.targetKind === 'string' ? data.targetKind : DEFAULTS.targetKind,
     clientPath: typeof data?.clientPath === 'string' ? data.clientPath : DEFAULTS.clientPath,
     version: data?.version ?? DEFAULTS.version,
     skipIntro: typeof data?.skipIntro === 'boolean' ? data.skipIntro : DEFAULTS.skipIntro,

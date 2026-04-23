@@ -153,6 +153,44 @@ describe('legacy flat-field migration', () => {
   })
 })
 
+describe('targetKind', () => {
+  it('defaults to legacy when no settings file exists', async () => {
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targetKind).toBe('legacy')
+  })
+
+  it('migrates pre-Stage-1 settings (without targetKind) to legacy', async () => {
+    const preStage1 = {
+      clientPath: 'C:/Darkages.exe',
+      theme: 'danaan',
+      profiles: [{ id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }],
+      activeProfile: 'official'
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(preStage1), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targetKind).toBe('legacy')
+    expect(settings.clientPath).toBe('C:/Darkages.exe')
+    expect(settings.theme).toBe('danaan')
+  })
+
+  it('preserves a non-default targetKind already in settings', async () => {
+    const future = { targetKind: 'chaos', clientPath: '' }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(future), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targetKind).toBe('chaos')
+  })
+
+  it('replaces a non-string targetKind with the legacy default', async () => {
+    const garbage = { targetKind: 42 }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(garbage), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targetKind).toBe('legacy')
+  })
+})
+
 describe('withDefaults field coercion', () => {
   it('fills in missing fields without losing valid user values', async () => {
     const partial = {

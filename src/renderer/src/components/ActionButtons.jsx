@@ -15,7 +15,7 @@ export default function ActionButtons({ settings, getActiveProfile }) {
       return setSnack({ severity: 'warning', message: 'No client path set — open Settings' })
     const profile = getActiveProfile()
     setLaunching(true)
-    const result = await window.sparkAPI.launch(settings, profile)
+    const result = await window.sparkAPI.launch(settings.targetKind ?? 'legacy', settings, profile)
     setLaunching(false)
     if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Launch failed' })
   }
