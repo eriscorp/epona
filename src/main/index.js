@@ -1,10 +1,13 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { spawn } from 'child_process'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
-import { launch } from './launcher.js'
+import { launch as launchLegacy } from './targets/legacyTarget.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
-import { launch as launchHybrasyl, resolvePath as resolveHybrasylPath } from './targets/hybrasylLauncher.js'
+import { launch as launchHybrasyl, resolvePath as resolveHybrasylPath } from './targets/hybrasylTarget.js'
+import { launch as launchServer } from './targets/serverTarget.js'
+import { listServerConfigs, readDataStore } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
 
@@ -65,6 +68,21 @@ app.whenReady().then(() => {
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
   // File dialogs
+  ipcMain.handle('dialog:openFile', async (_, title, filters) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: title || 'Select File',
+      filters: filters || [{ name: 'All files', extensions: ['*'] }],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+  ipcMain.handle('dialog:openDirectory', async (_, title) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: title || 'Select Directory',
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
   ipcMain.handle('dialog:openExe', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Dark Ages Executable',
@@ -130,7 +148,7 @@ app.whenReady().then(() => {
   ipcMain.handle('client:launch', async (_, targetKind, settings, profile) => {
     if (targetKind === 'legacy') {
       if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
-      return launch(settings, profile)
+      return launchLegacy(settings, profile)
     }
     if (targetKind === 'hybrasyl') {
       const result = await launchHybrasyl(settings.targets.hybrasyl, profile)
@@ -154,6 +172,133 @@ app.whenReady().then(() => {
   ipcMain.handle('client:testConnection', async (_, hostname, port, version) =>
     testConnection(hostname, port, version)
   )
+
+  // Server instance lifecycle — tracks one entry per running instanceId.
+  // Value is either:
+  //   { kind: 'child', value: ChildProcess }  — Unix / future piped-stdio path
+  //   { kind: 'pid',   value: <wrapperPid> }  — Windows detached-console path
+  // Stop reaps the process tree for 'pid' entries (taskkill /F /T).
+  const instanceChildren = new Map()
+
+  function wireInstanceLogs(instanceId, child) {
+    const stdout = createLineBuffer((line) =>
+      mainWindow.webContents.send('instance:log', { instanceId, stream: 'stdout', line })
+    )
+    const stderr = createLineBuffer((line) =>
+      mainWindow.webContents.send('instance:log', { instanceId, stream: 'stderr', line })
+    )
+    child.stdout?.on('data', stdout.push)
+    child.stderr?.on('data', stderr.push)
+    child.stdout?.on('end', stdout.flush)
+    child.stderr?.on('end', stderr.flush)
+    child.on('exit', (code, signal) => {
+      stdout.flush()
+      stderr.flush()
+      if (instanceChildren.get(instanceId) === child) instanceChildren.delete(instanceId)
+      mainWindow.webContents.send('instance:childExit', {
+        instanceId,
+        pid: child.pid,
+        code,
+        signal
+      })
+    })
+    child.on('error', (err) => {
+      mainWindow.webContents.send('instance:log', {
+        instanceId,
+        stream: 'stderr',
+        line: `[spawn error] ${err.message}`
+      })
+    })
+  }
+
+  ipcMain.handle('instance:listServerConfigs', async (_, worldDataDir) =>
+    listServerConfigs(worldDataDir)
+  )
+  ipcMain.handle('instance:readDataStore', async (_, worldDataDir, configFileName) =>
+    readDataStore(worldDataDir, configFileName)
+  )
+
+  ipcMain.handle('instance:start', async (_, instance) => {
+    if (!instance || typeof instance.id !== 'string') {
+      return { success: false, error: 'invalid instance payload' }
+    }
+    const existing = instanceChildren.get(instance.id)
+    if (existing) {
+      const alive =
+        existing.kind === 'child' ? existing.value.exitCode === null : true
+      if (alive) {
+        return {
+          success: false,
+          error: 'instance is already running — stop it first',
+          pid: existing.kind === 'child' ? existing.value.pid : existing.value
+        }
+      }
+    }
+    const result = await launchServer(instance)
+    if (result.success && result.child) {
+      instanceChildren.set(instance.id, { kind: 'child', value: result.child })
+      wireInstanceLogs(instance.id, result.child)
+    } else if (result.success && result.pid) {
+      instanceChildren.set(instance.id, { kind: 'pid', value: result.pid })
+    }
+    const { child: _child, ...safe } = result
+    return safe
+  })
+
+  ipcMain.handle('instance:stop', async (_, instanceId) => {
+    const tracked = instanceChildren.get(instanceId)
+    if (!tracked) return { success: true, wasRunning: false }
+
+    if (tracked.kind === 'child') {
+      if (tracked.value.exitCode !== null) {
+        instanceChildren.delete(instanceId)
+        return { success: true, wasRunning: false }
+      }
+      try {
+        tracked.value.kill()
+        return { success: true, wasRunning: true }
+      } catch (err) {
+        return { success: false, error: err.message }
+      }
+    }
+
+    // PID-tracked: reap the wrapper + its server child via taskkill /T.
+    // /F forces termination so Read-Host inside the wrapper can't veto it.
+    const pid = tracked.value
+    return await new Promise((resolve) => {
+      const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(pid)], {
+        stdio: 'ignore',
+        windowsHide: true
+      })
+      tk.once('exit', () => {
+        instanceChildren.delete(instanceId)
+        mainWindow.webContents.send('instance:childExit', {
+          instanceId,
+          pid,
+          code: null,
+          signal: 'SIGKILL'
+        })
+        resolve({ success: true, wasRunning: true })
+      })
+      tk.once('error', (err) => {
+        resolve({ success: false, error: `taskkill failed: ${err.message}` })
+      })
+    })
+  })
+
+  ipcMain.handle('instance:listRunning', async () => {
+    const running = []
+    for (const [id, tracked] of instanceChildren) {
+      if (tracked.kind === 'child') {
+        if (tracked.value.exitCode === null) {
+          running.push({ instanceId: id, pid: tracked.value.pid })
+        }
+      } else {
+        running.push({ instanceId: id, pid: tracked.value })
+      }
+    }
+    return running
+  })
 
   // Window controls
   ipcMain.on('window:minimize', () => mainWindow.minimize())

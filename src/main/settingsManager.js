@@ -17,6 +17,34 @@ const DEFAULT_HYBRASYL_TARGET = {
   showConsole: false
 }
 
+// An instance is a configured Hybrasyl server the user can start/stop from the
+// Server tab. All fields are present on every instance — mode toggles which
+// ones are meaningful at launch time. Repo/xml branch fields are schema-ready
+// but only consumed by Stage 3.1+.
+export const DEFAULT_INSTANCE = {
+  id: '',
+  name: 'New Instance',
+  mode: 'binary',
+  binaryPath: '',
+  serverRepoPath: '',
+  serverBranch: null,
+  xmlRepoPath: '',
+  xmlBranch: null,
+  worldDataDir: '',
+  logDir: '',
+  configFileName: '',
+  // Redis fields are optional per-instance OVERRIDES. When redisHost is '',
+  // no HYB_REDIS_* env vars are passed and the server reads its DataStore
+  // block from the selected config XML (the usual source of truth).
+  redisHost: '',
+  redisPort: 6379,
+  redisDatabase: null,
+  redisPassword: '',
+  lobbyPort: 2610,
+  loginPort: 2611,
+  worldPort: 2612
+}
+
 const DEFAULTS = {
   targetKind: 'legacy',
   clientPath: '',
@@ -27,7 +55,38 @@ const DEFAULTS = {
   theme: 'hybrasyl',
   activeProfile: 'official',
   profiles: DEFAULT_PROFILES,
-  targets: { hybrasyl: DEFAULT_HYBRASYL_TARGET }
+  targets: { hybrasyl: DEFAULT_HYBRASYL_TARGET },
+  instances: [],
+  activeInstance: null
+}
+
+function coerceInstance(raw) {
+  const safe = (key, type, fallback) =>
+    typeof raw?.[key] === type ? raw[key] : fallback
+  const safeNullable = (key, type, fallback) => {
+    if (raw?.[key] === null) return null
+    return typeof raw?.[key] === type ? raw[key] : fallback
+  }
+  return {
+    id: safe('id', 'string', DEFAULT_INSTANCE.id),
+    name: safe('name', 'string', DEFAULT_INSTANCE.name),
+    mode: raw?.mode === 'repo' ? 'repo' : 'binary',
+    binaryPath: safe('binaryPath', 'string', DEFAULT_INSTANCE.binaryPath),
+    serverRepoPath: safe('serverRepoPath', 'string', DEFAULT_INSTANCE.serverRepoPath),
+    serverBranch: safeNullable('serverBranch', 'string', DEFAULT_INSTANCE.serverBranch),
+    xmlRepoPath: safe('xmlRepoPath', 'string', DEFAULT_INSTANCE.xmlRepoPath),
+    xmlBranch: safeNullable('xmlBranch', 'string', DEFAULT_INSTANCE.xmlBranch),
+    worldDataDir: safe('worldDataDir', 'string', DEFAULT_INSTANCE.worldDataDir),
+    logDir: safe('logDir', 'string', DEFAULT_INSTANCE.logDir),
+    configFileName: safe('configFileName', 'string', DEFAULT_INSTANCE.configFileName),
+    redisHost: safe('redisHost', 'string', DEFAULT_INSTANCE.redisHost),
+    redisPort: safe('redisPort', 'number', DEFAULT_INSTANCE.redisPort),
+    redisDatabase: safeNullable('redisDatabase', 'number', DEFAULT_INSTANCE.redisDatabase),
+    redisPassword: safe('redisPassword', 'string', DEFAULT_INSTANCE.redisPassword),
+    lobbyPort: safe('lobbyPort', 'number', DEFAULT_INSTANCE.lobbyPort),
+    loginPort: safe('loginPort', 'number', DEFAULT_INSTANCE.loginPort),
+    worldPort: safe('worldPort', 'number', DEFAULT_INSTANCE.worldPort)
+  }
 }
 
 function validate(data) {
@@ -86,6 +145,10 @@ function withDefaults(data) {
     profiles: Array.isArray(data?.profiles) && data.profiles.length > 0
       ? data.profiles
       : DEFAULTS.profiles,
+    instances: Array.isArray(data?.instances)
+      ? data.instances.filter((i) => i && typeof i === 'object' && typeof i.id === 'string' && i.id.length > 0).map(coerceInstance)
+      : [],
+    activeInstance: typeof data?.activeInstance === 'string' ? data.activeInstance : DEFAULTS.activeInstance,
     targets: {
       hybrasyl: {
         clientPath:
@@ -137,6 +200,7 @@ export function createSettingsManager(userDataPath) {
     return {
       ...DEFAULTS,
       profiles: [...DEFAULT_PROFILES],
+      instances: [],
       targets: { hybrasyl: { ...DEFAULT_HYBRASYL_TARGET } }
     }
   }

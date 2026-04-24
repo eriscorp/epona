@@ -77,59 +77,81 @@ Each stage is its own branch off `main`, merged when complete. End state: a tabb
 
 ---
 
-## Stage 3 — Hybrasyl server instance management + Target abstraction extraction
+## Stage 3 — Hybrasyl server instance management
 
-**Branch:** `stage/3-server-instances`
-**Goal:** A "Hybrasyl Server" tab. User creates named server instances, configures each (binary or repo path, world data dir, log dir, Redis host:port, port triplet), Start/Stop them, watches a live log tail. `config.xml` is resolved automatically as `<worldDataDir>/world/xml/serverconfig` — no separate field, since `creidhne` (sibling tool) owns creation/maintenance of those XML files. Instances persist across launcher restarts; running PIDs are adopted on reopen.
+**Reshape from original plan:** the sibling server repo now carries a branch-aware XML override hook (see [server/docs/epona-branch-instances.md](../../server/docs/epona-branch-instances.md)) — `Hybrasyl.csproj` conditionally swaps its `Hybrasyl.Xml` NuGet reference for a `ProjectReference` when `UseLocalXml=true`, which Epona injects via a generated `Directory.Build.props`. That upgrades Stage 3 from "manual config, no XML" (original v1) to end-to-end branch-aware worktree management. To keep reviews tractable, Stage 3 is split:
 
-**Now the abstraction refactor pays off** — three real targets means the interface is grounded in actual cases, not speculation.
+### Stage 3.0 — Foundations (binary mode + refactor)
+
+**Branch:** `stage/3.0-server-instances-binary`
+**Goal:** "Hybrasyl Server" tab with multi-instance CRUD and **binary-mode launches only**. User points each instance at a prebuilt `Hybrasyl.dll` (or self-contained `.exe`), configures Redis + ports + dirs, clicks Start, watches logs in the shared LogPane. Repo-mode fields exist in the schema but are gated off (`validateForLaunch` rejects them) so 3.1 can layer in without settings churn.
+
+**Now the target-file reorg pays off** — three real targets means the folder layout is grounded rather than speculative. The plan-original `TargetBase.js` common interface is dropped; the three launch functions already share a close-enough shape (`launch(config, ...) → { success, pid?, error?, child? }`) that a formal interface adds more ceremony than value.
+
+**New files (3.0):**
+
+- `src/main/targets/serverTarget.js` — binary-mode launch. `resolveConfigFile` derives `<worldDataDir>/world/xml/serverconfig/config.xml`. `buildBinarySpawn` branches on extension: `.dll` wraps with `dotnet <dll>`, `.exe` runs directly. Env injects `HYB_REDIS_HOST`/`HYB_REDIS_PORT`. `validateForLaunch` rejects repo-mode (deferred) and missing fields with a friendly error.
+- `src/main/redisProbe.js` — TCP probe with short timeout. Returns `{ ok, error? }`. No shell-out discovery in 3.0 — unreachable Redis fails fast with a clear install-link message.
+- `src/renderer/src/components/ServerInstancePanel.jsx` — instance dropdown + Add/Delete + Console-toggle icon + detail form (name, binary path, world/log dirs, redis host:port, port triplet) + Start/Stop button. Fields disabled when the instance is running.
+
+**Moved files (3.0):**
+
+- `src/main/launcher.js` → `src/main/targets/legacyTarget.js` (import path updated)
+- `src/main/targets/hybrasylLauncher.*` → `src/main/targets/hybrasylTarget.*` (naming symmetry)
+
+**Modified files (3.0):**
+
+- [src/main/settingsManager.js](../src/main/settingsManager.js) — adds `instances: []` + `activeInstance` to DEFAULTS, a `coerceInstance` per-field coercer, and the exported `DEFAULT_INSTANCE` schema with all final fields (repo-mode branch fields present but unused in 3.0).
+- [src/main/index.js](../src/main/index.js) — new IPC handlers: `instance:start` (spawns via `serverTarget.launch`, tracks child in `Map<id, ChildProcess>`, wires log pipes), `instance:stop` (kills tracked child), `instance:listRunning`, generic `dialog:openFile`/`dialog:openDirectory` for reuse. Emits `instance:log`/`instance:childExit` events tagged with `instanceId`.
+- [src/preload/index.js](../src/preload/index.js) — `startInstance`, `stopInstance`, `listRunningInstances`, `pickFile`, `pickDirectory`, `onInstanceLog`, `onInstanceChildExit`.
+- [src/renderer/src/App.jsx](../src/renderer/src/App.jsx) — third tab "Hybrasyl Server". Per-instance log buffers (`instanceLogs: {id: lines[]}`), `runningInstances: Set<id>`. LogPane routes to the active kind of tab (client vs instance) based on `activeTab`.
+
+**Lifecycle behavior (3.0):**
+
+- **Start:** validate instance config → TCP-probe Redis → if unreachable, fail fast with an install-link error. Spawn server, wire stdio to per-instance line-buffered log events, track child in the Map.
+- **Stop:** `child.kill()` (Windows SIGTERM-equivalent). `/shutdown` via admin socket remains an open upstream question.
+- **Parent-exit behavior:** server children are not detached, but on Windows they survive Epona's exit by default. Logs stop flowing when Epona closes (pipes go away) — re-starting Epona won't reattach to the orphan.
+
+**Deferred (Stage 3.1+):**
+
+- Repo-mode launches + worktree manager + `Directory.Build.props` generation (see 3.1 below)
+- Local Redis discovery + "offer to start" (Memurai/Valkey service + binary detection)
+- PID-file adoption across launcher restarts
+- Graceful `/shutdown` over an admin socket (upstream work)
+- Port-collision detection across instances
+- Bundled Redis
+
+**Verification (3.0):**
+
+- Start an instance with a prebuilt `Hybrasyl.dll`; confirm `dotnet <dll>` spawns, logs stream into the LogPane, server listens on the configured port triplet.
+- Start an instance with a self-contained `Hybrasyl.exe`; confirm the exe runs directly (no `dotnet` wrapper), logs stream the same way.
+- Start two instances against the same world data dir with distinct port triplets; confirm both run and logs are routed per-instance by id.
+- Stop one; confirm the other survives and its LogPane stays live.
+- With Redis unreachable, attempt to start; confirm the error mentions `redisHost:redisPort` and the fallback guidance.
+
+### Stage 3.1 — Branch-aware repo mode
+
+**Branch:** `stage/3.1-server-worktrees`
+**Goal:** Repo-mode launches. User picks a server branch (+ optionally an XML branch); Epona creates git worktrees on demand, generates a gitignored `Directory.Build.props` in the server worktree when local XML is requested, runs `dotnet run --project`, and cleans up worktrees on instance stop/delete.
 
 **New files:**
 
-- `src/main/targets/TargetBase.js` — interface contract: `launch(config, profile) → { pid, stop(), onLog(cb) }`
-- `src/main/targets/legacyTarget.js` — move existing patching logic from [src/main/launcher.js](../src/main/launcher.js) here, behaviorally unchanged
-- `src/main/targets/chaosTarget.js` — move Stage 2 `chaosLauncher.js` content here
-- `src/main/targets/serverTarget.js` — new. Resolves binary-vs-repo (same detection helper as Chaos). Derives `configFile` as `<worldDataDir>/world/xml/serverconfig/config.xml` (or whatever `serverconfig` actually contains — confirm at implementation time). For binary: `dotnet hybrasyl.dll --configFile <derived> --worldDataDir ... --logDir ...` with `HYB_REDIS_HOST`/`HYB_REDIS_PORT` in env. For repo: `dotnet run --project hybrasyl/Hybrasyl.csproj -- --configFile <derived> --worldDataDir ... --logDir ...`. Writes a PID file under `%APPDATA%\Erisco\Epona\instances\<id>\hybrasyl.pid`.
-- `src/main/instanceManager.js` — CRUD over `settings.instances[]`. On startup, walk each instance's PID file and check liveness (`tasklist /FI "PID eq <pid>"`); adopt or clear stale entries.
-- `src/main/redisProbe.js` — two responsibilities: (1) TCP connect with short timeout to `host:port`, return `{ ok, error }`; (2) on a localhost target, discover local Memurai/Valkey via Windows service query (`sc query Memurai`, `sc query Valkey`) and binary lookup (`where redis-server.exe`, `where memurai.exe`). Return `{ installed, serviceName?, binaryPath?, running }` so the UI can offer to start it.
-- `src/main/redisManager.js` — start a discovered local install when the user asks. If a service is present and stopped: `sc start <name>` (may require elevation — surface that requirement in the UI). If only a binary is present: spawn it as a managed child process under Epona's lifetime, scoped to that instance (or shared across instances with refcounting).
-- `src/renderer/src/components/ServerInstanceList.jsx` — left pane: list with add/delete
-- `src/renderer/src/components/ServerInstanceDetail.jsx` — right pane: form fields + Start/Stop button + scrollable log pane (MUI `Paper` + `TextField multiline readOnly`, ring-buffered to ~5k lines, with a "Open log file" button to the on-disk Serilog output)
+- `src/main/worktreeManager.js` — `ensureWorktree(repoPath, branch) → { path, release }`, ref-counted sharing across instances on the same branch. Shells out to `git -C <repo> worktree add -B <branch> <.worktrees/sanitized> <branch>` and `git worktree remove` on release. Path sanitization strips `/`, `\`, `..`.
+- `src/main/buildProps.js` — write/delete `<serverWorktree>/Directory.Build.props` with `UseLocalXml=true` + `LocalXmlProjectPath=<xmlWorktree>/src/Hybrasyl.Xml.csproj` when local XML is requested; no-op when xmlBranch is null.
 
 **Modified files:**
 
-- [src/main/index.js](../src/main/index.js) — becomes a thin dispatcher over `targets/*`; new IPC handlers `listInstances`, `createInstance`, `updateInstance`, `deleteInstance`, `startInstance`, `stopInstance`
-- [src/main/launcher.js](../src/main/launcher.js) — emptied (logic moved to `legacyTarget.js`); deleted if no remaining call sites
-- [src/preload/index.js](../src/preload/index.js) — expose the new instance IPC; add `onInstanceLog(id, cb)` event subscription using `ipcRenderer.on` against per-instance channels (`instance:log:<id>`)
-- [src/renderer/src/App.jsx](../src/renderer/src/App.jsx) — third tab "Hybrasyl Server"
+- `src/main/targets/serverTarget.js` — lift the `mode === 'repo'` gate; orchestrate: ensure server worktree → (if xmlBranch) ensure xml worktree + write props → `dotnet run --project <worktree>/hybrasyl/Hybrasyl.csproj` → on exit, release worktrees and delete props.
+- `src/main/index.js` — `instance:stop` plumbs worktree release; new `instance:listBranches(repoPath)` for UI branch pickers.
+- `ServerInstancePanel.jsx` — mode toggle (binary/repo), server repo path + branch dropdown, xml repo path + branch dropdown.
 
-**Lifecycle behavior:**
+**Verification (3.1):**
 
-- Start: probe Redis first. If reachable → continue. If unreachable AND a local install is discovered → prompt the user with "Start <Memurai|Valkey> (service|process)?"; on confirm, start it via `redisManager`, re-probe, then continue. If unreachable and no local install discovered → fail fast with an install link. After Redis is ready, spawn the server process and pipe logs to the instance's ring buffer + per-instance file (Serilog also writes its own).
-- Stop: `taskkill /PID <pid>` (Windows equivalent of SIGTERM); document that in-game `/shutdown` is the only fully graceful path until the server exposes an external admin endpoint. If Epona started Redis itself for this instance, refcount-decrement on stop and shut Redis down when no instances reference it (only for spawn-as-child mode; never auto-stop a service Epona started, since it may be relied on by other tools).
-- Adoption: on Epona launch, check each PID file; if process is alive, attach (logs from this point forward only — historical logs remain on disk).
-
-**Out of scope (deferred to a follow-up `stage/3.1-server-templates` branch):**
-
-- Any XML editing — that's `creidhne`'s job; v1 only consumes what's already there
-- Port-collision detection across instances
-- Graceful `/shutdown` over an admin socket (likely needs upstream server work)
-- Bundled Redis
-
-**Risks:**
-
-- PID-file adoption may be flaky if processes are killed without cleanup; design `instanceManager` to tolerate stale files and surface "stopped (stale PID)" state in the UI
-- Multiple instances against shared world data: confirm the server treats `--worldDataDir` as read-only (no on-disk caching of parsed XML there)
-- Log volume: cap the in-UI ring buffer at ~5k lines; always link to the on-disk file
-- Per-instance Redis vs shared Redis: shared is safe per server-GUID partitioning; document this so users don't over-provision
-
-**Verification:**
-
-- Create two instances pointing at the same world data dir, distinct port triplets, shared Redis. Start both; connect a Chaos.Client (Stage 2) to each. Stop one; confirm the other survives. Restart Epona while both are running; confirm both are adopted with correct status.
-- Repeat the above with one instance pointing at a prebuilt `Hybrasyl.dll` and the other at the `server` repo source — both paths must work.
-- Kill an instance externally (Task Manager); confirm Epona surfaces `stopped (stale PID)` and lets the user restart cleanly.
-- With Redis installed locally but stopped, attempt to start an instance; confirm Epona offers to start it and continues cleanly after the user accepts.
-- With Redis not installed at all, attempt to start an instance against `localhost`; confirm fail-fast with the install-link error.
+- Create two instances on different server branches pointing at the same server repo; confirm they share nothing and their worktrees land at `server/.worktrees/<branch>/`.
+- Create two instances on the same server branch; confirm they share one worktree.
+- Enable local XML with different xml branches per instance; confirm each server's `Directory.Build.props` points at its instance's XML worktree.
+- Delete an instance; confirm its worktree is released and removed if no other instance references it.
+- Confirm `Directory.Build.props` is cleaned up on stop so a subsequent NuGet-mode run doesn't inherit `UseLocalXml=true`.
 
 ---
 
@@ -142,7 +164,7 @@ Three tabs in one Electron app: legacy DA client (behavior preserved), Hybrasyl 
 ## Critical files to know
 
 - [src/main/index.js](../src/main/index.js) — IPC entry, target dispatcher
-- [src/main/launcher.js](../src/main/launcher.js) — current legacy launcher (becomes `targets/legacyTarget.js` in Stage 3)
+- [src/main/targets/legacyTarget.js](../src/main/targets/legacyTarget.js) — legacy Dark Ages client launcher (memory-patched via `da-win32`)
 - [src/main/settingsManager.js](../src/main/settingsManager.js) — settings persistence, profile shape, instance list
 - [src/main/clientVersions.js](../src/main/clientVersions.js) — legacy DA patch offsets (untouched by this work)
 - [src/main/serverTester.js](../src/main/serverTester.js) — DA-protocol connection tester (reused for Chaos)

@@ -287,6 +287,108 @@ describe('targets.hybrasyl', () => {
   })
 })
 
+describe('instances', () => {
+  it('defaults to an empty array', async () => {
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.instances).toEqual([])
+    expect(settings.activeInstance).toBeNull()
+  })
+
+  it('preserves valid instances across a round-trip', async () => {
+    const mgr = createSettingsManager(dir)
+    const base = await mgr.load()
+    const instance = {
+      id: 'inst-1',
+      name: 'QA',
+      mode: 'binary',
+      binaryPath: 'D:/hyb/Hybrasyl.dll',
+      serverRepoPath: '',
+      serverBranch: null,
+      xmlRepoPath: '',
+      xmlBranch: null,
+      worldDataDir: 'D:/ceridwen',
+      logDir: 'D:/hyb-logs',
+      configFileName: 'config.xml',
+      redisHost: 'localhost',
+      redisPort: 6379,
+      redisDatabase: null,
+      redisPassword: '',
+      lobbyPort: 2610,
+      loginPort: 2611,
+      worldPort: 2612
+    }
+    await mgr.save({ ...base, instances: [instance], activeInstance: 'inst-1' })
+
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded.instances).toHaveLength(1)
+    expect(reloaded.instances[0]).toEqual(instance)
+    expect(reloaded.activeInstance).toBe('inst-1')
+  })
+
+  it('fills missing fields on each instance with defaults', async () => {
+    const partial = {
+      instances: [{ id: 'inst-1', name: 'Bare', mode: 'binary' }]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(partial), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    const i = settings.instances[0]
+    // Redis fields default to "don't override" — server reads XML DataStore.
+    expect(i.redisHost).toBe('')
+    expect(i.redisPort).toBe(6379)
+    expect(i.redisDatabase).toBeNull()
+    expect(i.redisPassword).toBe('')
+    expect(i.lobbyPort).toBe(2610)
+    expect(i.loginPort).toBe(2611)
+    expect(i.worldPort).toBe(2612)
+    expect(i.configFileName).toBe('')
+    expect(i.serverBranch).toBeNull()
+    expect(i.xmlBranch).toBeNull()
+  })
+
+  it('filters out instances with no id so the list never contains garbage', async () => {
+    const junk = {
+      instances: [
+        { id: 'good', name: 'ok' },
+        { name: 'no-id' },
+        null,
+        'not-an-object'
+      ]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(junk), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.instances).toHaveLength(1)
+    expect(settings.instances[0].id).toBe('good')
+  })
+
+  it('falls back to binary mode when mode is an unknown value', async () => {
+    const weird = {
+      instances: [{ id: 'i1', mode: 'lolwhat' }]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(weird), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.instances[0].mode).toBe('binary')
+  })
+
+  it('preserves null branches (no override) but rejects wrong-typed branches', async () => {
+    const data = {
+      instances: [
+        { id: 'keep-null', mode: 'repo', serverBranch: null, xmlBranch: null },
+        { id: 'coerce', mode: 'repo', serverBranch: 42, xmlBranch: true }
+      ]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(data), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.instances[0].serverBranch).toBeNull()
+    expect(settings.instances[0].xmlBranch).toBeNull()
+    expect(settings.instances[1].serverBranch).toBeNull()
+    expect(settings.instances[1].xmlBranch).toBeNull()
+  })
+})
+
 describe('withDefaults field coercion', () => {
   it('fills in missing fields without losing valid user values', async () => {
     const partial = {

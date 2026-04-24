@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   listVersions: () => ipcRenderer.invoke('versions:list'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: () => ipcRenderer.invoke('dialog:openExe'),
+  pickFile: (title, filters) => ipcRenderer.invoke('dialog:openFile', title, filters),
+  pickDirectory: (title) => ipcRenderer.invoke('dialog:openDirectory', title),
   pickHybrasylPath: () => ipcRenderer.invoke('dialog:openHybrasylPath'),
   pickHybrasylDataDir: () => ipcRenderer.invoke('dialog:openHybrasylDataDir'),
   detectHybrasylPath: (path) => ipcRenderer.invoke('hybrasyl:detectPath', path),
@@ -29,5 +31,23 @@ contextBridge.exposeInMainWorld('sparkAPI', {
     const listener = (_, payload) => cb(payload)
     ipcRenderer.on('hybrasyl:childExit', listener)
     return () => ipcRenderer.removeListener('hybrasyl:childExit', listener)
+  },
+
+  startInstance: (instance) => ipcRenderer.invoke('instance:start', instance),
+  stopInstance: (instanceId) => ipcRenderer.invoke('instance:stop', instanceId),
+  listRunningInstances: () => ipcRenderer.invoke('instance:listRunning'),
+  listServerConfigs: (worldDataDir) =>
+    ipcRenderer.invoke('instance:listServerConfigs', worldDataDir),
+  readDataStore: (worldDataDir, configFileName) =>
+    ipcRenderer.invoke('instance:readDataStore', worldDataDir, configFileName),
+  onInstanceLog: (cb) => {
+    const listener = (_, payload) => cb(payload)
+    ipcRenderer.on('instance:log', listener)
+    return () => ipcRenderer.removeListener('instance:log', listener)
+  },
+  onInstanceChildExit: (cb) => {
+    const listener = (_, payload) => cb(payload)
+    ipcRenderer.on('instance:childExit', listener)
+    return () => ipcRenderer.removeListener('instance:childExit', listener)
   }
 })

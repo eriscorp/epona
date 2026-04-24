@@ -1,6 +1,6 @@
 import { lookup } from 'dns/promises'
 import { createRequire } from 'module'
-import { getVersion, detectVersion } from './clientVersions.js'
+import { getVersion, detectVersion } from '../clientVersions.js'
 
 // Native addon must be loaded via require (CJS) — not bundled by Vite
 const win32 =
