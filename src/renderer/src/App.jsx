@@ -27,7 +27,7 @@ const kindToIndex = (k) => {
 
 const MAIN_W = 480
 const PANE_W = 360
-const WINDOW_H = 720
+const WINDOW_H = 800
 const LOG_CAP = 2000
 
 const themes = {

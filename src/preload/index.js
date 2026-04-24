@@ -36,10 +36,12 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   startInstance: (instance) => ipcRenderer.invoke('instance:start', instance),
   stopInstance: (instanceId) => ipcRenderer.invoke('instance:stop', instanceId),
   listRunningInstances: () => ipcRenderer.invoke('instance:listRunning'),
-  listServerConfigs: (worldDataDir) =>
-    ipcRenderer.invoke('instance:listServerConfigs', worldDataDir),
-  readDataStore: (worldDataDir, configFileName) =>
-    ipcRenderer.invoke('instance:readDataStore', worldDataDir, configFileName),
+  listServerConfigs: (dataDir) =>
+    ipcRenderer.invoke('instance:listServerConfigs', dataDir),
+  readDataStore: (dataDir, configFileName) =>
+    ipcRenderer.invoke('instance:readDataStore', dataDir, configFileName),
+  listGitBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
+  isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath),
   onInstanceLog: (cb) => {
     const listener = (_, payload) => cb(payload)
     ipcRenderer.on('instance:log', listener)

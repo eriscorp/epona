@@ -32,7 +32,7 @@ async function makeConfigs(filesOrMap) {
 }
 
 describe('listServerConfigs', () => {
-  it('returns an empty array when worldDataDir is empty', async () => {
+  it('returns an empty array when dataDir is empty', async () => {
     expect(await listServerConfigs('')).toEqual([])
   })
 
@@ -93,7 +93,7 @@ describe('listServerConfigs', () => {
 })
 
 describe('readDataStore', () => {
-  it('returns null when worldDataDir or configFileName is empty', async () => {
+  it('returns null when dataDir or configFileName is empty', async () => {
     expect(await readDataStore('', 'x.xml')).toBeNull()
     expect(await readDataStore(dir, '')).toBeNull()
   })

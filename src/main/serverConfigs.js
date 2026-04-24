@@ -31,9 +31,9 @@ async function isServerConfig(path) {
 // are present — we mirror that by returning null so callers can decide).
 // Regex-based parse: the element is flat, attribute-only for host/port/db,
 // and stable enough that a DOMParser / fast-xml-parser dep isn't worth it.
-export async function readDataStore(worldDataDir, configFileName) {
-  if (!worldDataDir || !configFileName) return null
-  const path = join(worldDataDir, 'xml', 'serverconfigs', configFileName)
+export async function readDataStore(dataDir, configFileName) {
+  if (!dataDir || !configFileName) return null
+  const path = join(dataDir, 'xml', 'serverconfigs', configFileName)
   let text
   try {
     text = await fs.readFile(path, 'utf-8')
@@ -72,14 +72,14 @@ export async function readDataStore(worldDataDir, configFileName) {
   return { host, port, database, username, password }
 }
 
-// List every validated server config under <worldDataDir>/xml/serverconfigs/
+// List every validated server config under <dataDir>/xml/serverconfigs/
 // so the UI can offer them as a dropdown. Returns an array of filenames
 // (no paths), sorted alphabetically. Missing/unreadable dir → empty array;
 // callers treat "no configs" the same as "wrong world data dir". Files that
 // don't sniff as a ServerConfig are filtered out.
-export async function listServerConfigs(worldDataDir) {
-  if (typeof worldDataDir !== 'string' || worldDataDir.length === 0) return []
-  const dir = join(worldDataDir, 'xml', 'serverconfigs')
+export async function listServerConfigs(dataDir) {
+  if (typeof dataDir !== 'string' || dataDir.length === 0) return []
+  const dir = join(dataDir, 'xml', 'serverconfigs')
   let entries
   try {
     entries = await fs.readdir(dir, { withFileTypes: true })

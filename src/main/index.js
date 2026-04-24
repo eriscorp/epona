@@ -10,13 +10,15 @@ import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
+import { listBranches, isGitRepo } from './gitOps.js'
+import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
 
 let settingsManager
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 480,
-    height: 640,
+    height: 800,
     resizable: false,
     show: false,
     autoHideMenuBar: true,
@@ -174,10 +176,12 @@ app.whenReady().then(() => {
   )
 
   // Server instance lifecycle — tracks one entry per running instanceId.
-  // Value is either:
-  //   { kind: 'child', value: ChildProcess }  — Unix / future piped-stdio path
-  //   { kind: 'pid',   value: <wrapperPid> }  — Windows detached-console path
-  // Stop reaps the process tree for 'pid' entries (taskkill /F /T).
+  // Each entry is { kind, value, cleanup }:
+  //   kind: 'child' (Unix piped child) or 'pid' (Windows detached console)
+  //   value: ChildProcess or wrapperPid
+  //   cleanup: async () => void  — releases worktrees / removes Directory.Build.props
+  //                                for repo-mode instances; no-op for binary
+  // Stop reaps the process tree for 'pid' entries (taskkill /F /T) THEN runs cleanup.
   const instanceChildren = new Map()
 
   function wireInstanceLogs(instanceId, child) {
@@ -211,12 +215,24 @@ app.whenReady().then(() => {
     })
   }
 
-  ipcMain.handle('instance:listServerConfigs', async (_, worldDataDir) =>
-    listServerConfigs(worldDataDir)
+  ipcMain.handle('instance:listServerConfigs', async (_, dataDir) =>
+    listServerConfigs(dataDir)
   )
-  ipcMain.handle('instance:readDataStore', async (_, worldDataDir, configFileName) =>
-    readDataStore(worldDataDir, configFileName)
+  ipcMain.handle('instance:readDataStore', async (_, dataDir, configFileName) =>
+    readDataStore(dataDir, configFileName)
   )
+
+  // Git ops for the repo-mode picker — list branches in a chosen repo, and
+  // an inline-validation check so the path picker can flag "not a git repo"
+  // before the user tries to launch.
+  ipcMain.handle('git:listBranches', async (_, repoPath) => {
+    try {
+      return { ok: true, branches: await listBranches(repoPath) }
+    } catch (err) {
+      return { ok: false, error: err.message, branches: [] }
+    }
+  })
+  ipcMain.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
 
   ipcMain.handle('instance:start', async (_, instance) => {
     if (!instance || typeof instance.id !== 'string') {
@@ -235,13 +251,14 @@ app.whenReady().then(() => {
       }
     }
     const result = await launchServer(instance)
+    const cleanup = result.cleanup ?? (async () => {})
     if (result.success && result.child) {
-      instanceChildren.set(instance.id, { kind: 'child', value: result.child })
+      instanceChildren.set(instance.id, { kind: 'child', value: result.child, cleanup })
       wireInstanceLogs(instance.id, result.child)
     } else if (result.success && result.pid) {
-      instanceChildren.set(instance.id, { kind: 'pid', value: result.pid })
+      instanceChildren.set(instance.id, { kind: 'pid', value: result.pid, cleanup })
     }
-    const { child: _child, ...safe } = result
+    const { child: _child, cleanup: _cleanup, ...safe } = result
     return safe
   })
 
@@ -249,13 +266,21 @@ app.whenReady().then(() => {
     const tracked = instanceChildren.get(instanceId)
     if (!tracked) return { success: true, wasRunning: false }
 
+    async function runCleanup() {
+      try { await tracked.cleanup() } catch (err) {
+        console.warn(`instance ${instanceId} cleanup failed:`, err.message)
+      }
+    }
+
     if (tracked.kind === 'child') {
       if (tracked.value.exitCode !== null) {
         instanceChildren.delete(instanceId)
+        await runCleanup()
         return { success: true, wasRunning: false }
       }
       try {
         tracked.value.kill()
+        await runCleanup()
         return { success: true, wasRunning: true }
       } catch (err) {
         return { success: false, error: err.message }
@@ -270,7 +295,7 @@ app.whenReady().then(() => {
         stdio: 'ignore',
         windowsHide: true
       })
-      tk.once('exit', () => {
+      tk.once('exit', async () => {
         instanceChildren.delete(instanceId)
         mainWindow.webContents.send('instance:childExit', {
           instanceId,
@@ -278,6 +303,7 @@ app.whenReady().then(() => {
           code: null,
           signal: 'SIGKILL'
         })
+        await runCleanup()
         resolve({ success: true, wasRunning: true })
       })
       tk.once('error', (err) => {
@@ -322,4 +348,19 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// Best-effort sweep of every tracked git worktree on clean shutdown so a
+// normal Epona quit leaves disk tidy. Force-close via Task Manager won't
+// run this; the next launch's adoption path covers that case.
+app.on('before-quit', async (event) => {
+  if (app._eponaCleanupRan) return
+  app._eponaCleanupRan = true
+  event.preventDefault()
+  try {
+    await releaseAllWorktrees()
+  } catch (err) {
+    console.warn('worktree cleanup failed on quit:', err.message)
+  }
+  app.quit()
 })

@@ -306,7 +306,7 @@ describe('instances', () => {
       serverBranch: null,
       xmlRepoPath: '',
       xmlBranch: null,
-      worldDataDir: 'D:/ceridwen',
+      dataDir: 'D:/ceridwen',
       logDir: 'D:/hyb-logs',
       configFileName: 'config.xml',
       redisHost: 'localhost',
@@ -370,6 +370,22 @@ describe('instances', () => {
 
     const settings = await createSettingsManager(dir).load()
     expect(settings.instances[0].mode).toBe('binary')
+  })
+
+  it('fills repo-mode path/branch fields with empty defaults on a bare instance', async () => {
+    // Pre-Stage-3.1 instances saved before repo mode existed will have no
+    // serverRepoPath/xmlRepoPath at all — confirm coerceInstance fills them.
+    const bare = { instances: [{ id: 'i1' }] }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(bare), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    const i = settings.instances[0]
+    expect(i.mode).toBe('binary')
+    expect(i.binaryPath).toBe('')
+    expect(i.serverRepoPath).toBe('')
+    expect(i.xmlRepoPath).toBe('')
+    expect(i.serverBranch).toBeNull()
+    expect(i.xmlBranch).toBeNull()
   })
 
   it('preserves null branches (no override) but rejects wrong-typed branches', async () => {
