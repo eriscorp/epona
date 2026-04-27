@@ -16,8 +16,12 @@ function gitSync(cwd, args) {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     let err = ''
-    child.stderr.on('data', (c) => { err += c.toString() })
-    child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`git ${args.join(' ')} → ${code}: ${err}`)))
+    child.stderr.on('data', (c) => {
+      err += c.toString()
+    })
+    child.once('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`git ${args.join(' ')} → ${code}: ${err}`))
+    )
   })
 }
 

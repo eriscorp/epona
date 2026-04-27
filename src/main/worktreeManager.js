@@ -18,7 +18,10 @@ const mutexes = new Map()
 function withMutex(repoPath, fn) {
   const prev = mutexes.get(repoPath) ?? Promise.resolve()
   const next = prev.then(fn, fn)
-  mutexes.set(repoPath, next.catch(() => {}))
+  mutexes.set(
+    repoPath,
+    next.catch(() => {})
+  )
   return next
 }
 
@@ -30,12 +33,21 @@ function runGit(cwd, args) {
     })
     let stdout = ''
     let stderr = ''
-    child.stdout.on('data', (c) => { stdout += c.toString() })
-    child.stderr.on('data', (c) => { stderr += c.toString() })
+    child.stdout.on('data', (c) => {
+      stdout += c.toString()
+    })
+    child.stderr.on('data', (c) => {
+      stderr += c.toString()
+    })
     child.once('error', reject)
     child.once('exit', (code) => {
       if (code === 0) resolve({ stdout, stderr })
-      else reject(new Error(`git ${args.join(' ')} failed (exit ${code}): ${stderr.trim() || '(no stderr)'}`))
+      else
+        reject(
+          new Error(
+            `git ${args.join(' ')} failed (exit ${code}): ${stderr.trim() || '(no stderr)'}`
+          )
+        )
     })
   })
 }
@@ -104,9 +116,7 @@ export function ensureWorktree(repoPath, branch) {
     // Two cases land here: (a) Epona was restarted and our in-memory state is
     // empty; (b) a developer made the worktree manually outside Epona.
     const onDisk = await listWorktreesOnDisk(repo)
-    const adopted = onDisk.find(
-      (e) => e.branch === branch || resolvePath(e.path) === target
-    )
+    const adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
     if (adopted) {
       branchMap.set(branch, { path: adopted.path, refcount: 1 })
       refcounts.set(repo, branchMap)
@@ -160,9 +170,7 @@ export async function listOrphanWorktrees(repoPath) {
   const repo = resolvePath(repoPath)
   const onDisk = await listWorktreesOnDisk(repo)
   const tracked = refcounts.get(repo)
-  const trackedPaths = new Set(
-    [...(tracked?.values() ?? [])].map((e) => resolvePath(e.path))
-  )
+  const trackedPaths = new Set([...(tracked?.values() ?? [])].map((e) => resolvePath(e.path)))
   const worktreesDir = resolvePath(repo, '.worktrees')
   return onDisk.filter((e) => {
     const p = resolvePath(e.path)
@@ -192,7 +200,14 @@ export async function releaseAll() {
       const r = await releaseWorktree(repo, branch)
       results.push({ repo, branch, ...r })
     } catch (err) {
-      results.push({ repo, branch, removed: false, retained: true, error: err.message, originalRefcount: refcount })
+      results.push({
+        repo,
+        branch,
+        removed: false,
+        retained: true,
+        error: err.message,
+        originalRefcount: refcount
+      })
     }
   }
   return results

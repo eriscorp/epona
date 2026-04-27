@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { listServerConfigs, readDataStore } from './serverConfigs.js'
+import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 
 let dir
 
@@ -168,5 +168,33 @@ describe('readDataStore', () => {
     const r = await readDataStore(dir, 'badnums.xml')
     expect(r.port).toBe(6379)
     expect(r.database).toBe(0)
+  })
+})
+
+describe('isHybrasylDataDir', () => {
+  it('returns false for empty or non-string input', async () => {
+    expect(await isHybrasylDataDir('')).toBe(false)
+    expect(await isHybrasylDataDir(null)).toBe(false)
+    expect(await isHybrasylDataDir(undefined)).toBe(false)
+  })
+
+  it('returns false when the dir does not exist', async () => {
+    expect(await isHybrasylDataDir(join(dir, 'nope'))).toBe(false)
+  })
+
+  it('returns false when xml/ exists but xml/serverconfigs/ is missing', async () => {
+    await fs.mkdir(join(dir, 'xml'), { recursive: true })
+    expect(await isHybrasylDataDir(dir)).toBe(false)
+  })
+
+  it('returns false when xml/serverconfigs is a file instead of a directory', async () => {
+    await fs.mkdir(join(dir, 'xml'), { recursive: true })
+    await fs.writeFile(join(dir, 'xml', 'serverconfigs'), 'oops', 'utf-8')
+    expect(await isHybrasylDataDir(dir)).toBe(false)
+  })
+
+  it('returns true when xml/serverconfigs/ exists as a directory (even if empty)', async () => {
+    await fs.mkdir(join(dir, 'xml', 'serverconfigs'), { recursive: true })
+    expect(await isHybrasylDataDir(dir)).toBe(true)
   })
 })

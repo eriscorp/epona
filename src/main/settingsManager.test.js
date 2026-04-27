@@ -41,7 +41,15 @@ describe('load', () => {
     const validBackup = {
       clientPath: 'C:/recovered.exe',
       theme: 'chadul',
-      profiles: [{ id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }],
+      profiles: [
+        {
+          id: 'official',
+          name: 'Dark Ages (Official)',
+          hostname: 'da0.kru.com',
+          port: 2610,
+          redirect: false
+        }
+      ],
       activeProfile: 'official'
     }
     await fs.writeFile(join(dir, 'settings.json'), '{corrupt', 'utf-8')
@@ -73,6 +81,22 @@ describe('save/load round-trip', () => {
     expect(reloaded.hideWalls).toBe(true)
   })
 
+  it('keeps the save queue alive after a save failure', async () => {
+    const mgr = createSettingsManager(dir)
+    const base = await mgr.load()
+
+    // Circular reference forces JSON.stringify to throw inside the queue's
+    // doSave step — pre-fix this would poison the queue and silently no-op
+    // every subsequent save.
+    const poison = { ...base }
+    poison.self = poison
+    await expect(mgr.save(poison)).rejects.toThrow()
+
+    await mgr.save({ ...base, theme: 'recovered' })
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded.theme).toBe('recovered')
+  })
+
   it('queues concurrent saves without clobbering', async () => {
     const mgr = createSettingsManager(dir)
     const base = await mgr.load()
@@ -95,6 +119,58 @@ describe('save/load round-trip', () => {
     expect(backup.theme).toBe('spark')
     const primary = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
     expect(primary.theme).toBe('chadul')
+  })
+
+  // If you add a new top-level setting, also add it here with a non-default
+  // value. Guards against the withDefaults allowlist trap: forgetting to wire
+  // a new field through withDefaults silently strips it on next load.
+  it('round-trips every documented top-level field', async () => {
+    const sample = {
+      targetKind: 'hybrasyl',
+      clientPath: 'C:/round-trip/Darkages.exe',
+      version: '7.41',
+      skipIntro: false,
+      multipleInstances: false,
+      hideWalls: true,
+      theme: 'chadul',
+      activeProfile: 'custom',
+      profiles: [
+        { id: 'custom', name: 'Custom', hostname: 'rt.example', port: 1234, redirect: true }
+      ],
+      targets: {
+        hybrasyl: { clientPath: 'D:/client.exe', dataPath: 'D:/data', showConsole: true }
+      },
+      instances: [
+        {
+          id: 'inst-rt',
+          name: 'Round-Trip',
+          mode: 'repo',
+          binaryPath: 'D:/hyb/Hybrasyl.dll',
+          serverRepoPath: 'D:/server',
+          serverBranch: 'develop',
+          xmlRepoPath: 'D:/xml',
+          xmlBranch: 'main',
+          worldDirectoryId: 'wd-rt',
+          logDir: 'D:/logs',
+          configFileName: 'local.xml',
+          redisHost: 'rt-redis',
+          redisPort: 6380,
+          redisDatabase: 5,
+          redisPassword: 'rt-pw',
+          lobbyPort: 3610,
+          loginPort: 3611,
+          worldPort: 3612
+        }
+      ],
+      activeInstance: 'inst-rt',
+      worldDirectories: [{ id: 'wd-rt', name: 'world', path: 'D:/Hybrasyl/world' }],
+      activeWorldDirectory: 'wd-rt'
+    }
+
+    const mgr = createSettingsManager(dir)
+    await mgr.save(sample)
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded).toEqual(sample)
   })
 })
 
@@ -163,7 +239,15 @@ describe('targetKind', () => {
     const preStage1 = {
       clientPath: 'C:/Darkages.exe',
       theme: 'danaan',
-      profiles: [{ id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }],
+      profiles: [
+        {
+          id: 'official',
+          name: 'Dark Ages (Official)',
+          hostname: 'da0.kru.com',
+          port: 2610,
+          redirect: false
+        }
+      ],
       activeProfile: 'official'
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(preStage1), 'utf-8')
@@ -203,7 +287,15 @@ describe('targets.hybrasyl', () => {
     const preStage2 = {
       targetKind: 'legacy',
       clientPath: 'C:/Darkages.exe',
-      profiles: [{ id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }],
+      profiles: [
+        {
+          id: 'official',
+          name: 'Dark Ages (Official)',
+          hostname: 'da0.kru.com',
+          port: 2610,
+          redirect: false
+        }
+      ],
       activeProfile: 'official'
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(preStage2), 'utf-8')
@@ -218,11 +310,15 @@ describe('targets.hybrasyl', () => {
     const base = await mgr.load()
     await mgr.save({
       ...base,
-      targets: { hybrasyl: { clientPath: 'D:/client-repo/bin/Release/net10.0/client.exe', dataPath: 'D:/DA' } }
+      targets: {
+        hybrasyl: { clientPath: 'D:/client-repo/bin/Release/net10.0/client.exe', dataPath: 'D:/DA' }
+      }
     })
 
     const reloaded = await createSettingsManager(dir).load()
-    expect(reloaded.targets.hybrasyl.clientPath).toBe('D:/client-repo/bin/Release/net10.0/client.exe')
+    expect(reloaded.targets.hybrasyl.clientPath).toBe(
+      'D:/client-repo/bin/Release/net10.0/client.exe'
+    )
     expect(reloaded.targets.hybrasyl.dataPath).toBe('D:/DA')
   })
 
@@ -297,6 +393,7 @@ describe('instances', () => {
   it('preserves valid instances across a round-trip', async () => {
     const mgr = createSettingsManager(dir)
     const base = await mgr.load()
+    const worldDir = { id: 'wd-1', name: 'ceridwen', path: 'D:/ceridwen' }
     const instance = {
       id: 'inst-1',
       name: 'QA',
@@ -306,7 +403,7 @@ describe('instances', () => {
       serverBranch: null,
       xmlRepoPath: '',
       xmlBranch: null,
-      dataDir: 'D:/ceridwen',
+      worldDirectoryId: 'wd-1',
       logDir: 'D:/hyb-logs',
       configFileName: 'config.xml',
       redisHost: 'localhost',
@@ -317,12 +414,20 @@ describe('instances', () => {
       loginPort: 2611,
       worldPort: 2612
     }
-    await mgr.save({ ...base, instances: [instance], activeInstance: 'inst-1' })
+    await mgr.save({
+      ...base,
+      instances: [instance],
+      activeInstance: 'inst-1',
+      worldDirectories: [worldDir],
+      activeWorldDirectory: 'wd-1'
+    })
 
     const reloaded = await createSettingsManager(dir).load()
     expect(reloaded.instances).toHaveLength(1)
     expect(reloaded.instances[0]).toEqual(instance)
     expect(reloaded.activeInstance).toBe('inst-1')
+    expect(reloaded.worldDirectories).toEqual([worldDir])
+    expect(reloaded.activeWorldDirectory).toBe('wd-1')
   })
 
   it('fills missing fields on each instance with defaults', async () => {
@@ -348,12 +453,7 @@ describe('instances', () => {
 
   it('filters out instances with no id so the list never contains garbage', async () => {
     const junk = {
-      instances: [
-        { id: 'good', name: 'ok' },
-        { name: 'no-id' },
-        null,
-        'not-an-object'
-      ]
+      instances: [{ id: 'good', name: 'ok' }, { name: 'no-id' }, null, 'not-an-object']
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(junk), 'utf-8')
 
@@ -437,5 +537,84 @@ describe('withDefaults field coercion', () => {
     expect(settings.skipIntro).toBe(true)
     expect(settings.hideWalls).toBe(false)
     expect(settings.profiles).toHaveLength(1)
+  })
+})
+
+describe('worldDirectories migration', () => {
+  it('synthesizes a worldDirectories entry from a legacy instance.dataDir', async () => {
+    const legacy = {
+      instances: [{ id: 'i1', name: 'QA', mode: 'binary', dataDir: 'D:/Hybrasyl/world' }]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(legacy), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.worldDirectories).toHaveLength(1)
+    const wd = settings.worldDirectories[0]
+    expect(wd.path).toBe('D:/Hybrasyl/world')
+    expect(wd.name).toBe('world')
+    expect(wd.id).toMatch(/^[0-9a-f-]{36}$/) // UUID
+
+    expect(settings.instances[0].worldDirectoryId).toBe(wd.id)
+    expect(settings.instances[0].dataDir).toBeUndefined()
+    expect(settings.activeWorldDirectory).toBe(wd.id)
+  })
+
+  it('dedupes legacy paths case-insensitively and across slash flavors', async () => {
+    const legacy = {
+      instances: [
+        { id: 'a', dataDir: 'D:/Hybrasyl/world' },
+        { id: 'b', dataDir: 'D:\\Hybrasyl\\world' }, // backslashes
+        { id: 'c', dataDir: 'd:/HYBRASYL/world/' } // case + trailing slash
+      ]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(legacy), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.worldDirectories).toHaveLength(1)
+    const id = settings.worldDirectories[0].id
+    expect(settings.instances.map((i) => i.worldDirectoryId)).toEqual([id, id, id])
+  })
+
+  it('preserves an existing worldDirectories list and reuses entries on migration', async () => {
+    const data = {
+      worldDirectories: [{ id: 'pre-existing', name: 'world', path: 'D:/Hybrasyl/world' }],
+      activeWorldDirectory: 'pre-existing',
+      instances: [{ id: 'i1', dataDir: 'D:/Hybrasyl/world' }]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(data), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.worldDirectories).toHaveLength(1)
+    expect(settings.worldDirectories[0].id).toBe('pre-existing')
+    expect(settings.instances[0].worldDirectoryId).toBe('pre-existing')
+  })
+
+  it('leaves migrated instances alone (idempotent)', async () => {
+    const data = {
+      worldDirectories: [{ id: 'wd-1', name: 'world', path: 'D:/Hybrasyl/world' }],
+      activeWorldDirectory: 'wd-1',
+      instances: [{ id: 'i1', worldDirectoryId: 'wd-1' }]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(data), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.worldDirectories).toHaveLength(1)
+    expect(settings.instances[0].worldDirectoryId).toBe('wd-1')
+  })
+
+  it('drops invalid worldDirectories entries (missing id or path)', async () => {
+    const data = {
+      worldDirectories: [
+        { id: 'good', name: 'world', path: 'D:/world' },
+        { name: 'no-id' },
+        { id: 'no-path' },
+        null
+      ]
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(data), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.worldDirectories).toHaveLength(1)
+    expect(settings.worldDirectories[0].id).toBe('good')
   })
 })

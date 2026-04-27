@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { check as redisCheck } from '../redisProbe.js'
+import { isPortInUse } from '../portProbe.js'
 import { readDataStore } from '../serverConfigs.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { writeBuildProps, removeBuildProps } from '../buildProps.js'
@@ -45,10 +46,14 @@ function buildEnv(instance) {
 // the bare config name (no .xml) and resolves under <worldDataDir>/serverconfigs/.
 function buildServerArgs(instance) {
   return [
-    '--dataDir', instance.dataDir,
-    '--worldDataDir', join(instance.dataDir, 'xml'),
-    '--logDir', instance.logDir,
-    '--config', stripXmlExt(instance.configFileName)
+    '--dataDir',
+    instance.dataDir,
+    '--worldDataDir',
+    join(instance.dataDir, 'xml'),
+    '--logDir',
+    instance.logDir,
+    '--config',
+    stripXmlExt(instance.configFileName)
   ]
 }
 
@@ -75,8 +80,10 @@ export function buildRepoSpawn(instance, serverWorktreePath) {
     command: 'dotnet',
     args: [
       'run',
-      '--project', csproj,
-      '--configuration', 'Debug',
+      '--project',
+      csproj,
+      '--configuration',
+      'Debug',
       '--no-launch-profile',
       '--',
       ...buildServerArgs(instance)
@@ -164,25 +171,35 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
     `-WindowStyle Normal -PassThru; ` +
     `Write-Output $p.Id`
 
-  const shim = spawn('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', outerPs
-  ], {
-    env: { ...process.env, ...env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true
-  })
+  const shim = spawn(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', outerPs],
+    {
+      env: { ...process.env, ...env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    }
+  )
 
   let psStdout = ''
   let psStderr = ''
-  shim.stdout.on('data', (c) => { psStdout += c.toString() })
-  shim.stderr.on('data', (c) => { psStderr += c.toString() })
+  shim.stdout.on('data', (c) => {
+    psStdout += c.toString()
+  })
+  shim.stderr.on('data', (c) => {
+    psStderr += c.toString()
+  })
   const exitCode = await new Promise((resolve) => {
     shim.once('exit', (code) => resolve(code))
     shim.once('error', () => resolve(-1))
     setTimeout(() => resolve(null), 5000)
   })
   if (exitCode === null) {
-    try { shim.kill() } catch { /* already dead */ }
+    try {
+      shim.kill()
+    } catch {
+      /* already dead */
+    }
     return { success: false, error: 'PowerShell launch timed out after 5s' }
   }
   if (exitCode !== 0) {
@@ -306,9 +323,23 @@ async function launchRepo(instance) {
     }
   } catch (err) {
     // Any setup step (worktree add, build-props write) blew up — undo and report.
-    try { if (didWriteBuildProps) await removeBuildProps(serverWorktreePath) } catch {}
-    try { await releaseXml() } catch {}
-    try { await releaseServer() } catch {}
+    // Cleanup failures during error recovery are themselves swallowed: the
+    // caller already has a meaningful error to surface.
+    try {
+      if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
+    } catch {
+      /* swallow during error recovery */
+    }
+    try {
+      await releaseXml()
+    } catch {
+      /* swallow during error recovery */
+    }
+    try {
+      await releaseServer()
+    } catch {
+      /* swallow during error recovery */
+    }
     return { success: false, error: `Failed to set up repo-mode launch: ${err.message}` }
   }
 }
@@ -340,9 +371,10 @@ export async function launch(instance) {
     }
   }
 
-  // Pre-flight: fail fast if the lobby port is already occupied.
-  const portInUse = await redisCheck('127.0.0.1', instance.lobbyPort, 500)
-  if (portInUse.ok) {
+  // Pre-flight: fail fast if the lobby port is already occupied. Pure TCP
+  // probe — a RESP-PING based probe gives false negatives when the existing
+  // listener (e.g. a leftover Hybrasyl server) doesn't speak Redis.
+  if (await isPortInUse('127.0.0.1', instance.lobbyPort, 500)) {
     return {
       success: false,
       error:

@@ -12,7 +12,9 @@ function gitSync(cwd, args) {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     let err = ''
-    child.stderr.on('data', (c) => { err += c.toString() })
+    child.stderr.on('data', (c) => {
+      err += c.toString()
+    })
     child.once('exit', (code) => {
       code === 0 ? resolve() : reject(new Error(`git ${args.join(' ')} → ${code}: ${err}`))
     })
@@ -38,8 +40,10 @@ describe('gitOps', () => {
     // `git fetch` would produce without needing an actual remote.
     const remoteRefDir = join(repoPath, '.git', 'refs', 'remotes', 'origin')
     await fs.mkdir(remoteRefDir, { recursive: true })
-    const sha = (await import('child_process')).execSync('git rev-parse HEAD', { cwd: repoPath })
-      .toString().trim()
+    const sha = (await import('child_process'))
+      .execSync('git rev-parse HEAD', { cwd: repoPath })
+      .toString()
+      .trim()
     await fs.writeFile(join(remoteRefDir, 'main'), `${sha}\n`)
     await fs.writeFile(join(remoteRefDir, 'staging'), `${sha}\n`)
     await fs.writeFile(join(remoteRefDir, 'feature__bar'), `${sha}\n`)
@@ -95,7 +99,9 @@ describe('gitOps', () => {
     it('puts locals before remotes', async () => {
       const branches = await listBranches(repoPath)
       const firstRemoteIdx = branches.findIndex((b) => b.remote)
-      const lastLocalIdx = branches.map((b, i) => (b.remote ? -1 : i)).reduce((a, b) => Math.max(a, b), -1)
+      const lastLocalIdx = branches
+        .map((b, i) => (b.remote ? -1 : i))
+        .reduce((a, b) => Math.max(a, b), -1)
       expect(lastLocalIdx).toBeLessThan(firstRemoteIdx)
     })
   })

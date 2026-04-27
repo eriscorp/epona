@@ -26,7 +26,11 @@ export function check(host, port, timeoutMs = 1500) {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      try { socket.destroy() } catch { /* socket already gone */ }
+      try {
+        socket.destroy()
+      } catch {
+        /* socket already gone */
+      }
       resolve(result)
     }
 

@@ -67,7 +67,9 @@ export async function detectVersion(exePath) {
   try {
     const hash = await md5File(exePath)
     const version = VERSIONS.find((v) => v.hash === hash)
-    return version ? { found: true, versionCode: version.versionCode, name: version.name } : { found: false }
+    return version
+      ? { found: true, versionCode: version.versionCode, name: version.name }
+      : { found: false }
   } catch {
     return { found: false }
   }

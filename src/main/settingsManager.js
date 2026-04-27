@@ -1,5 +1,6 @@
 import { join } from 'path'
 import { promises as fs } from 'fs'
+import { randomUUID } from 'crypto'
 
 const DEFAULT_PROFILES = [
   {
@@ -19,8 +20,9 @@ const DEFAULT_HYBRASYL_TARGET = {
 
 // An instance is a configured Hybrasyl server the user can start/stop from the
 // Server tab. All fields are present on every instance — mode toggles which
-// ones are meaningful at launch time. Repo/xml branch fields are schema-ready
-// but only consumed by Stage 3.1+.
+// ones are meaningful at launch time. The world data dir is referenced by id
+// into top-level `worldDirectories`, so multiple instances sharing a path only
+// store it once (and editing the path updates every instance pointing at it).
 export const DEFAULT_INSTANCE = {
   id: '',
   name: 'New Instance',
@@ -30,7 +32,7 @@ export const DEFAULT_INSTANCE = {
   serverBranch: null,
   xmlRepoPath: '',
   xmlBranch: null,
-  dataDir: '',
+  worldDirectoryId: '',
   logDir: '',
   configFileName: '',
   // Redis fields are optional per-instance OVERRIDES. When redisHost is '',
@@ -57,12 +59,13 @@ const DEFAULTS = {
   profiles: DEFAULT_PROFILES,
   targets: { hybrasyl: DEFAULT_HYBRASYL_TARGET },
   instances: [],
-  activeInstance: null
+  activeInstance: null,
+  worldDirectories: [],
+  activeWorldDirectory: null
 }
 
 function coerceInstance(raw) {
-  const safe = (key, type, fallback) =>
-    typeof raw?.[key] === type ? raw[key] : fallback
+  const safe = (key, type, fallback) => (typeof raw?.[key] === type ? raw[key] : fallback)
   const safeNullable = (key, type, fallback) => {
     if (raw?.[key] === null) return null
     return typeof raw?.[key] === type ? raw[key] : fallback
@@ -76,7 +79,7 @@ function coerceInstance(raw) {
     serverBranch: safeNullable('serverBranch', 'string', DEFAULT_INSTANCE.serverBranch),
     xmlRepoPath: safe('xmlRepoPath', 'string', DEFAULT_INSTANCE.xmlRepoPath),
     xmlBranch: safeNullable('xmlBranch', 'string', DEFAULT_INSTANCE.xmlBranch),
-    dataDir: safe('dataDir', 'string', DEFAULT_INSTANCE.dataDir),
+    worldDirectoryId: safe('worldDirectoryId', 'string', DEFAULT_INSTANCE.worldDirectoryId),
     logDir: safe('logDir', 'string', DEFAULT_INSTANCE.logDir),
     configFileName: safe('configFileName', 'string', DEFAULT_INSTANCE.configFileName),
     redisHost: safe('redisHost', 'string', DEFAULT_INSTANCE.redisHost),
@@ -127,9 +130,74 @@ function migrateHybrasylTarget(data) {
   return data
 }
 
+// Lower-case + forward-slash + trim trailing slashes, for dedup only. Windows
+// paths are case-insensitive on disk, and users will mix `\` and `/` writing
+// them by hand.
+function normalizeWorldDirPath(p) {
+  return p.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+function deriveWorldDirName(p) {
+  const cleaned = p.replace(/[\\/]+$/, '').replace(/\\/g, '/')
+  const segs = cleaned.split('/').filter(Boolean)
+  return segs[segs.length - 1] || cleaned
+}
+
+function coerceWorldDirectory(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  if (typeof raw.id !== 'string' || raw.id.length === 0) return null
+  if (typeof raw.path !== 'string' || raw.path.length === 0) return null
+  return {
+    id: raw.id,
+    name: typeof raw.name === 'string' ? raw.name : deriveWorldDirName(raw.path),
+    path: raw.path
+  }
+}
+
+// Migrate the legacy per-instance `dataDir` field into a top-level
+// `worldDirectories` registry, with each instance carrying a `worldDirectoryId`
+// reference. Idempotent: instances already migrated pass through untouched.
+// Drops `dataDir` after migration — there's no "downgrade to old Epona"
+// concern (single-user / pre-release).
+function migrateWorldDirectories(data) {
+  if (!data || typeof data !== 'object') return data
+
+  const dirs = Array.isArray(data.worldDirectories)
+    ? data.worldDirectories.map(coerceWorldDirectory).filter(Boolean)
+    : []
+  const byNormPath = new Map()
+  for (const wd of dirs) byNormPath.set(normalizeWorldDirPath(wd.path), wd.id)
+
+  if (Array.isArray(data.instances)) {
+    for (const inst of data.instances) {
+      if (!inst || typeof inst !== 'object') continue
+      const hasLegacyDataDir = typeof inst.dataDir === 'string' && inst.dataDir.length > 0
+      const hasId = typeof inst.worldDirectoryId === 'string' && inst.worldDirectoryId.length > 0
+      if (hasLegacyDataDir && !hasId) {
+        const norm = normalizeWorldDirPath(inst.dataDir)
+        let id = byNormPath.get(norm)
+        if (!id) {
+          id = randomUUID()
+          dirs.push({ id, name: deriveWorldDirName(inst.dataDir), path: inst.dataDir })
+          byNormPath.set(norm, id)
+        }
+        inst.worldDirectoryId = id
+      }
+      delete inst.dataDir
+    }
+  }
+
+  data.worldDirectories = dirs
+  if (typeof data.activeWorldDirectory !== 'string' && dirs.length > 0) {
+    data.activeWorldDirectory = dirs[0].id
+  }
+  return data
+}
+
 function withDefaults(data) {
   data = migrateProfiles(data)
   data = migrateHybrasylTarget(data)
+  data = migrateWorldDirectories(data)
   return {
     targetKind: typeof data?.targetKind === 'string' ? data.targetKind : DEFAULTS.targetKind,
     clientPath: typeof data?.clientPath === 'string' ? data.clientPath : DEFAULTS.clientPath,
@@ -141,14 +209,24 @@ function withDefaults(data) {
         : DEFAULTS.multipleInstances,
     hideWalls: typeof data?.hideWalls === 'boolean' ? data.hideWalls : DEFAULTS.hideWalls,
     theme: typeof data?.theme === 'string' ? data.theme : DEFAULTS.theme,
-    activeProfile: typeof data?.activeProfile === 'string' ? data.activeProfile : DEFAULTS.activeProfile,
-    profiles: Array.isArray(data?.profiles) && data.profiles.length > 0
-      ? data.profiles
-      : DEFAULTS.profiles,
+    activeProfile:
+      typeof data?.activeProfile === 'string' ? data.activeProfile : DEFAULTS.activeProfile,
+    profiles:
+      Array.isArray(data?.profiles) && data.profiles.length > 0 ? data.profiles : DEFAULTS.profiles,
     instances: Array.isArray(data?.instances)
-      ? data.instances.filter((i) => i && typeof i === 'object' && typeof i.id === 'string' && i.id.length > 0).map(coerceInstance)
+      ? data.instances
+          .filter((i) => i && typeof i === 'object' && typeof i.id === 'string' && i.id.length > 0)
+          .map(coerceInstance)
       : [],
-    activeInstance: typeof data?.activeInstance === 'string' ? data.activeInstance : DEFAULTS.activeInstance,
+    activeInstance:
+      typeof data?.activeInstance === 'string' ? data.activeInstance : DEFAULTS.activeInstance,
+    worldDirectories: Array.isArray(data?.worldDirectories)
+      ? data.worldDirectories.map(coerceWorldDirectory).filter(Boolean)
+      : [],
+    activeWorldDirectory:
+      typeof data?.activeWorldDirectory === 'string'
+        ? data.activeWorldDirectory
+        : DEFAULTS.activeWorldDirectory,
     targets: {
       hybrasyl: {
         clientPath:
@@ -207,19 +285,31 @@ export function createSettingsManager(userDataPath) {
 
   let saveQueue = Promise.resolve()
 
+  async function doSave(data) {
+    const content = JSON.stringify(data, null, 2)
+    await fs.mkdir(userDataPath, { recursive: true })
+    await fs.writeFile(tmp, content, 'utf-8')
+    try {
+      await fs.copyFile(primary, backup)
+    } catch {
+      /* primary may not exist yet */
+    }
+    await fs.rename(tmp, primary)
+  }
+
   function save(data) {
-    saveQueue = saveQueue.then(async () => {
-      const content = JSON.stringify(data, null, 2)
-      await fs.mkdir(userDataPath, { recursive: true })
-      await fs.writeFile(tmp, content, 'utf-8')
-      try {
-        await fs.copyFile(primary, backup)
-      } catch {
-        /* primary may not exist yet */
-      }
-      await fs.rename(tmp, primary)
-    })
-    return saveQueue
+    // .then(fn, fn) so the queue runs the next save even after a previous
+    // failure — otherwise a single rejection poisons the chain and every
+    // future save silently no-ops via the rejected-promise propagation.
+    const op = saveQueue.then(
+      () => doSave(data),
+      () => doSave(data)
+    )
+    // Renderer's update() is fire-and-forget; without a handler here a save
+    // failure surfaces as an unhandled rejection. Log so it isn't silent.
+    op.catch((err) => console.error('[settings] save failed:', err))
+    saveQueue = op.catch(() => {})
+    return op
   }
 
   return { load, save }

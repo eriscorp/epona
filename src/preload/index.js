@@ -4,6 +4,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 contextBridge.exposeInMainWorld('electron', electronAPI)
 
 contextBridge.exposeInMainWorld('sparkAPI', {
+  platform: process.platform,
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   listVersions: () => ipcRenderer.invoke('versions:list'),
@@ -35,13 +36,15 @@ contextBridge.exposeInMainWorld('sparkAPI', {
 
   startInstance: (instance) => ipcRenderer.invoke('instance:start', instance),
   stopInstance: (instanceId) => ipcRenderer.invoke('instance:stop', instanceId),
+  resetInstance: (instance) => ipcRenderer.invoke('instance:reset', instance),
   listRunningInstances: () => ipcRenderer.invoke('instance:listRunning'),
-  listServerConfigs: (dataDir) =>
-    ipcRenderer.invoke('instance:listServerConfigs', dataDir),
+  listServerConfigs: (dataDir) => ipcRenderer.invoke('instance:listServerConfigs', dataDir),
   readDataStore: (dataDir, configFileName) =>
     ipcRenderer.invoke('instance:readDataStore', dataDir, configFileName),
   listGitBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
   isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath),
+  isHybrasylDataDir: (dataDir) => ipcRenderer.invoke('instance:isHybrasylDataDir', dataDir),
+  openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
   onInstanceLog: (cb) => {
     const listener = (_, payload) => cb(payload)
     ipcRenderer.on('instance:log', listener)

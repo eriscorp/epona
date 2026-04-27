@@ -12,8 +12,12 @@ function runGit(cwd, args, { allowFail = false } = {}) {
     })
     let stdout = ''
     let stderr = ''
-    child.stdout.on('data', (c) => { stdout += c.toString() })
-    child.stderr.on('data', (c) => { stderr += c.toString() })
+    child.stdout.on('data', (c) => {
+      stdout += c.toString()
+    })
+    child.stderr.on('data', (c) => {
+      stderr += c.toString()
+    })
     child.once('error', (err) => reject(err))
     child.once('exit', (code) => {
       if (code === 0 || allowFail) {
@@ -21,7 +25,11 @@ function runGit(cwd, args, { allowFail = false } = {}) {
         // for some git commands (e.g. `branch -a` puts marker columns there).
         resolve({ code, stdout: stdout.replace(/\s+$/, ''), stderr: stderr.trim() })
       } else {
-        reject(new Error(`git ${args.join(' ')} failed (exit ${code}): ${stderr.trim() || '(no stderr)'}`))
+        reject(
+          new Error(
+            `git ${args.join(' ')} failed (exit ${code}): ${stderr.trim() || '(no stderr)'}`
+          )
+        )
       }
     })
   })

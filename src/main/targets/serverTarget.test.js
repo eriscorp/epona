@@ -73,17 +73,21 @@ describe('stripXmlExt', () => {
 })
 
 describe('buildBinarySpawn', () => {
-  it('wraps a .dll target with `dotnet <dll>` and uses the server\'s lowercase flags', () => {
+  it("wraps a .dll target with `dotnet <dll>` and uses the server's lowercase flags", () => {
     const spec = buildBinarySpawn(BASE_INSTANCE)
     expect(spec.command).toBe('dotnet')
     expect(spec.args[0]).toBe('D:/hyb/Hybrasyl.dll')
     // Flag order is deterministic — assert exact sequence so a flag rename
     // breaks loudly rather than silently.
     expect(spec.args.slice(1)).toEqual([
-      '--dataDir', 'D:/ceridwen',
-      '--worldDataDir', join('D:/ceridwen', 'xml'),
-      '--logDir', 'D:/hyb-logs',
-      '--config', 'config'
+      '--dataDir',
+      'D:/ceridwen',
+      '--worldDataDir',
+      join('D:/ceridwen', 'xml'),
+      '--logDir',
+      'D:/hyb-logs',
+      '--config',
+      'config'
     ])
   })
 
@@ -91,10 +95,14 @@ describe('buildBinarySpawn', () => {
     const spec = buildBinarySpawn({ ...BASE_INSTANCE, binaryPath: 'D:/hyb/Hybrasyl.exe' })
     expect(spec.command).toBe('D:/hyb/Hybrasyl.exe')
     expect(spec.args).toEqual([
-      '--dataDir', 'D:/ceridwen',
-      '--worldDataDir', join('D:/ceridwen', 'xml'),
-      '--logDir', 'D:/hyb-logs',
-      '--config', 'config'
+      '--dataDir',
+      'D:/ceridwen',
+      '--worldDataDir',
+      join('D:/ceridwen', 'xml'),
+      '--logDir',
+      'D:/hyb-logs',
+      '--config',
+      'config'
     ])
   })
 
@@ -140,22 +148,25 @@ describe('buildRepoSpawn', () => {
     expect(spec.command).toBe('dotnet')
     expect(spec.args).toEqual([
       'run',
-      '--project', join('D:/repos/server/.worktrees/develop', 'hybrasyl', 'Hybrasyl.csproj'),
-      '--configuration', 'Debug',
+      '--project',
+      join('D:/repos/server/.worktrees/develop', 'hybrasyl', 'Hybrasyl.csproj'),
+      '--configuration',
+      'Debug',
       '--no-launch-profile',
       '--',
-      '--dataDir', 'D:/ceridwen',
-      '--worldDataDir', join('D:/ceridwen', 'xml'),
-      '--logDir', 'D:/hyb-logs',
-      '--config', 'config'
+      '--dataDir',
+      'D:/ceridwen',
+      '--worldDataDir',
+      join('D:/ceridwen', 'xml'),
+      '--logDir',
+      'D:/hyb-logs',
+      '--config',
+      'config'
     ])
   })
 
   it('strips .xml from configFileName for --config', () => {
-    const spec = buildRepoSpawn(
-      { ...REPO_INSTANCE, configFileName: 'qa.xml' },
-      'D:/wt'
-    )
+    const spec = buildRepoSpawn({ ...REPO_INSTANCE, configFileName: 'qa.xml' }, 'D:/wt')
     expect(spec.args).toContain('qa')
     expect(spec.args).not.toContain('qa.xml')
   })
@@ -189,11 +200,13 @@ describe('validateForLaunch', () => {
   })
 
   it('accepts a repo-mode instance with both server and xml branches', () => {
-    expect(validateForLaunch({
-      ...REPO_INSTANCE,
-      xmlRepoPath: 'D:/repos/xml',
-      xmlBranch: 'develop'
-    })).toEqual({ ok: true })
+    expect(
+      validateForLaunch({
+        ...REPO_INSTANCE,
+        xmlRepoPath: 'D:/repos/xml',
+        xmlBranch: 'develop'
+      })
+    ).toEqual({ ok: true })
   })
 
   it('rejects when mode is unknown', () => {

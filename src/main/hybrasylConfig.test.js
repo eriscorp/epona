@@ -126,7 +126,11 @@ describe('file I/O', () => {
     })
 
     it('parses an existing Darkages.cfg file', async () => {
-      await fs.writeFile(join(dir, 'Darkages.cfg'), 'LobbyHost: foo.com\nLobbyPort: 2610\n', 'utf-8')
+      await fs.writeFile(
+        join(dir, 'Darkages.cfg'),
+        'LobbyHost: foo.com\nLobbyPort: 2610\n',
+        'utf-8'
+      )
       expect(await readCfg(dir)).toEqual({ lobbyhost: 'foo.com', lobbyport: '2610' })
     })
   })

@@ -2,7 +2,6 @@ import { createConnection } from 'net'
 
 // DA wire protocol: 0xAA 0x00 <length> <opcode> <data...>
 const WELCOME_PREFIX = 0x1b
-const WELCOME_TEXT = 'CONNECTED SERVER\n'
 
 // Matches C# ServerTester: NetworkPacket(0xAA, 0x00, 0x0A, 0x62, 0x00, 0x34, 0x00, 0x0A, 0x88, 0x6E, 0x59, 0x59, 0x75)
 const HANDSHAKE = Buffer.from([
@@ -12,7 +11,7 @@ const HANDSHAKE = Buffer.from([
 export function testConnection(hostname, port, versionCode) {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      socket.destroy()
+      cleanup()
       resolve({ success: false, error: 'Connection timed out' })
     }, 3000)
 
@@ -64,7 +63,11 @@ export function testConnection(hostname, port, versionCode) {
 
     function cleanup() {
       clearTimeout(timeout)
-      socket.destroy()
+      try {
+        socket.destroy()
+      } catch {
+        /* already destroyed */
+      }
     }
   })
 }

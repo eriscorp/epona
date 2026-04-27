@@ -33,7 +33,9 @@ describe('writeBuildProps', () => {
     expect(result.written).toBe(true)
     const content = await fs.readFile(join(workDir, 'Directory.Build.props'), 'utf-8')
     // MSBuild prefers backslashes; the design doc shows them.
-    expect(content).toContain('E:\\Dark Ages Dev\\Repos\\xml\\.worktrees\\develop\\src\\Hybrasyl.Xml.csproj')
+    expect(content).toContain(
+      'E:\\Dark Ages Dev\\Repos\\xml\\.worktrees\\develop\\src\\Hybrasyl.Xml.csproj'
+    )
     expect(content).not.toContain('E:/Dark Ages Dev/Repos/xml')
   })
 

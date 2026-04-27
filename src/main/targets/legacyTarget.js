@@ -3,10 +3,7 @@ import { createRequire } from 'module'
 import { getVersion, detectVersion } from '../clientVersions.js'
 
 // Native addon must be loaded via require (CJS) — not bundled by Vite
-const win32 =
-  process.platform === 'win32'
-    ? createRequire(import.meta.url)('da-win32')
-    : null
+const win32 = process.platform === 'win32' ? createRequire(import.meta.url)('da-win32') : null
 
 export async function launch(settings, profile) {
   if (!win32) return { success: false, error: 'Windows only' }
@@ -41,9 +38,7 @@ export async function launch(settings, profile) {
     if (profile.redirect && profile.hostname) {
       const { address } = await lookup(profile.hostname)
       const ip = address.split('.').map(Number)
-      const hostnameBytes = Buffer.from([
-        0x6a, ip[3], 0x6a, ip[2], 0x6a, ip[1], 0x6a, ip[0]
-      ])
+      const hostnameBytes = Buffer.from([0x6a, ip[3], 0x6a, ip[2], 0x6a, ip[1], 0x6a, ip[0]])
       win32.writeProcessMemory(memHandle, version.hostnamePatchAddress, hostnameBytes)
 
       if (version.skipHostnamePatchAddress !== null) {

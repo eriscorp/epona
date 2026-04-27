@@ -20,7 +20,11 @@ afterEach(async () => {
   // can resolve. server.closeAllConnections() would do this too but isn't
   // present on every Node we support; destroying manually is portable.
   for (const s of sockets) {
-    try { s.destroy() } catch { /* already gone */ }
+    try {
+      s.destroy()
+    } catch {
+      /* already gone */
+    }
   }
   sockets = []
   if (server && server.listening) {
@@ -39,9 +43,7 @@ describe('check', () => {
 
   it('resolves { ok: true, authRequired: true } when Redis demands AUTH', async () => {
     const port = await startListener((socket) => {
-      socket.once('data', () =>
-        socket.write('-NOAUTH Authentication required.\r\n')
-      )
+      socket.once('data', () => socket.write('-NOAUTH Authentication required.\r\n'))
     })
     const result = await check('127.0.0.1', port, 1000)
     expect(result.ok).toBe(true)

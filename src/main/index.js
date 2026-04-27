@@ -5,15 +5,29 @@ import { createSettingsManager } from './settingsManager.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
-import { launch as launchHybrasyl, resolvePath as resolveHybrasylPath } from './targets/hybrasylTarget.js'
+import {
+  launch as launchHybrasyl,
+  resolvePath as resolveHybrasylPath
+} from './targets/hybrasylTarget.js'
 import { launch as launchServer } from './targets/serverTarget.js'
-import { listServerConfigs, readDataStore } from './serverConfigs.js'
+import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
 import { listBranches, isGitRepo } from './gitOps.js'
 import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
 
 let settingsManager
+
+// Tracked server instances. Lifted to module scope so the before-quit handler
+// can iterate and kill them before sweeping worktrees — otherwise running
+// servers hold the worktree dirs open and `git worktree remove` fails silently,
+// orphaning directories on disk.
+//
+// Each entry is { kind, value, cleanup }:
+//   kind:    'child' (piped child process) | 'pid' (Windows console wrapper)
+//   value:   ChildProcess | wrapperPid
+//   cleanup: async () => void  — releases worktrees / removes Directory.Build.props
+const instanceChildren = new Map()
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -123,12 +137,8 @@ app.whenReady().then(() => {
   let activeHybrasylChild = null
 
   function wireHybrasylChildLogs(child) {
-    const stdout = createLineBuffer((line) =>
-      mainWindow.webContents.send('hybrasyl:log', { stream: 'stdout', line })
-    )
-    const stderr = createLineBuffer((line) =>
-      mainWindow.webContents.send('hybrasyl:log', { stream: 'stderr', line })
-    )
+    const stdout = createLineBuffer((line) => safeSend('hybrasyl:log', { stream: 'stdout', line }))
+    const stderr = createLineBuffer((line) => safeSend('hybrasyl:log', { stream: 'stderr', line }))
     child.stdout?.on('data', stdout.push)
     child.stderr?.on('data', stderr.push)
     child.stdout?.on('end', stdout.flush)
@@ -137,17 +147,21 @@ app.whenReady().then(() => {
       stdout.flush()
       stderr.flush()
       if (activeHybrasylChild === child) activeHybrasylChild = null
-      mainWindow.webContents.send('hybrasyl:childExit', { pid: child.pid, code, signal })
+      safeSend('hybrasyl:childExit', { pid: child.pid, code, signal })
     })
     child.on('error', (err) => {
-      mainWindow.webContents.send('hybrasyl:log', {
+      safeSend('hybrasyl:log', {
         stream: 'stderr',
         line: `[spawn error] ${err.message}`
       })
     })
   }
 
-  ipcMain.handle('client:launch', async (_, targetKind, settings, profile) => {
+  ipcMain.handle('client:launch', async (_, targetKind, _renderSettings, profile) => {
+    // Spawn-path hardening: disk wins. The renderer's settings payload is
+    // ignored so a compromised renderer can't redirect the spawn target —
+    // we only execute paths the user persisted via dialog + save.
+    const settings = await settingsManager.load()
     if (targetKind === 'legacy') {
       if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
       return launchLegacy(settings, profile)
@@ -158,7 +172,11 @@ app.whenReady().then(() => {
         // Singleton repo run — stop the previous one so the pane shows a single
         // clean stream, then adopt the new child.
         if (activeHybrasylChild && activeHybrasylChild.exitCode === null) {
-          try { activeHybrasylChild.kill() } catch { /* may already be gone */ }
+          try {
+            activeHybrasylChild.kill()
+          } catch {
+            /* may already be gone */
+          }
         }
         activeHybrasylChild = result.child
         wireHybrasylChildLogs(result.child)
@@ -175,21 +193,27 @@ app.whenReady().then(() => {
     testConnection(hostname, port, version)
   )
 
-  // Server instance lifecycle — tracks one entry per running instanceId.
-  // Each entry is { kind, value, cleanup }:
-  //   kind: 'child' (Unix piped child) or 'pid' (Windows detached console)
-  //   value: ChildProcess or wrapperPid
-  //   cleanup: async () => void  — releases worktrees / removes Directory.Build.props
-  //                                for repo-mode instances; no-op for binary
-  // Stop reaps the process tree for 'pid' entries (taskkill /F /T) THEN runs cleanup.
-  const instanceChildren = new Map()
+  // (instanceChildren is module-scoped — see top of file. Stop reaps the
+  // process tree for 'pid' entries via taskkill /F /T, then runs cleanup.)
+
+  // Wraps webContents.send so a destroyed window during before-quit doesn't
+  // throw and abort the quit handler. The renderer is going away anyway.
+  function safeSend(channel, payload) {
+    try {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(channel, payload)
+      }
+    } catch {
+      /* webContents already gone */
+    }
+  }
 
   function wireInstanceLogs(instanceId, child) {
     const stdout = createLineBuffer((line) =>
-      mainWindow.webContents.send('instance:log', { instanceId, stream: 'stdout', line })
+      safeSend('instance:log', { instanceId, stream: 'stdout', line })
     )
     const stderr = createLineBuffer((line) =>
-      mainWindow.webContents.send('instance:log', { instanceId, stream: 'stderr', line })
+      safeSend('instance:log', { instanceId, stream: 'stderr', line })
     )
     child.stdout?.on('data', stdout.push)
     child.stderr?.on('data', stderr.push)
@@ -199,15 +223,10 @@ app.whenReady().then(() => {
       stdout.flush()
       stderr.flush()
       if (instanceChildren.get(instanceId) === child) instanceChildren.delete(instanceId)
-      mainWindow.webContents.send('instance:childExit', {
-        instanceId,
-        pid: child.pid,
-        code,
-        signal
-      })
+      safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal })
     })
     child.on('error', (err) => {
-      mainWindow.webContents.send('instance:log', {
+      safeSend('instance:log', {
         instanceId,
         stream: 'stderr',
         line: `[spawn error] ${err.message}`
@@ -215,12 +234,21 @@ app.whenReady().then(() => {
     })
   }
 
-  ipcMain.handle('instance:listServerConfigs', async (_, dataDir) =>
-    listServerConfigs(dataDir)
-  )
+  ipcMain.handle('instance:listServerConfigs', async (_, dataDir) => listServerConfigs(dataDir))
   ipcMain.handle('instance:readDataStore', async (_, dataDir, configFileName) =>
     readDataStore(dataDir, configFileName)
   )
+  ipcMain.handle('instance:isHybrasylDataDir', async (_, dataDir) => isHybrasylDataDir(dataDir))
+
+  // Open a path in the OS file explorer. Used by the LogDir quick-open button.
+  // shell.openPath returns '' on success, error string on failure.
+  ipcMain.handle('shell:openPath', async (_, path) => {
+    if (typeof path !== 'string' || path.length === 0) {
+      return { ok: false, error: 'no path' }
+    }
+    const err = await shell.openPath(path)
+    return err ? { ok: false, error: err } : { ok: true }
+  })
 
   // Git ops for the repo-mode picker — list branches in a chosen repo, and
   // an inline-validation check so the path picker can flag "not a git repo"
@@ -234,14 +262,37 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
 
-  ipcMain.handle('instance:start', async (_, instance) => {
-    if (!instance || typeof instance.id !== 'string') {
+  // Resolve an instance's worldDirectoryId to a concrete dataDir path that
+  // serverTarget understands. Returns null if the world directory is missing
+  // (deleted out from under the instance, or never set).
+  function resolveInstanceForLaunch(settings, instance) {
+    const wd = settings.worldDirectories.find((w) => w.id === instance.worldDirectoryId)
+    if (!wd) return null
+    return { ...instance, dataDir: wd.path }
+  }
+
+  ipcMain.handle('instance:start', async (_, supplied) => {
+    if (!supplied || typeof supplied.id !== 'string') {
       return { success: false, error: 'invalid instance payload' }
+    }
+    // Spawn-path hardening: re-resolve the instance from disk by id so the
+    // renderer can't supply forged paths. Unsaved edits will fail this lookup,
+    // forcing a save before launch.
+    const settings = await settingsManager.load()
+    const persisted = settings.instances.find((i) => i.id === supplied.id)
+    if (!persisted) {
+      return { success: false, error: 'instance not in saved settings — save changes first' }
+    }
+    const instance = resolveInstanceForLaunch(settings, persisted)
+    if (!instance) {
+      return {
+        success: false,
+        error: 'World directory not selected for this instance — pick one in settings.'
+      }
     }
     const existing = instanceChildren.get(instance.id)
     if (existing) {
-      const alive =
-        existing.kind === 'child' ? existing.value.exitCode === null : true
+      const alive = existing.kind === 'child' ? existing.value.exitCode === null : true
       if (alive) {
         return {
           success: false,
@@ -267,7 +318,9 @@ app.whenReady().then(() => {
     if (!tracked) return { success: true, wasRunning: false }
 
     async function runCleanup() {
-      try { await tracked.cleanup() } catch (err) {
+      try {
+        await tracked.cleanup()
+      } catch (err) {
         console.warn(`instance ${instanceId} cleanup failed:`, err.message)
       }
     }
@@ -278,13 +331,18 @@ app.whenReady().then(() => {
         await runCleanup()
         return { success: true, wasRunning: false }
       }
+      // Await actual exit before returning so a fast Stop→Start can't see the
+      // child still tracked. wireInstanceLogs handles the delete + event emit
+      // when exit fires; we cap the wait so a hung child can't block the IPC.
+      const exited = new Promise((resolve) => tracked.value.once('exit', resolve))
       try {
         tracked.value.kill()
-        await runCleanup()
-        return { success: true, wasRunning: true }
-      } catch (err) {
-        return { success: false, error: err.message }
+      } catch {
+        /* already gone */
       }
+      await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))])
+      await runCleanup()
+      return { success: true, wasRunning: true }
     }
 
     // PID-tracked: reap the wrapper + its server child via taskkill /T.
@@ -310,6 +368,78 @@ app.whenReady().then(() => {
         resolve({ success: false, error: `taskkill failed: ${err.message}` })
       })
     })
+  })
+
+  // Reset = stop + relaunch in one IPC round-trip. Awaits process death
+  // before relaunching so the new server doesn't race the old one on the
+  // port bind. The renderer keeps the running flag set across the gap so
+  // the UI doesn't flicker mid-restart.
+  ipcMain.handle('instance:reset', async (_, supplied) => {
+    if (!supplied || typeof supplied.id !== 'string') {
+      return { success: false, error: 'invalid instance payload' }
+    }
+    // Same disk-wins resolution as instance:start.
+    const settings = await settingsManager.load()
+    const persisted = settings.instances.find((i) => i.id === supplied.id)
+    if (!persisted) {
+      return { success: false, error: 'instance not in saved settings — save changes first' }
+    }
+    const instance = resolveInstanceForLaunch(settings, persisted)
+    if (!instance) {
+      return {
+        success: false,
+        error: 'World directory not selected for this instance — pick one in settings.'
+      }
+    }
+    const tracked = instanceChildren.get(instance.id)
+    if (!tracked) return { success: false, error: 'instance is not running' }
+
+    if (tracked.kind === 'child') {
+      if (tracked.value.exitCode === null) {
+        const exited = new Promise((resolve) => tracked.value.once('exit', resolve))
+        try {
+          tracked.value.kill()
+        } catch {
+          /* already gone */
+        }
+        // Cap so a stuck process can't deadlock the UI.
+        await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))])
+      }
+    } else {
+      const pid = tracked.value
+      await new Promise((resolve) => {
+        const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(pid)], {
+          stdio: 'ignore',
+          windowsHide: true
+        })
+        tk.once('exit', resolve)
+        tk.once('error', resolve)
+      })
+      instanceChildren.delete(instance.id)
+      mainWindow.webContents.send('instance:childExit', {
+        instanceId: instance.id,
+        pid,
+        code: null,
+        signal: 'SIGKILL'
+      })
+    }
+
+    try {
+      await tracked.cleanup()
+    } catch (err) {
+      console.warn(`instance ${instance.id} cleanup failed during reset:`, err.message)
+    }
+
+    const result = await launchServer(instance)
+    const cleanup = result.cleanup ?? (async () => {})
+    if (result.success && result.child) {
+      instanceChildren.set(instance.id, { kind: 'child', value: result.child, cleanup })
+      wireInstanceLogs(instance.id, result.child)
+    } else if (result.success && result.pid) {
+      instanceChildren.set(instance.id, { kind: 'pid', value: result.pid, cleanup })
+    }
+    const { child: _child, cleanup: _cleanup, ...safe } = result
+    return safe
   })
 
   ipcMain.handle('instance:listRunning', async () => {
@@ -350,13 +480,40 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// Best-effort sweep of every tracked git worktree on clean shutdown so a
-// normal Epona quit leaves disk tidy. Force-close via Task Manager won't
-// run this; the next launch's adoption path covers that case.
+// Best-effort cleanup on clean shutdown. Order matters: kill any tracked
+// server instances first so they release their open file handles inside the
+// worktree dirs, otherwise `git worktree remove` fails silently and orphans
+// directories on disk. Force-close via Task Manager won't run this; the next
+// launch's adoption path covers that case.
 app.on('before-quit', async (event) => {
   if (app._eponaCleanupRan) return
   app._eponaCleanupRan = true
   event.preventDefault()
+
+  for (const [id, tracked] of instanceChildren) {
+    try {
+      if (tracked.kind === 'child') {
+        if (tracked.value.exitCode === null) {
+          const exited = new Promise((r) => tracked.value.once('exit', r))
+          tracked.value.kill()
+          await Promise.race([exited, new Promise((r) => setTimeout(r, 2000))])
+        }
+      } else {
+        // PID-tracked: taskkill /F /T against the wrapper.
+        await new Promise((resolve) => {
+          const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(tracked.value)], {
+            stdio: 'ignore',
+            windowsHide: true
+          })
+          tk.once('exit', resolve)
+          tk.once('error', resolve)
+        })
+      }
+    } catch (err) {
+      console.warn(`instance ${id} kill on quit failed:`, err.message)
+    }
+  }
+
   try {
     await releaseAllWorktrees()
   } catch (err) {
