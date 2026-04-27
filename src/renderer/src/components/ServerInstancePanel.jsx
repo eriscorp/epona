@@ -23,6 +23,8 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import TerminalIcon from '@mui/icons-material/Terminal'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 
 const PICKER_SX = {
   flex: 1,
@@ -39,7 +41,7 @@ const TAB_XML = 1
 const TAB_CONFIG = 2
 const TAB_NETWORK = 3
 
-function emptyInstance() {
+function emptyInstance(activeWorldDirectoryId) {
   return {
     id: crypto.randomUUID(),
     name: 'New Instance',
@@ -49,7 +51,7 @@ function emptyInstance() {
     serverBranch: null,
     xmlRepoPath: '',
     xmlBranch: null,
-    dataDir: '',
+    worldDirectoryId: activeWorldDirectoryId ?? '',
     logDir: '',
     configFileName: '',
     redisHost: '',
@@ -62,13 +64,22 @@ function emptyInstance() {
   }
 }
 
+// Clamp a number-input's raw value to a valid port (1-65535) — falls back to
+// the previous value on non-finite input so a transient empty string while
+// editing doesn't blow away the field.
+function clampPort(raw, fallback) {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(1, Math.min(65535, Math.floor(n)))
+}
+
 function deriveLogDir(dataDir) {
   if (!dataDir) return ''
   const sep = dataDir.includes('\\') ? '\\' : '/'
   return `${dataDir.replace(/[\\/]+$/, '')}${sep}logs`
 }
 
-function PathPicker({ label, value, onPick, disabled }) {
+function PathPicker({ label, value, onPick, disabled, extraAction }) {
   return (
     <Box>
       <Typography variant="caption" color="text.button" sx={{ display: 'block', mb: 0.5 }}>
@@ -78,9 +89,12 @@ function PathPicker({ label, value, onPick, disabled }) {
         <Typography variant="body2" sx={{ ...PICKER_SX, opacity: value ? 1 : 0.5 }}>
           {value || '(not set)'}
         </Typography>
-        <Button size="small" variant="outlined" disabled={disabled} onClick={onPick}>
-          Browse…
-        </Button>
+        {onPick && (
+          <Button size="small" variant="outlined" disabled={disabled} onClick={onPick}>
+            Browse…
+          </Button>
+        )}
+        {extraAction}
       </Box>
     </Box>
   )
@@ -90,14 +104,18 @@ export default function ServerInstancePanel({
   instances,
   selectedId,
   runningIds,
+  worldDirectories,
+  activeWorldDirectory,
   onSelect,
   onInstancesChange,
   onStart,
   onStop,
-  logPaneOpen,
-  onToggleLogPane
+  onReset,
+  onOpenSettings
 }) {
-  const [busy, setBusy] = useState(false)
+  // null when idle; otherwise the verb shown on the busy button.
+  const [busyLabel, setBusyLabel] = useState(null)
+  const busy = busyLabel !== null
   const [snack, setSnack] = useState(null)
   const [activeTab, setActiveTab] = useState(TAB_SERVER)
   const [availableConfigs, setAvailableConfigs] = useState([])
@@ -111,23 +129,30 @@ export default function ServerInstancePanel({
   const isRepoMode = selected?.mode === 'repo'
   const useLocalXml = isRepoMode && selected?.xmlBranch !== null
 
+  // The instance stores `worldDirectoryId` (a reference); the path itself
+  // lives in the top-level worldDirectories list. Derive the resolved entry
+  // and path here so downstream effects (config listing, datastore probe) and
+  // the picker UI all share one source of truth.
+  const selectedWorldDir = selected?.worldDirectoryId
+    ? (worldDirectories.find((w) => w.id === selected.worldDirectoryId) ?? null)
+    : null
+  const selectedDataDir = selectedWorldDir?.path ?? ''
+
   useEffect(() => {
-    if (!selected?.dataDir) {
+    if (!selectedDataDir) {
       setAvailableConfigs([])
       return
     }
-    window.sparkAPI.listServerConfigs(selected.dataDir).then(setAvailableConfigs)
-  }, [selected?.dataDir])
+    window.sparkAPI.listServerConfigs(selectedDataDir).then(setAvailableConfigs)
+  }, [selectedDataDir])
 
   useEffect(() => {
-    if (!selected?.dataDir || !selected?.configFileName) {
+    if (!selectedDataDir || !selected?.configFileName) {
       setConfigDataStore(null)
       return
     }
-    window.sparkAPI
-      .readDataStore(selected.dataDir, selected.configFileName)
-      .then(setConfigDataStore)
-  }, [selected?.dataDir, selected?.configFileName])
+    window.sparkAPI.readDataStore(selectedDataDir, selected.configFileName).then(setConfigDataStore)
+  }, [selectedDataDir, selected?.configFileName])
 
   // Load branches on demand for whichever repo paths the selected instance uses.
   useEffect(() => {
@@ -137,15 +162,26 @@ export default function ServerInstancePanel({
     for (const p of paths) {
       if (branchCache[p] !== undefined) continue
       window.sparkAPI.listGitBranches(p).then((result) => {
-        setBranchCache((prev) => ({
-          ...prev,
-          [p]: result.ok
-            ? { branches: result.branches, error: null }
-            : { branches: [], error: result.error }
-        }))
+        // Functional update + idempotency check: if a concurrent fetch already
+        // populated this entry (e.g. rapid path swap re-entered the effect),
+        // keep the first write rather than clobbering it.
+        setBranchCache((prev) => {
+          if (prev[p] !== undefined) return prev
+          return {
+            ...prev,
+            [p]: result.ok
+              ? { branches: result.branches, error: null }
+              : { branches: [], error: result.error }
+          }
+        })
       })
     }
-  }, [isRepoMode, useLocalXml, selected?.serverRepoPath, selected?.xmlRepoPath, branchCache])
+    // branchCache intentionally NOT in deps: entries are append-only, so the
+    // closure's view is a subset of the live cache and the !== undefined check
+    // still skips already-loaded paths. Including it would re-fire the effect
+    // on every cache write. (The react-hooks/exhaustive-deps rule isn't active
+    // in this project, so no disable comment is needed.)
+  }, [isRepoMode, useLocalXml, selected?.serverRepoPath, selected?.xmlRepoPath])
 
   function updateSelected(patch) {
     if (!selected) return
@@ -154,7 +190,7 @@ export default function ServerInstancePanel({
   }
 
   function addInstance() {
-    const fresh = emptyInstance()
+    const fresh = emptyInstance(activeWorldDirectory)
     onInstancesChange([...instances, fresh])
     onSelect(fresh.id)
   }
@@ -172,18 +208,26 @@ export default function ServerInstancePanel({
 
   async function handleStart() {
     if (!selected) return
-    setBusy(true)
+    setBusyLabel('Starting…')
     const result = await onStart(selected)
-    setBusy(false)
+    setBusyLabel(null)
     if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Failed to start' })
   }
 
   async function handleStop() {
     if (!selected) return
-    setBusy(true)
+    setBusyLabel('Stopping…')
     const result = await onStop(selected.id)
-    setBusy(false)
+    setBusyLabel(null)
     if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Failed to stop' })
+  }
+
+  async function handleReset() {
+    if (!selected) return
+    setBusyLabel('Resetting…')
+    const result = await onReset(selected)
+    setBusyLabel(null)
+    if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Failed to reset' })
   }
 
   async function pickBinary() {
@@ -212,20 +256,47 @@ export default function ServerInstancePanel({
     }
     updateSelected({ xmlRepoPath: p })
   }
-  async function pickDataDir() {
-    const p = await window.sparkAPI.pickDirectory('Select data directory')
-    if (!p) return
-    const patch = { dataDir: p }
-    if (!selected.logDir) patch.logDir = deriveLogDir(p)
+  // Apply a worldDirectoryId selection: also re-derive logDir from the matching
+  // path. Note: this overwrites any manual logDir override — switching the
+  // world directory always resets logDir to the derived default.
+  function selectWorldDirectory(id) {
+    const wd = worldDirectories.find((w) => w.id === id)
+    const patch = { worldDirectoryId: id, logDir: wd ? deriveLogDir(wd.path) : '' }
     updateSelected(patch)
   }
+
   async function pickLogDir() {
     const p = await window.sparkAPI.pickDirectory('Select log directory')
     if (p) updateSelected({ logDir: p })
   }
 
-  const serverBranches = (selected?.serverRepoPath && branchCache[selected.serverRepoPath]?.branches) || []
-  const xmlBranches = (selected?.xmlRepoPath && branchCache[selected.xmlRepoPath]?.branches) || []
+  async function openLogDir() {
+    if (!selected?.logDir) return
+    const result = await window.sparkAPI.openPath(selected.logDir)
+    if (!result.ok) {
+      setSnack({ severity: 'error', message: `Could not open log dir: ${result.error}` })
+    }
+  }
+
+  // Pin a saved branch into the option list even if it's not in the fetched
+  // results — covers (1) the loading window before the IPC returns, (2) the
+  // branch having been deleted upstream, and (3) a git error suppressing the
+  // listing entirely. Without this, MUI warns "out-of-range value" and the
+  // user sees an empty dropdown.
+  function withSavedBranchPinned(branches, savedName) {
+    if (!savedName || branches.some((b) => b.name === savedName)) return branches
+    return [{ name: savedName, current: false, remote: false, missing: true }, ...branches]
+  }
+
+  const serverCacheEntry = selected?.serverRepoPath ? branchCache[selected.serverRepoPath] : null
+  const xmlCacheEntry = selected?.xmlRepoPath ? branchCache[selected.xmlRepoPath] : null
+  const serverBranchError = serverCacheEntry?.error ?? null
+  const xmlBranchError = xmlCacheEntry?.error ?? null
+  const serverBranches = withSavedBranchPinned(
+    serverCacheEntry?.branches ?? [],
+    selected?.serverBranch
+  )
+  const xmlBranches = withSavedBranchPinned(xmlCacheEntry?.branches ?? [], selected?.xmlBranch)
 
   // ──────────── Tab content sections ────────────
 
@@ -239,8 +310,12 @@ export default function ServerInstancePanel({
         onChange={(_, m) => m && updateSelected({ mode: m })}
         disabled={isRunning}
       >
-        <ToggleButton value="binary" sx={{ textTransform: 'none' }}>Binary</ToggleButton>
-        <ToggleButton value="repo" sx={{ textTransform: 'none' }}>Repo</ToggleButton>
+        <ToggleButton value="binary" sx={{ textTransform: 'none' }}>
+          Binary
+        </ToggleButton>
+        <ToggleButton value="repo" sx={{ textTransform: 'none' }}>
+          Repo
+        </ToggleButton>
       </ToggleButtonGroup>
 
       {!isRepoMode && (
@@ -266,17 +341,27 @@ export default function ServerInstancePanel({
               label="Server Branch"
               notched
               value={selected.serverBranch ?? CURRENT_CHECKOUT_VALUE}
-              onChange={(e) => updateSelected({
-                serverBranch: e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
-              })}
+              onChange={(e) =>
+                updateSelected({
+                  serverBranch: e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
+                })
+              }
             >
               <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
               {serverBranches.map((b) => (
                 <MenuItem key={b.name} value={b.name}>
-                  {b.name}{b.current ? ' (current)' : ''}{b.remote ? ' (remote)' : ''}
+                  {b.name}
+                  {b.current ? ' (current)' : ''}
+                  {b.remote ? ' (remote)' : ''}
+                  {b.missing ? ' (loading…)' : ''}
                 </MenuItem>
               ))}
             </Select>
+            {serverBranchError && (
+              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                Couldn&apos;t list branches: {serverBranchError}
+              </Typography>
+            )}
           </FormControl>
         </>
       )}
@@ -287,8 +372,8 @@ export default function ServerInstancePanel({
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
       {!isRepoMode ? (
         <Typography variant="body2" color="text.secondary" sx={{ p: 1, fontStyle: 'italic' }}>
-          Local Hybrasyl.Xml branches are only available in repo mode. Switch to Repo on the
-          Server tab to enable.
+          Local Hybrasyl.Xml branches are only available in repo mode. Switch to Repo on the Server
+          tab to enable.
         </Typography>
       ) : (
         <>
@@ -332,10 +417,18 @@ export default function ServerInstancePanel({
                   )}
                   {xmlBranches.map((b) => (
                     <MenuItem key={b.name} value={b.name}>
-                      {b.name}{b.current ? ' (current)' : ''}{b.remote ? ' (remote)' : ''}
+                      {b.name}
+                      {b.current ? ' (current)' : ''}
+                      {b.remote ? ' (remote)' : ''}
+                      {b.missing ? ' (loading…)' : ''}
                     </MenuItem>
                   ))}
                 </Select>
+                {xmlBranchError && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    Couldn&apos;t list branches: {xmlBranchError}
+                  </Typography>
+                )}
               </FormControl>
             </>
           )}
@@ -346,17 +439,79 @@ export default function ServerInstancePanel({
 
   const configTab = selected && (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-      <PathPicker
-        label="Data Dir"
-        value={selected.dataDir}
-        onPick={pickDataDir}
-        disabled={isRunning}
-      />
+      <Box>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}
+        >
+          <Typography variant="caption" color="text.button">
+            World Directory
+          </Typography>
+          {onOpenSettings && (
+            <Button
+              size="small"
+              onClick={onOpenSettings}
+              sx={{ minWidth: 0, fontSize: 11, textTransform: 'none', py: 0 }}
+            >
+              Manage…
+            </Button>
+          )}
+        </Box>
+        <FormControl size="small" fullWidth disabled={isRunning}>
+          <Select
+            value={selected.worldDirectoryId || ''}
+            onChange={(e) => selectWorldDirectory(e.target.value)}
+            displayEmpty
+          >
+            {worldDirectories.length === 0 ? (
+              <MenuItem value="" disabled>
+                (no world directories — add one in Settings)
+              </MenuItem>
+            ) : (
+              [
+                <MenuItem key="__none" value="" disabled>
+                  (select a world directory…)
+                </MenuItem>,
+                ...worldDirectories.map((wd) => (
+                  <MenuItem key={wd.id} value={wd.id}>
+                    {wd.name}
+                  </MenuItem>
+                ))
+              ]
+            )}
+          </Select>
+        </FormControl>
+        {selectedWorldDir && (
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              mt: 0.5,
+              fontFamily: 'monospace',
+              fontSize: 10,
+              opacity: 0.7,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {selectedWorldDir.path}
+          </Typography>
+        )}
+      </Box>
       <PathPicker
         label="Log Dir"
         value={selected.logDir}
         onPick={pickLogDir}
         disabled={isRunning}
+        extraAction={
+          <Tooltip title="Open log folder in Explorer">
+            <span>
+              <IconButton size="small" disabled={!selected.logDir} onClick={openLogDir}>
+                <FolderOpenIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        }
       />
       <FormControl size="small" disabled={isRunning}>
         <InputLabel shrink>Server Config</InputLabel>
@@ -371,9 +526,9 @@ export default function ServerInstancePanel({
             <MenuItem value="" disabled>
               {availableConfigs.length > 0
                 ? '(select a config…)'
-                : selected.dataDir
+                : selectedDataDir
                   ? '(no <ServerConfig> XMLs found in xml/serverconfigs/)'
-                  : '(pick a data dir to list options)'}
+                  : '(pick a world directory to list options)'}
             </MenuItem>
           )}
           {availableConfigs.map((name) => (
@@ -412,9 +567,10 @@ export default function ServerInstancePanel({
             type="number"
             value={selected.redisPort}
             onChange={(e) =>
-              updateSelected({ redisPort: Number(e.target.value) || selected.redisPort })
+              updateSelected({ redisPort: clampPort(e.target.value, selected.redisPort) })
             }
             disabled={isRunning}
+            inputProps={{ min: 1, max: 65535 }}
             sx={{ flex: 1 }}
           />
         </Box>
@@ -430,8 +586,8 @@ export default function ServerInstancePanel({
             title={
               <Box>
                 <Typography variant="caption" sx={{ display: 'block' }}>
-                  WSL Redis can drop forwarded connections under load on Windows.
-                  Memurai is a native Windows Redis-compatible alternative.
+                  WSL Redis can drop forwarded connections under load on Windows. Memurai is a
+                  native Windows Redis-compatible alternative.
                 </Typography>
                 <Typography
                   variant="caption"
@@ -453,9 +609,10 @@ export default function ServerInstancePanel({
           type="number"
           value={selected.lobbyPort}
           onChange={(e) =>
-            updateSelected({ lobbyPort: Number(e.target.value) || selected.lobbyPort })
+            updateSelected({ lobbyPort: clampPort(e.target.value, selected.lobbyPort) })
           }
           disabled={isRunning}
+          inputProps={{ min: 1, max: 65535 }}
           sx={{ flex: 1 }}
         />
         <TextField
@@ -464,9 +621,10 @@ export default function ServerInstancePanel({
           type="number"
           value={selected.loginPort}
           onChange={(e) =>
-            updateSelected({ loginPort: Number(e.target.value) || selected.loginPort })
+            updateSelected({ loginPort: clampPort(e.target.value, selected.loginPort) })
           }
           disabled={isRunning}
+          inputProps={{ min: 1, max: 65535 }}
           sx={{ flex: 1 }}
         />
         <TextField
@@ -475,9 +633,10 @@ export default function ServerInstancePanel({
           type="number"
           value={selected.worldPort}
           onChange={(e) =>
-            updateSelected({ worldPort: Number(e.target.value) || selected.worldPort })
+            updateSelected({ worldPort: clampPort(e.target.value, selected.worldPort) })
           }
           disabled={isRunning}
+          inputProps={{ min: 1, max: 65535 }}
           sx={{ flex: 1 }}
         />
       </Box>
@@ -567,17 +726,35 @@ export default function ServerInstancePanel({
 
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isRunning ? (
-              <Button
-                fullWidth
-                variant="contained"
-                color="error"
-                disabled={busy}
-                onClick={handleStop}
-                startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
-                sx={{ color: 'text.button' }}
-              >
-                {busy ? 'Stopping…' : 'Stop Server'}
-              </Button>
+              <>
+                <Tooltip title="Reset (kill and relaunch — picks up script/XML changes)">
+                  <span>
+                    <IconButton
+                      color="primary"
+                      disabled={busy}
+                      onClick={handleReset}
+                      sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}
+                    >
+                      {busyLabel === 'Resetting…' ? (
+                        <CircularProgress size={18} color="inherit" />
+                      ) : (
+                        <RestartAltIcon />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="error"
+                  disabled={busy}
+                  onClick={handleStop}
+                  startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
+                  sx={{ color: 'text.button' }}
+                >
+                  {busyLabel ?? 'Stop Server'}
+                </Button>
+              </>
             ) : (
               <Button
                 fullWidth
@@ -587,7 +764,7 @@ export default function ServerInstancePanel({
                 startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
                 sx={{ color: 'text.button' }}
               >
-                {busy ? 'Starting…' : 'Start Server'}
+                {busyLabel ?? 'Start Server'}
               </Button>
             )}
           </Box>

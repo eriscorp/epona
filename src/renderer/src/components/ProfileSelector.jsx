@@ -26,7 +26,9 @@ export default function ProfileSelector({ profiles, activeProfile, onChange }) {
       </FormControl>
       {profile && (
         <Typography variant="caption" color="text.button" sx={{ mt: 0.5, display: 'block' }}>
-          {profile.redirect ? `${profile.hostname}:${profile.port}` : 'No redirect (official servers)'}
+          {profile.redirect
+            ? `${profile.hostname}:${profile.port}`
+            : 'No redirect (official servers)'}
         </Typography>
       )}
     </Box>

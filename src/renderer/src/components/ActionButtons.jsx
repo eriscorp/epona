@@ -52,7 +52,7 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
           disabled={testing}
           onClick={handleTest}
           startIcon={testing ? <CircularProgress size={14} /> : null}
-          sx={{color: 'text.button'}}
+          sx={{ color: 'text.button' }}
         >
           {testing ? 'Testing…' : 'Test Connection'}
         </Button>
@@ -62,7 +62,7 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
           disabled={launching}
           onClick={handleLaunch}
           startIcon={launching ? <CircularProgress size={14} color="inherit" /> : null}
-          sx={{color: 'text.button'}}
+          sx={{ color: 'text.button' }}
         >
           {launching ? 'Launching…' : 'Launch Client'}
         </Button>

@@ -4,6 +4,7 @@ import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
+import Alert from '@mui/material/Alert'
 import hybrasylTheme from './themes/hybrasyl'
 import chadulTheme from './themes/chadul'
 import danaanTheme from './themes/danaan'
@@ -16,7 +17,7 @@ import OptionsPanel from './components/OptionsPanel'
 import HybrasylClientPanel from './components/HybrasylClientPanel'
 import ServerInstancePanel from './components/ServerInstancePanel'
 import ActionButtons from './components/ActionButtons'
-import SettingsDrawer from './components/SettingsDrawer'
+import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 
 const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
@@ -48,11 +49,19 @@ const defaultSettings = {
   theme: 'hybrasyl',
   activeProfile: 'official',
   profiles: [
-    { id: 'official', name: 'Dark Ages (Official)', hostname: 'da0.kru.com', port: 2610, redirect: false }
+    {
+      id: 'official',
+      name: 'Dark Ages (Official)',
+      hostname: 'da0.kru.com',
+      port: 2610,
+      redirect: false
+    }
   ],
   targets: { hybrasyl: { clientPath: '', dataPath: 'E:\\Games\\Dark Ages', showConsole: false } },
   instances: [],
-  activeInstance: null
+  activeInstance: null,
+  worldDirectories: [],
+  activeWorldDirectory: null
 }
 
 export default function App() {
@@ -102,24 +111,26 @@ export default function App() {
         return { ...prev, [instanceId]: trimmed }
       })
     })
-    const offInstanceExit = window.sparkAPI.onInstanceChildExit(({ instanceId, pid, code, signal }) => {
-      const label = signal ? `signal ${signal}` : `exit code ${code}`
-      setInstanceLogs((prev) => {
-        const prior = prev[instanceId] ?? []
-        return {
-          ...prev,
-          [instanceId]: prior.concat({
-            stream: 'exit',
-            text: `— process ${pid} ended (${label}) —`
-          })
-        }
-      })
-      setRunningInstances((prev) => {
-        const next = new Set(prev)
-        next.delete(instanceId)
-        return next
-      })
-    })
+    const offInstanceExit = window.sparkAPI.onInstanceChildExit(
+      ({ instanceId, pid, code, signal }) => {
+        const label = signal ? `signal ${signal}` : `exit code ${code}`
+        setInstanceLogs((prev) => {
+          const prior = prev[instanceId] ?? []
+          return {
+            ...prev,
+            [instanceId]: prior.concat({
+              stream: 'exit',
+              text: `— process ${pid} ended (${label}) —`
+            })
+          }
+        })
+        setRunningInstances((prev) => {
+          const next = new Set(prev)
+          next.delete(instanceId)
+          return next
+        })
+      }
+    )
     return () => {
       offLog?.()
       offExit?.()
@@ -129,14 +140,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const width = logPaneOpen ? MAIN_W + PANE_W : MAIN_W
+    const width = MAIN_W + (settingsOpen ? PANE_W : 0) + (logPaneOpen ? PANE_W : 0)
     window.sparkAPI.resizeWindow(width, WINDOW_H)
-  }, [logPaneOpen])
+  }, [logPaneOpen, settingsOpen])
 
   function update(patch) {
     setSettings((prev) => {
       const next = { ...prev, ...patch }
-      window.sparkAPI.saveSettings(next)
+      // Fire-and-forget save: log on failure so it isn't silent.
+      window.sparkAPI
+        .saveSettings(next)
+        .catch((err) => console.error('[settings] saveSettings rejected:', err))
       if (patch.theme && themes[patch.theme]) setThemeName(patch.theme)
       return next
     })
@@ -186,145 +200,183 @@ export default function App() {
           '::-webkit-scrollbar-corner': { background: 'transparent' }
         })}
       />
-      <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', height: WINDOW_H, bgcolor: 'background.default' }}>
       <Box
         sx={{
-          flex: `0 0 ${MAIN_W}px`,
-          height: WINDOW_H,
           display: 'flex',
-          flexDirection: 'column',
-          bgcolor: 'background.default',
-          overflow: 'hidden'
+          flexDirection: 'row',
+          width: '100%',
+          height: WINDOW_H,
+          bgcolor: 'background.default'
         }}
       >
-        <TitleBar />
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
-        <NavToolbar
-          detectedVersion={detectedVersion}
-          onLocateClient={handleLocateClient}
-          onToggleSettings={() => setSettingsOpen((o) => !o)}
-        />
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
-
-        <Tabs
-          value={activeTab}
-          onChange={(_, v) => {
-            setActiveTab(v)
-            update({ targetKind: TAB_ORDER[v] })
+        <Box
+          sx={{
+            flex: `0 0 ${MAIN_W}px`,
+            height: WINDOW_H,
+            display: 'flex',
+            flexDirection: 'column',
+            bgcolor: 'background.default',
+            overflow: 'hidden'
           }}
-          variant="fullWidth"
-          sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
         >
-          <Tab label="Legacy Client" />
-          <Tab label="Hybrasyl Client" />
-          <Tab label="Hybrasyl Server" />
-        </Tabs>
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <TitleBar />
+          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <NavToolbar
+            detectedVersion={detectedVersion}
+            onLocateClient={handleLocateClient}
+            onToggleSettings={() => setSettingsOpen((o) => !o)}
+          />
+          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
 
-        {activeTab === 0 && (
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-            <ProfileSelector
-              profiles={settings.profiles}
-              activeProfile={settings.activeProfile}
-              onChange={(id) => update({ activeProfile: id })}
-            />
-            <OptionsPanel settings={settings} onChange={update} />
-            <ActionButtons
-              targetKind="legacy"
-              settings={settings}
-              getActiveProfile={getActiveProfile}
-            />
-          </Box>
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => {
+              setActiveTab(v)
+              update({ targetKind: TAB_ORDER[v] })
+            }}
+            variant="fullWidth"
+            sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
+          >
+            <Tab label="Legacy Client" />
+            <Tab label="Hybrasyl Client" />
+            <Tab label="Hybrasyl Server" />
+          </Tabs>
+          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+
+          {activeTab === 0 && (
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+              {window.sparkAPI.platform !== 'win32' && (
+                <Alert severity="warning" variant="outlined">
+                  Legacy Client requires Windows — it patches the running .exe via native Win32
+                  APIs. On macOS or Linux you&apos;ll need a compatibility layer (Wine, CrossOver,
+                  etc.) and we can&apos;t promise it&apos;ll work.
+                </Alert>
+              )}
+              <ProfileSelector
+                profiles={settings.profiles}
+                activeProfile={settings.activeProfile}
+                onChange={(id) => update({ activeProfile: id })}
+              />
+              <OptionsPanel settings={settings} onChange={update} />
+              <ActionButtons
+                targetKind="legacy"
+                settings={settings}
+                getActiveProfile={getActiveProfile}
+              />
+            </Box>
+          )}
+
+          {activeTab === 1 && (
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+              <HybrasylClientPanel
+                hybrasyl={settings.targets.hybrasyl}
+                onChange={update}
+                logPaneOpen={logPaneOpen}
+                onToggleLogPane={() => setLogPaneOpen((o) => !o)}
+              />
+              <ProfileSelector
+                profiles={settings.profiles}
+                activeProfile={settings.activeProfile}
+                onChange={(id) => update({ activeProfile: id })}
+              />
+              <ActionButtons
+                targetKind="hybrasyl"
+                settings={settings}
+                getActiveProfile={getActiveProfile}
+              />
+            </Box>
+          )}
+
+          {activeTab === 2 && (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.5,
+                p: 2,
+                overflow: 'hidden'
+              }}
+            >
+              <ServerInstancePanel
+                instances={settings.instances}
+                selectedId={settings.activeInstance}
+                runningIds={runningInstances}
+                worldDirectories={settings.worldDirectories}
+                activeWorldDirectory={settings.activeWorldDirectory}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onSelect={(id) => update({ activeInstance: id })}
+                onInstancesChange={(next) => update({ instances: next })}
+                onStart={async (instance) => {
+                  const result = await window.sparkAPI.startInstance(instance)
+                  if (result.success) {
+                    setRunningInstances((prev) => new Set(prev).add(instance.id))
+                  }
+                  return result
+                }}
+                onStop={async (instanceId) => {
+                  const result = await window.sparkAPI.stopInstance(instanceId)
+                  // For cmd /c start-launched servers we don't track the PID,
+                  // so nothing actually happens on the main side. Clear the
+                  // UI's running flag anyway — the user is telling us the
+                  // instance is no longer running, and the console window
+                  // closure is the real stop signal.
+                  setRunningInstances((prev) => {
+                    const next = new Set(prev)
+                    next.delete(instanceId)
+                    return next
+                  })
+                  return result
+                }}
+                onReset={async (instance) => {
+                  const result = await window.sparkAPI.resetInstance(instance)
+                  // On success the instance is still running (a fresh process)
+                  // — leave the flag set. On failure the previous process was
+                  // killed but relaunch failed, so treat as stopped.
+                  if (!result.success) {
+                    setRunningInstances((prev) => {
+                      const next = new Set(prev)
+                      next.delete(instance.id)
+                      return next
+                    })
+                  }
+                  return result
+                }}
+              />
+            </Box>
+          )}
+        </Box>
+
+        {logPaneOpen && activeTab !== 2 && (
+          <LogPane
+            title="Hybrasyl Client"
+            lines={hybrasylLog}
+            onClear={() => setHybrasylLog([])}
+            onClose={() => setLogPaneOpen(false)}
+          />
         )}
 
-        {activeTab === 1 && (
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-            <HybrasylClientPanel
-              hybrasyl={settings.targets.hybrasyl}
-              onChange={update}
-              logPaneOpen={logPaneOpen}
-              onToggleLogPane={() => setLogPaneOpen((o) => !o)}
-            />
-            <ProfileSelector
-              profiles={settings.profiles}
-              activeProfile={settings.activeProfile}
-              onChange={(id) => update({ activeProfile: id })}
-            />
-            <ActionButtons
-              targetKind="hybrasyl"
-              settings={settings}
-              getActiveProfile={getActiveProfile}
-            />
-          </Box>
+        {logPaneOpen && activeTab === 2 && (
+          <LogPane
+            title={
+              settings.instances.find((i) => i.id === settings.activeInstance)?.name ??
+              'Server Instance'
+            }
+            lines={instanceLogs[settings.activeInstance] ?? []}
+            onClear={() => setInstanceLogs((prev) => ({ ...prev, [settings.activeInstance]: [] }))}
+            onClose={() => setLogPaneOpen(false)}
+          />
         )}
 
-        {activeTab === 2 && (
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, overflow: 'hidden' }}>
-            <ServerInstancePanel
-              instances={settings.instances}
-              selectedId={settings.activeInstance}
-              runningIds={runningInstances}
-              onSelect={(id) => update({ activeInstance: id })}
-              onInstancesChange={(next) => update({ instances: next })}
-              onStart={async (instance) => {
-                const result = await window.sparkAPI.startInstance(instance)
-                if (result.success) {
-                  setRunningInstances((prev) => new Set(prev).add(instance.id))
-                }
-                return result
-              }}
-              onStop={async (instanceId) => {
-                const result = await window.sparkAPI.stopInstance(instanceId)
-                // For cmd /c start-launched servers we don't track the PID,
-                // so nothing actually happens on the main side. Clear the
-                // UI's running flag anyway — the user is telling us the
-                // instance is no longer running, and the console window
-                // closure is the real stop signal.
-                setRunningInstances((prev) => {
-                  const next = new Set(prev)
-                  next.delete(instanceId)
-                  return next
-                })
-                return result
-              }}
-              logPaneOpen={logPaneOpen}
-              onToggleLogPane={() => setLogPaneOpen((o) => !o)}
-            />
-          </Box>
+        {settingsOpen && (
+          <SettingsPane
+            settings={settings}
+            versions={versions}
+            onClose={() => setSettingsOpen(false)}
+            onChange={update}
+          />
         )}
       </Box>
-
-      {logPaneOpen && activeTab !== 2 && (
-        <LogPane
-          title="Hybrasyl Client"
-          lines={hybrasylLog}
-          onClear={() => setHybrasylLog([])}
-          onClose={() => setLogPaneOpen(false)}
-        />
-      )}
-
-      {logPaneOpen && activeTab === 2 && (
-        <LogPane
-          title={
-            settings.instances.find((i) => i.id === settings.activeInstance)?.name
-              ?? 'Server Instance'
-          }
-          lines={instanceLogs[settings.activeInstance] ?? []}
-          onClear={() =>
-            setInstanceLogs((prev) => ({ ...prev, [settings.activeInstance]: [] }))
-          }
-          onClose={() => setLogPaneOpen(false)}
-        />
-      )}
-      </Box>
-
-      <SettingsDrawer
-        open={settingsOpen}
-        settings={settings}
-        versions={versions}
-        onClose={() => setSettingsOpen(false)}
-        onChange={update}
-      />
     </ThemeProvider>
   )
 }

@@ -22,24 +22,38 @@ export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, o
 
   useEffect(() => {
     if (hybrasyl.clientPath) {
-      window.sparkAPI.detectHybrasylPath(hybrasyl.clientPath).then(setResolution)
+      window.sparkAPI
+        .detectHybrasylPath(hybrasyl.clientPath)
+        .then(setResolution)
+        .catch((err) => console.error('[hybrasyl] detectHybrasylPath failed:', err))
     } else {
       setResolution({ kind: null })
     }
   }, [hybrasyl.clientPath])
 
   useEffect(() => {
-    window.sparkAPI.checkDotnetRuntime().then(setRuntime)
+    window.sparkAPI
+      .checkDotnetRuntime()
+      .then(setRuntime)
+      .catch((err) => console.error('[hybrasyl] checkDotnetRuntime failed:', err))
   }, [])
 
   async function pickClientPath() {
-    const path = await window.sparkAPI.pickHybrasylPath()
-    if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, clientPath: path } } })
+    try {
+      const path = await window.sparkAPI.pickHybrasylPath()
+      if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, clientPath: path } } })
+    } catch (err) {
+      console.error('[hybrasyl] pickHybrasylPath failed:', err)
+    }
   }
 
   async function pickDataPath() {
-    const path = await window.sparkAPI.pickHybrasylDataDir()
-    if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, dataPath: path } } })
+    try {
+      const path = await window.sparkAPI.pickHybrasylDataDir()
+      if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, dataPath: path } } })
+    } catch (err) {
+      console.error('[hybrasyl] pickHybrasylDataDir failed:', err)
+    }
   }
 
   const kind = kindLabel(resolution.kind)
@@ -47,7 +61,9 @@ export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, o
   // launches are fire-and-forget with no stdio pipes (multi-instance allowed).
   const consoleAvailable = resolution.kind === 'repo'
   const consoleTooltip = consoleAvailable
-    ? logPaneOpen ? 'Hide console' : 'Show console'
+    ? logPaneOpen
+      ? 'Hide console'
+      : 'Show console'
     : 'Console output is only available for source (.csproj) launches'
 
   const runtimeOk = runtime.netCoreApp10 === true
@@ -63,8 +79,12 @@ export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, o
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-          <Typography variant="caption" color="text.button">Client Path</Typography>
+        <Box
+          sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}
+        >
+          <Typography variant="caption" color="text.button">
+            Client Path
+          </Typography>
           <Chip size="small" label={kind.label} color={kind.color} variant="outlined" />
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -118,7 +138,9 @@ export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, o
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="caption" color="text.button">Runtime</Typography>
+        <Typography variant="caption" color="text.button">
+          Runtime
+        </Typography>
         <Chip size="small" label={runtimeChip.label} color={runtimeChip.color} variant="outlined" />
         <Box sx={{ flex: 1 }} />
         <Tooltip title={consoleTooltip}>

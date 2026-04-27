@@ -1,5 +1,5 @@
 import { Toolbar, IconButton, Tooltip, Box, Typography } from '@mui/material'
-import { GiContract, GiExpand, GiDeathSkull } from 'react-icons/gi'
+import { GiContract, GiDeathSkull } from 'react-icons/gi'
 import eponaLogo from '../assets/epona.png'
 
 const iconSx = {
@@ -40,11 +40,7 @@ export default function TitleBar() {
       <Box sx={{ flexGrow: 1 }} />
 
       <Tooltip title="Minimize">
-        <IconButton
-          size="small"
-          sx={winBtnSx}
-          onClick={() => window.sparkAPI.minimizeWindow()}
-        >
+        <IconButton size="small" sx={winBtnSx} onClick={() => window.sparkAPI.minimizeWindow()}>
           <GiContract />
         </IconButton>
       </Tooltip>
