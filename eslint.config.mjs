@@ -9,5 +9,14 @@ export default [
   reactPlugin.configs.flat.recommended,
   reactPlugin.configs.flat['jsx-runtime'],
   { settings: { react: { version: 'detect' } } },
-  electronToolkitPrettier
+  electronToolkitPrettier,
+  {
+    rules: {
+      // Codebase is plain JS without runtime type checks; we don't author
+      // propTypes shims. Disabling matches actual practice.
+      'react/prop-types': 'off',
+      // Allow `const { foo: _foo, ...rest } = obj` discard pattern.
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }]
+    }
+  }
 ]
