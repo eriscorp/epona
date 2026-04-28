@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { spawn } from 'child_process'
-import { isGitRepo, listBranches } from './gitOps.js'
+import { isGitRepo, listBranches, gitToplevel } from './gitOps.js'
 
 // Helpers — run a real git command in a real temp dir. Slower than mocking
 // but catches git-version drift and platform quirks; matches the project's
@@ -69,11 +69,51 @@ describe('gitOps', () => {
       expect(await isGitRepo(null)).toBe(false)
       expect(await isGitRepo(undefined)).toBe(false)
     })
+    // Regression: passing a file inside a repo (e.g. a .csproj path the user
+    // picked) used to fail because `git -C <file>` errors. The function now
+    // resolves to the file's parent dir.
+    it('returns true for a file inside a git repo', async () => {
+      const filePath = join(repoPath, 'project.csproj')
+      await fs.writeFile(filePath, '<Project />', 'utf-8')
+      expect(await isGitRepo(filePath)).toBe(true)
+    })
+  })
+
+  describe('gitToplevel', () => {
+    it('returns the repo root for a path inside the repo', async () => {
+      const top = await gitToplevel(repoPath)
+      // Compare via realpath-normalised form so /private/var vs /var on macOS
+      // and short-vs-long names on Windows don't trip the assertion.
+      expect(top && (await fs.realpath(top))).toBe(await fs.realpath(repoPath))
+    })
+    it('resolves to repo root when given a file inside the repo', async () => {
+      const filePath = join(repoPath, 'sub.csproj')
+      await fs.writeFile(filePath, '<Project />', 'utf-8')
+      const top = await gitToplevel(filePath)
+      expect(top && (await fs.realpath(top))).toBe(await fs.realpath(repoPath))
+    })
+    it('returns null for a directory that is not a git repo', async () => {
+      expect(await gitToplevel(nonRepoPath)).toBeNull()
+    })
+    it('returns null for empty / non-string input', async () => {
+      expect(await gitToplevel('')).toBeNull()
+      expect(await gitToplevel(null)).toBeNull()
+      expect(await gitToplevel(undefined)).toBeNull()
+    })
   })
 
   describe('listBranches', () => {
     it('rejects with a friendly error when path is not a git repo', async () => {
       await expect(listBranches(nonRepoPath)).rejects.toThrow(/Not a git repository/)
+    })
+
+    // Regression: passing a .csproj path used to throw 'Not a git repository'
+    // because `git -C <file>` errors. The function now resolves to dirname.
+    it('lists branches when given a file inside the repo', async () => {
+      const filePath = join(repoPath, 'project-for-branches.csproj')
+      await fs.writeFile(filePath, '<Project />', 'utf-8')
+      const branches = await listBranches(filePath)
+      expect(branches.map((b) => b.name)).toContain('main')
     })
 
     it('lists locals and remote-tracking branches with current first', async () => {

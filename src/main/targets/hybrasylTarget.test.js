@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { resolvePath, buildSpawnArgs } from './hybrasylTarget.js'
+import { resolvePath, buildSpawnArgs, launch } from './hybrasylTarget.js'
 
 let dir
 
@@ -104,5 +104,50 @@ describe('buildSpawnArgs', () => {
 
   it('throws when given an invalid kind', () => {
     expect(() => buildSpawnArgs({ kind: 'invalid' })).toThrow(/invalid/)
+  })
+})
+
+// Pre-spawn validation paths in launch(). All four return a friendly error
+// before any child_process is created, so we can exercise the contract
+// without mocking spawn.
+describe('launch (pre-spawn validation)', () => {
+  it('errors when daClientPath is empty', async () => {
+    const result = await launch({ mode: 'binary', binaryPath: '' }, null, '')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Dark Ages client path not set/)
+  })
+
+  it('errors on an unknown mode', async () => {
+    const result = await launch({ mode: 'whatever' }, null, 'C:/Dark Ages/Darkages.exe')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Unknown mode/)
+  })
+
+  it('errors when binary mode is given a .csproj path', async () => {
+    const projDir = join(dir, 'proj')
+    await fs.mkdir(projDir)
+    const csprojPath = join(projDir, 'client.csproj')
+    await fs.writeFile(csprojPath, '<Project />', 'utf-8')
+
+    const result = await launch(
+      { mode: 'binary', binaryPath: csprojPath },
+      null,
+      join(dir, 'Darkages.exe')
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Binary mode requires a \.exe path/)
+  })
+
+  it('errors when repo mode is given a .exe path', async () => {
+    const exePath = join(dir, 'client.exe')
+    await fs.writeFile(exePath, 'stub', 'utf-8')
+
+    const result = await launch(
+      { mode: 'repo', clientRepoPath: exePath, clientBranch: null },
+      null,
+      join(dir, 'Darkages.exe')
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/Repo mode requires a \.csproj path/)
   })
 })
