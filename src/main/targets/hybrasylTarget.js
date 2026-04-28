@@ -1,7 +1,6 @@
 import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { dirname } from 'path'
-import { writeCfg } from '../hybrasylConfig.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -46,8 +45,11 @@ export function buildSpawnArgs(resolved) {
   throw new Error(`cannot build spawn args for resolved kind '${resolved.kind}'`)
 }
 
-// Orchestration: write Darkages.cfg with the profile endpoint, then spawn the
-// client. Two launch modes by kind:
+// Orchestration: spawn the client with the lobby host/port + asset path
+// passed via env vars. The client picks them up in GlobalSettings.cs
+// (DA_HOST / DA_HOST_PORT / DA_ASSET_PATH) with hardcoded fallbacks if absent.
+//
+// Two launch modes by kind:
 //   exe  → fire-and-forget, stdio ignored, multiple instances allowed.
 //          `child` is not returned; main does no tracking.
 //   repo → stdio piped so the LogPane can tail `dotnet run` output. Singleton
@@ -61,25 +63,25 @@ export async function launch(config, profile) {
     return { success: false, error: `Client path invalid: ${resolved.reason}` }
   }
 
-  try {
-    await writeCfg(config.dataPath, {
-      LobbyHost: profile.hostname,
-      LobbyPort: String(profile.port)
-    })
-  } catch (err) {
-    return {
-      success: false,
-      error: `Failed to write Darkages.cfg in ${config.dataPath}: ${err.message}`
-    }
-  }
-
   const isRepo = resolved.kind === 'repo'
   const { command, args, cwd } = buildSpawnArgs(resolved)
+
+  // DA_ASSET_PATH is universally needed: the client's fallback is
+  // `<binary>/..` which is wrong for both prebuilt-exe and `dotnet run`
+  // layouts. DA_HOST / DA_HOST_PORT only override when the active profile
+  // is non-empty; without them the client falls back to its hardcoded host.
+  const env = { ...process.env, DA_ASSET_PATH: config.dataPath }
+  if (profile?.hostname) {
+    env.DA_HOST = profile.hostname
+    env.DA_HOST_PORT = String(profile.port)
+  }
+
   try {
     const child = spawn(command, args, {
       cwd,
       stdio: isRepo ? ['ignore', 'pipe', 'pipe'] : 'ignore',
-      windowsHide: !config.showConsole
+      windowsHide: !config.showConsole,
+      env
     })
     return {
       success: true,
