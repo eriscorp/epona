@@ -42,6 +42,24 @@ warning when launched on a non-`win32` platform.
 | US Dark Ages 7.40 | `9dc6fb13d0470331bf5ba230343fce42` |
 | US Dark Ages 7.41 | `3244dc0e68cd26f4fb1626da3673fda8` |
 
+### Known caveat: use `127.0.0.1` instead of `localhost`
+
+The Legacy redirect path resolves your profile's hostname via
+`dns.lookup` and writes the resulting IP into the DA client's memory
+as four raw bytes. On systems where `localhost` resolves to `::1`
+first (IPv6 — modern Windows often prefers it), the IPv4 byte-split
+produces `NaN` and the patch writes garbage; the client then can't
+connect.
+
+**Workaround**: set `127.0.0.1` directly in the profile's hostname
+field for local-server redirects. DNS resolution of a literal IPv4
+is a no-op, so this side-steps the IPv6 pickup.
+
+This only affects the Legacy target — Hybrasyl Client uses env-var
+redirection (`DA_HOST`) which goes through the .NET socket layer
+that handles hostnames natively. Tracked in `legacyTarget.js:39`;
+the fix is `lookup(profile.hostname, { family: 4 })` to force IPv4.
+
 ---
 
 ## Hybrasyl Client tab
