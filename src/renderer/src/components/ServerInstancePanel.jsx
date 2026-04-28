@@ -231,13 +231,18 @@ export default function ServerInstancePanel({
   }
 
   async function pickBinary() {
-    const p = await window.sparkAPI.pickFile('Select Hybrasyl server binary', [
-      { name: 'Hybrasyl server (.dll or .exe)', extensions: ['dll', 'exe'] }
-    ])
+    const p = await window.sparkAPI.pickFile(
+      'Select Hybrasyl server binary',
+      [{ name: 'Hybrasyl server (.dll or .exe)', extensions: ['dll', 'exe'] }],
+      selected?.binaryPath
+    )
     if (p) updateSelected({ binaryPath: p })
   }
   async function pickServerRepo() {
-    const p = await window.sparkAPI.pickDirectory('Select Hybrasyl server repo')
+    const p = await window.sparkAPI.pickDirectory(
+      'Select Hybrasyl server repo',
+      selected?.serverRepoPath
+    )
     if (!p) return
     const isRepo = await window.sparkAPI.isGitRepo(p)
     if (!isRepo) {
@@ -247,7 +252,7 @@ export default function ServerInstancePanel({
     updateSelected({ serverRepoPath: p })
   }
   async function pickXmlRepo() {
-    const p = await window.sparkAPI.pickDirectory('Select Hybrasyl.Xml repo')
+    const p = await window.sparkAPI.pickDirectory('Select Hybrasyl.Xml repo', selected?.xmlRepoPath)
     if (!p) return
     const isRepo = await window.sparkAPI.isGitRepo(p)
     if (!isRepo) {
@@ -266,7 +271,7 @@ export default function ServerInstancePanel({
   }
 
   async function pickLogDir() {
-    const p = await window.sparkAPI.pickDirectory('Select log directory')
+    const p = await window.sparkAPI.pickDirectory('Select log directory', selected?.logDir)
     if (p) updateSelected({ logDir: p })
   }
 
@@ -730,10 +735,14 @@ export default function ServerInstancePanel({
                 <Tooltip title="Reset (kill and relaunch — picks up script/XML changes)">
                   <span>
                     <IconButton
-                      color="primary"
                       disabled={busy}
                       onClick={handleReset}
-                      sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        color: 'text.button'
+                      }}
                     >
                       {busyLabel === 'Resetting…' ? (
                         <CircularProgress size={18} color="inherit" />

@@ -83,46 +83,38 @@ app.whenReady().then(() => {
   ipcMain.handle('versions:list', () => listVersions())
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
-  // File dialogs
-  ipcMain.handle('dialog:openFile', async (_, title, filters) => {
+  // File dialogs. Each accepts an optional defaultPath so callers can pre-fill
+  // the picker with the current setting value — without it Electron's dialog
+  // remembers the last directory globally per-window, which leaks state across
+  // unrelated pickers (e.g. picking a server binary biases the next client
+  // pick). Empty/missing defaultPath falls back to the OS default.
+  function dialogDefault(p) {
+    return typeof p === 'string' && p.length > 0 ? p : undefined
+  }
+
+  ipcMain.handle('dialog:openFile', async (_, title, filters, defaultPath) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: title || 'Select File',
       filters: filters || [{ name: 'All files', extensions: ['*'] }],
+      defaultPath: dialogDefault(defaultPath),
       properties: ['openFile']
     })
     return result.canceled ? null : result.filePaths[0]
   })
-  ipcMain.handle('dialog:openDirectory', async (_, title) => {
+  ipcMain.handle('dialog:openDirectory', async (_, title, defaultPath) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: title || 'Select Directory',
+      defaultPath: dialogDefault(defaultPath),
       properties: ['openDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
   })
-  ipcMain.handle('dialog:openExe', async () => {
+  ipcMain.handle('dialog:openExe', async (_, defaultPath) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Dark Ages Executable',
       filters: [{ name: 'Executables', extensions: ['exe'] }],
+      defaultPath: dialogDefault(defaultPath),
       properties: ['openFile']
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-  ipcMain.handle('dialog:openHybrasylPath', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Select Hybrasyl client .exe or .csproj',
-      filters: [
-        { name: 'Hybrasyl client (.exe or .csproj)', extensions: ['exe', 'csproj'] },
-        { name: 'Executable', extensions: ['exe'] },
-        { name: 'C# Project', extensions: ['csproj'] }
-      ],
-      properties: ['openFile']
-    })
-    return result.canceled ? null : result.filePaths[0]
-  })
-  ipcMain.handle('dialog:openHybrasylDataDir', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Select Dark Ages Data Directory',
-      properties: ['openDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
   })
@@ -135,18 +127,30 @@ app.whenReady().then(() => {
   // Only the singleton (repo / dotnet run) child is tracked — exe launches are
   // fire-and-forget with no pipes, so multiple can run in parallel.
   let activeHybrasylChild = null
+  // Pending cleanup for the active repo child (worktree release). Runs when
+  // the child exits or when a fresh launch supersedes it. Awaited inline so
+  // a fast Stop→Start can't race the worktree refcount.
+  let activeHybrasylCleanup = async () => {}
 
-  function wireHybrasylChildLogs(child) {
+  function wireHybrasylChildLogs(child, cleanup) {
     const stdout = createLineBuffer((line) => safeSend('hybrasyl:log', { stream: 'stdout', line }))
     const stderr = createLineBuffer((line) => safeSend('hybrasyl:log', { stream: 'stderr', line }))
     child.stdout?.on('data', stdout.push)
     child.stderr?.on('data', stderr.push)
     child.stdout?.on('end', stdout.flush)
     child.stderr?.on('end', stderr.flush)
-    child.on('exit', (code, signal) => {
+    child.on('exit', async (code, signal) => {
       stdout.flush()
       stderr.flush()
-      if (activeHybrasylChild === child) activeHybrasylChild = null
+      if (activeHybrasylChild === child) {
+        activeHybrasylChild = null
+        activeHybrasylCleanup = async () => {}
+      }
+      try {
+        await cleanup()
+      } catch (err) {
+        console.warn('hybrasyl client cleanup failed:', err.message)
+      }
       safeSend('hybrasyl:childExit', { pid: child.pid, code, signal })
     })
     child.on('error', (err) => {
@@ -167,7 +171,7 @@ app.whenReady().then(() => {
       return launchLegacy(settings, profile)
     }
     if (targetKind === 'hybrasyl') {
-      const result = await launchHybrasyl(settings.targets.hybrasyl, profile)
+      const result = await launchHybrasyl(settings.targets.hybrasyl, profile, settings.clientPath)
       if (result.success && result.kind === 'repo' && result.child) {
         // Singleton repo run — stop the previous one so the pane shows a single
         // clean stream, then adopt the new child.
@@ -178,13 +182,29 @@ app.whenReady().then(() => {
             /* may already be gone */
           }
         }
+        // Run the previous launch's cleanup before swapping, so worktree
+        // refcounts settle in order.
+        try {
+          await activeHybrasylCleanup()
+        } catch (err) {
+          console.warn('hybrasyl client previous-cleanup failed:', err.message)
+        }
         activeHybrasylChild = result.child
-        wireHybrasylChildLogs(result.child)
+        activeHybrasylCleanup = result.cleanup ?? (async () => {})
+        wireHybrasylChildLogs(result.child, activeHybrasylCleanup)
+      } else if (result.success && !result.child && result.cleanup) {
+        // Binary launch with a stray cleanup (shouldn't happen today, but
+        // future-proof): run it now since there's no child to wait on.
+        try {
+          await result.cleanup()
+        } catch (err) {
+          console.warn('hybrasyl client cleanup failed:', err.message)
+        }
       }
-      // exe launches: leave any previous child alone (multi-instance is allowed),
-      // no pipes to wire. Strip the child handle from the IPC response either
-      // way — it's not serialisable.
-      const { child: _child, ...safe } = result
+      // Strip non-serialisable fields from the IPC response. exe launches:
+      // leave any previous child alone (multi-instance is allowed), no pipes
+      // to wire.
+      const { child: _child, cleanup: _cleanup, ...safe } = result
       return safe
     }
     return { success: false, error: `Unknown targetKind: ${targetKind}` }

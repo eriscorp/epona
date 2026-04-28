@@ -57,7 +57,15 @@ const defaultSettings = {
       redirect: false
     }
   ],
-  targets: { hybrasyl: { clientPath: '', dataPath: 'E:\\Games\\Dark Ages', showConsole: false } },
+  targets: {
+    hybrasyl: {
+      mode: 'binary',
+      binaryPath: '',
+      clientRepoPath: '',
+      clientBranch: null,
+      showConsole: false
+    }
+  },
   instances: [],
   activeInstance: null,
   worldDirectories: [],
@@ -171,7 +179,7 @@ export default function App() {
   }
 
   async function handleLocateClient() {
-    const path = await window.sparkAPI.openExeDialog()
+    const path = await window.sparkAPI.openExeDialog(settings.clientPath)
     if (path) update({ clientPath: path })
   }
 

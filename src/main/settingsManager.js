@@ -12,9 +12,16 @@ const DEFAULT_PROFILES = [
   }
 ]
 
+// The Hybrasyl client target mirrors the Server tab's binary/repo split.
+// Binary mode points at a prebuilt client .exe; repo mode points at a .csproj
+// inside a git checkout, with an optional branch that gets resolved to a git
+// worktree at launch time. clientBranch === null means "use the current
+// checkout in place" (no worktree).
 const DEFAULT_HYBRASYL_TARGET = {
-  clientPath: '',
-  dataPath: 'E:\\Games\\Dark Ages',
+  mode: 'binary',
+  binaryPath: '',
+  clientRepoPath: '',
+  clientBranch: null,
   showConsole: false
 }
 
@@ -130,6 +137,42 @@ function migrateHybrasylTarget(data) {
   return data
 }
 
+// Migrate the old single-clientPath shape (clientPath + dataPath) to the
+// mode-split shape (mode + binaryPath/clientRepoPath + clientBranch). Routing
+// is by file extension on the old clientPath. dataPath drops entirely — the
+// global Dark Ages directory is now derived from settings.clientPath.
+// Idempotent: if mode is already present, leave it alone.
+function migrateHybrasylClientShape(data) {
+  const t = data?.targets?.hybrasyl
+  if (!t || typeof t !== 'object') return data
+  if (typeof t.mode === 'string') {
+    // Already migrated — just sweep dropped keys in case an older Epona wrote them back.
+    delete t.clientPath
+    delete t.dataPath
+    return data
+  }
+  const old = typeof t.clientPath === 'string' ? t.clientPath : ''
+  if (old.toLowerCase().endsWith('.exe')) {
+    t.mode = 'binary'
+    t.binaryPath = old
+    t.clientRepoPath = ''
+    t.clientBranch = null
+  } else if (old.toLowerCase().endsWith('.csproj')) {
+    t.mode = 'repo'
+    t.binaryPath = ''
+    t.clientRepoPath = old
+    t.clientBranch = null
+  } else {
+    t.mode = 'binary'
+    t.binaryPath = ''
+    t.clientRepoPath = ''
+    t.clientBranch = null
+  }
+  delete t.clientPath
+  delete t.dataPath
+  return data
+}
+
 // Lower-case + forward-slash + trim trailing slashes, for dedup only. Windows
 // paths are case-insensitive on disk, and users will mix `\` and `/` writing
 // them by hand.
@@ -197,6 +240,7 @@ function migrateWorldDirectories(data) {
 function withDefaults(data) {
   data = migrateProfiles(data)
   data = migrateHybrasylTarget(data)
+  data = migrateHybrasylClientShape(data)
   data = migrateWorldDirectories(data)
   return {
     targetKind: typeof data?.targetKind === 'string' ? data.targetKind : DEFAULTS.targetKind,
@@ -229,14 +273,21 @@ function withDefaults(data) {
         : DEFAULTS.activeWorldDirectory,
     targets: {
       hybrasyl: {
-        clientPath:
-          typeof data?.targets?.hybrasyl?.clientPath === 'string'
-            ? data.targets.hybrasyl.clientPath
-            : DEFAULT_HYBRASYL_TARGET.clientPath,
-        dataPath:
-          typeof data?.targets?.hybrasyl?.dataPath === 'string'
-            ? data.targets.hybrasyl.dataPath
-            : DEFAULT_HYBRASYL_TARGET.dataPath,
+        mode: data?.targets?.hybrasyl?.mode === 'repo' ? 'repo' : 'binary',
+        binaryPath:
+          typeof data?.targets?.hybrasyl?.binaryPath === 'string'
+            ? data.targets.hybrasyl.binaryPath
+            : DEFAULT_HYBRASYL_TARGET.binaryPath,
+        clientRepoPath:
+          typeof data?.targets?.hybrasyl?.clientRepoPath === 'string'
+            ? data.targets.hybrasyl.clientRepoPath
+            : DEFAULT_HYBRASYL_TARGET.clientRepoPath,
+        clientBranch:
+          data?.targets?.hybrasyl?.clientBranch === null
+            ? null
+            : typeof data?.targets?.hybrasyl?.clientBranch === 'string'
+              ? data.targets.hybrasyl.clientBranch
+              : DEFAULT_HYBRASYL_TARGET.clientBranch,
         showConsole:
           typeof data?.targets?.hybrasyl?.showConsole === 'boolean'
             ? data.targets.hybrasyl.showConsole

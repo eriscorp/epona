@@ -9,11 +9,11 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   listVersions: () => ipcRenderer.invoke('versions:list'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
-  openExeDialog: () => ipcRenderer.invoke('dialog:openExe'),
-  pickFile: (title, filters) => ipcRenderer.invoke('dialog:openFile', title, filters),
-  pickDirectory: (title) => ipcRenderer.invoke('dialog:openDirectory', title),
-  pickHybrasylPath: () => ipcRenderer.invoke('dialog:openHybrasylPath'),
-  pickHybrasylDataDir: () => ipcRenderer.invoke('dialog:openHybrasylDataDir'),
+  openExeDialog: (defaultPath) => ipcRenderer.invoke('dialog:openExe', defaultPath),
+  pickFile: (title, filters, defaultPath) =>
+    ipcRenderer.invoke('dialog:openFile', title, filters, defaultPath),
+  pickDirectory: (title, defaultPath) =>
+    ipcRenderer.invoke('dialog:openDirectory', title, defaultPath),
   detectHybrasylPath: (path) => ipcRenderer.invoke('hybrasyl:detectPath', path),
   checkDotnetRuntime: () => ipcRenderer.invoke('hybrasyl:checkRuntime'),
   launch: (targetKind, settings, profile) =>

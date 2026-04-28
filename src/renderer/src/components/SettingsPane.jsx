@@ -47,7 +47,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
 
   async function browseClient() {
     try {
-      const path = await window.sparkAPI.openExeDialog()
+      const path = await window.sparkAPI.openExeDialog(settings.clientPath)
       if (path) onChange({ clientPath: path })
     } catch (err) {
       console.error('[settings] openExeDialog failed:', err)
@@ -321,7 +321,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
                       <Tooltip title={isActive ? 'Default for new instances' : 'Set as default'}>
                         <IconButton size="small" onClick={() => setActiveWorldDir(wd.id)}>
                           {isActive ? (
-                            <StarIcon fontSize="small" color="primary" />
+                            <StarIcon fontSize="small" sx={{ color: 'text.button' }} />
                           ) : (
                             <StarBorderIcon fontSize="small" />
                           )}
@@ -450,7 +450,7 @@ function WorldDirDialog({ mode, worldDir: initial, onSave, onCancel }) {
 
   async function browse() {
     try {
-      const p = await window.sparkAPI.pickDirectory('Select world directory')
+      const p = await window.sparkAPI.pickDirectory('Select world directory', worldDir.path)
       if (!p) return
       setValidating(true)
       const ok = await window.sparkAPI.isHybrasylDataDir(p)

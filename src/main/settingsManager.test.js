@@ -138,7 +138,13 @@ describe('save/load round-trip', () => {
         { id: 'custom', name: 'Custom', hostname: 'rt.example', port: 1234, redirect: true }
       ],
       targets: {
-        hybrasyl: { clientPath: 'D:/client.exe', dataPath: 'D:/data', showConsole: true }
+        hybrasyl: {
+          mode: 'repo',
+          binaryPath: 'D:/prebuilt/client.exe',
+          clientRepoPath: 'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj',
+          clientBranch: 'feature/foo',
+          showConsole: true
+        }
       },
       instances: [
         {
@@ -276,10 +282,12 @@ describe('targetKind', () => {
 })
 
 describe('targets.hybrasyl', () => {
-  it('defaults to empty clientPath, the game data path, and a hidden console', async () => {
+  it('defaults to binary mode with empty paths and a hidden console', async () => {
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.hybrasyl.clientPath).toBe('')
-    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.mode).toBe('binary')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('')
+    expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
+    expect(settings.targets.hybrasyl.clientBranch).toBeNull()
     expect(settings.targets.hybrasyl.showConsole).toBe(false)
   })
 
@@ -301,8 +309,9 @@ describe('targets.hybrasyl', () => {
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(preStage2), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.hybrasyl.clientPath).toBe('')
-    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.mode).toBe('binary')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('')
+    expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
   })
 
   it('preserves existing hybrasyl settings on round-trip', async () => {
@@ -311,37 +320,58 @@ describe('targets.hybrasyl', () => {
     await mgr.save({
       ...base,
       targets: {
-        hybrasyl: { clientPath: 'D:/client-repo/bin/Release/net10.0/client.exe', dataPath: 'D:/DA' }
+        hybrasyl: {
+          mode: 'repo',
+          binaryPath: '',
+          clientRepoPath: 'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj',
+          clientBranch: 'develop',
+          showConsole: true
+        }
       }
     })
 
     const reloaded = await createSettingsManager(dir).load()
-    expect(reloaded.targets.hybrasyl.clientPath).toBe(
-      'D:/client-repo/bin/Release/net10.0/client.exe'
+    expect(reloaded.targets.hybrasyl.mode).toBe('repo')
+    expect(reloaded.targets.hybrasyl.clientRepoPath).toBe(
+      'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj'
     )
-    expect(reloaded.targets.hybrasyl.dataPath).toBe('D:/DA')
+    expect(reloaded.targets.hybrasyl.clientBranch).toBe('develop')
+    expect(reloaded.targets.hybrasyl.showConsole).toBe(true)
   })
 
-  it('fills in only the missing field when targets.hybrasyl is partial', async () => {
+  it('fills in defaults for missing fields when targets.hybrasyl is partial', async () => {
     const partial = {
-      targets: { hybrasyl: { clientPath: 'D:/client.exe' } }
+      targets: { hybrasyl: { mode: 'binary', binaryPath: 'D:/client.exe' } }
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(partial), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.hybrasyl.clientPath).toBe('D:/client.exe')
-    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.mode).toBe('binary')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
+    expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
+    expect(settings.targets.hybrasyl.clientBranch).toBeNull()
+    expect(settings.targets.hybrasyl.showConsole).toBe(false)
   })
 
   it('replaces wrong-typed hybrasyl fields with defaults', async () => {
     const garbage = {
-      targets: { hybrasyl: { clientPath: 42, dataPath: null, showConsole: 'yes' } }
+      targets: {
+        hybrasyl: {
+          mode: 42,
+          binaryPath: 99,
+          clientRepoPath: null,
+          clientBranch: true,
+          showConsole: 'yes'
+        }
+      }
     }
     await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(garbage), 'utf-8')
 
     const settings = await createSettingsManager(dir).load()
-    expect(settings.targets.hybrasyl.clientPath).toBe('')
-    expect(settings.targets.hybrasyl.dataPath).toBe('E:\\Games\\Dark Ages')
+    expect(settings.targets.hybrasyl.mode).toBe('binary')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('')
+    expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
+    expect(settings.targets.hybrasyl.clientBranch).toBeNull()
     expect(settings.targets.hybrasyl.showConsole).toBe(false)
   })
 
@@ -372,14 +402,63 @@ describe('targets.hybrasyl', () => {
     const mgr = createSettingsManager(dir)
     const settings = await mgr.load()
 
-    expect(settings.targets.hybrasyl.clientPath).toBe('D:/client.exe')
-    expect(settings.targets.hybrasyl.dataPath).toBe('D:/DA')
+    // After both migrations: chaos→hybrasyl, then old shape→mode-split.
+    expect(settings.targets.hybrasyl.mode).toBe('binary')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
     expect(settings.targets.hybrasyl.showConsole).toBe(true)
 
     await mgr.save(settings)
     const onDisk = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
     expect(onDisk.targets.chaos).toBeUndefined()
-    expect(onDisk.targets.hybrasyl.clientPath).toBe('D:/client.exe')
+    expect(onDisk.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
+    expect(onDisk.targets.hybrasyl.clientPath).toBeUndefined()
+    expect(onDisk.targets.hybrasyl.dataPath).toBeUndefined()
+  })
+
+  it('migrates an old-shape .exe clientPath to mode=binary + binaryPath', async () => {
+    const old = {
+      targets: {
+        hybrasyl: {
+          clientPath: 'D:/client.exe',
+          dataPath: 'D:/DA',
+          showConsole: true
+        }
+      }
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(old), 'utf-8')
+
+    const mgr = createSettingsManager(dir)
+    const settings = await mgr.load()
+    expect(settings.targets.hybrasyl.mode).toBe('binary')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
+    expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
+    expect(settings.targets.hybrasyl.clientBranch).toBeNull()
+    expect(settings.targets.hybrasyl.showConsole).toBe(true)
+
+    await mgr.save(settings)
+    const onDisk = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
+    expect(onDisk.targets.hybrasyl.clientPath).toBeUndefined()
+    expect(onDisk.targets.hybrasyl.dataPath).toBeUndefined()
+  })
+
+  it('migrates an old-shape .csproj clientPath to mode=repo + clientRepoPath', async () => {
+    const old = {
+      targets: {
+        hybrasyl: {
+          clientPath: 'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj',
+          dataPath: 'D:/DA'
+        }
+      }
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(old), 'utf-8')
+
+    const settings = await createSettingsManager(dir).load()
+    expect(settings.targets.hybrasyl.mode).toBe('repo')
+    expect(settings.targets.hybrasyl.binaryPath).toBe('')
+    expect(settings.targets.hybrasyl.clientRepoPath).toBe(
+      'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj'
+    )
+    expect(settings.targets.hybrasyl.clientBranch).toBeNull()
   })
 })
 
