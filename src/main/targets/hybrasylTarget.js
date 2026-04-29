@@ -149,7 +149,7 @@ export async function launch(config, profile, daClientPath) {
     const child = spawn(command, args, {
       cwd,
       stdio: isRepo ? ['ignore', 'pipe', 'pipe'] : 'ignore',
-      windowsHide: !config.showConsole,
+      windowsHide: true,
       env
     })
     // For repo launches with a worktree, the cleanup releases the worktree

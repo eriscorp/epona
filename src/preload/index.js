@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath),
   isHybrasylDataDir: (dataDir) => ipcRenderer.invoke('instance:isHybrasylDataDir', dataDir),
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
+  saveLog: (content, defaultFileName) =>
+    ipcRenderer.invoke('log:save', { content, defaultFileName }),
   onInstanceLog: (cb) => {
     const listener = (_, payload) => cb(payload)
     ipcRenderer.on('instance:log', listener)

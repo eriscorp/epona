@@ -17,12 +17,16 @@ const DEFAULT_PROFILES = [
 // inside a git checkout, with an optional branch that gets resolved to a git
 // worktree at launch time. clientBranch === null means "use the current
 // checkout in place" (no worktree).
+//
+// autoSaveLogs: when true, the captured stdout/stderr from a repo-mode launch
+// is dumped to the active server instance's logDir on child exit. No-op in
+// binary mode (no pipes) or when no active instance has a logDir set.
 const DEFAULT_HYBRASYL_TARGET = {
   mode: 'binary',
   binaryPath: '',
   clientRepoPath: '',
   clientBranch: null,
-  showConsole: false
+  autoSaveLogs: false
 }
 
 // An instance is a configured Hybrasyl server the user can start/stop from the
@@ -149,6 +153,7 @@ function migrateHybrasylClientShape(data) {
     // Already migrated — just sweep dropped keys in case an older Epona wrote them back.
     delete t.clientPath
     delete t.dataPath
+    delete t.showConsole
     return data
   }
   const old = typeof t.clientPath === 'string' ? t.clientPath : ''
@@ -170,6 +175,7 @@ function migrateHybrasylClientShape(data) {
   }
   delete t.clientPath
   delete t.dataPath
+  delete t.showConsole
   return data
 }
 
@@ -288,10 +294,10 @@ function withDefaults(data) {
             : typeof data?.targets?.hybrasyl?.clientBranch === 'string'
               ? data.targets.hybrasyl.clientBranch
               : DEFAULT_HYBRASYL_TARGET.clientBranch,
-        showConsole:
-          typeof data?.targets?.hybrasyl?.showConsole === 'boolean'
-            ? data.targets.hybrasyl.showConsole
-            : DEFAULT_HYBRASYL_TARGET.showConsole
+        autoSaveLogs:
+          typeof data?.targets?.hybrasyl?.autoSaveLogs === 'boolean'
+            ? data.targets.hybrasyl.autoSaveLogs
+            : DEFAULT_HYBRASYL_TARGET.autoSaveLogs
       }
     }
   }

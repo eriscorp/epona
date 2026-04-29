@@ -143,7 +143,7 @@ describe('save/load round-trip', () => {
           binaryPath: 'D:/prebuilt/client.exe',
           clientRepoPath: 'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj',
           clientBranch: 'feature/foo',
-          showConsole: true
+          autoSaveLogs: true
         }
       },
       instances: [
@@ -282,13 +282,14 @@ describe('targetKind', () => {
 })
 
 describe('targets.hybrasyl', () => {
-  it('defaults to binary mode with empty paths and a hidden console', async () => {
+  it('defaults to binary mode with empty paths and auto-save off', async () => {
     const settings = await createSettingsManager(dir).load()
     expect(settings.targets.hybrasyl.mode).toBe('binary')
     expect(settings.targets.hybrasyl.binaryPath).toBe('')
     expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
     expect(settings.targets.hybrasyl.clientBranch).toBeNull()
-    expect(settings.targets.hybrasyl.showConsole).toBe(false)
+    expect(settings.targets.hybrasyl.autoSaveLogs).toBe(false)
+    expect(settings.targets.hybrasyl.showConsole).toBeUndefined()
   })
 
   it('fills in hybrasyl defaults when pre-Stage-2 settings lack a targets key', async () => {
@@ -325,7 +326,7 @@ describe('targets.hybrasyl', () => {
           binaryPath: '',
           clientRepoPath: 'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj',
           clientBranch: 'develop',
-          showConsole: true
+          autoSaveLogs: true
         }
       }
     })
@@ -336,7 +337,7 @@ describe('targets.hybrasyl', () => {
       'D:/client-repo/Hybrasyl.Client/Hybrasyl.Client.csproj'
     )
     expect(reloaded.targets.hybrasyl.clientBranch).toBe('develop')
-    expect(reloaded.targets.hybrasyl.showConsole).toBe(true)
+    expect(reloaded.targets.hybrasyl.autoSaveLogs).toBe(true)
   })
 
   it('fills in defaults for missing fields when targets.hybrasyl is partial', async () => {
@@ -350,7 +351,7 @@ describe('targets.hybrasyl', () => {
     expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
     expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
     expect(settings.targets.hybrasyl.clientBranch).toBeNull()
-    expect(settings.targets.hybrasyl.showConsole).toBe(false)
+    expect(settings.targets.hybrasyl.autoSaveLogs).toBe(false)
   })
 
   it('replaces wrong-typed hybrasyl fields with defaults', async () => {
@@ -361,7 +362,7 @@ describe('targets.hybrasyl', () => {
           binaryPath: 99,
           clientRepoPath: null,
           clientBranch: true,
-          showConsole: 'yes'
+          autoSaveLogs: 'yes'
         }
       }
     }
@@ -372,19 +373,44 @@ describe('targets.hybrasyl', () => {
     expect(settings.targets.hybrasyl.binaryPath).toBe('')
     expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
     expect(settings.targets.hybrasyl.clientBranch).toBeNull()
-    expect(settings.targets.hybrasyl.showConsole).toBe(false)
+    expect(settings.targets.hybrasyl.autoSaveLogs).toBe(false)
   })
 
-  it('round-trips a showConsole=true preference', async () => {
+  it('round-trips an autoSaveLogs=true preference', async () => {
     const mgr = createSettingsManager(dir)
     const base = await mgr.load()
     await mgr.save({
       ...base,
-      targets: { hybrasyl: { ...base.targets.hybrasyl, showConsole: true } }
+      targets: { hybrasyl: { ...base.targets.hybrasyl, autoSaveLogs: true } }
     })
 
     const reloaded = await createSettingsManager(dir).load()
-    expect(reloaded.targets.hybrasyl.showConsole).toBe(true)
+    expect(reloaded.targets.hybrasyl.autoSaveLogs).toBe(true)
+  })
+
+  it('drops a legacy showConsole field on load (renamed to autoSaveLogs schema)', async () => {
+    const legacy = {
+      targets: {
+        hybrasyl: {
+          mode: 'binary',
+          binaryPath: 'D:/client.exe',
+          clientRepoPath: '',
+          clientBranch: null,
+          showConsole: true
+        }
+      }
+    }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(legacy), 'utf-8')
+
+    const mgr = createSettingsManager(dir)
+    const settings = await mgr.load()
+    expect(settings.targets.hybrasyl.showConsole).toBeUndefined()
+    expect(settings.targets.hybrasyl.autoSaveLogs).toBe(false)
+    expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
+
+    await mgr.save(settings)
+    const onDisk = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
+    expect(onDisk.targets.hybrasyl.showConsole).toBeUndefined()
   })
 
   it('migrates settings.targets.chaos (legacy stage-2 key) to .hybrasyl', async () => {
@@ -403,9 +429,11 @@ describe('targets.hybrasyl', () => {
     const settings = await mgr.load()
 
     // After both migrations: chaos→hybrasyl, then old shape→mode-split.
+    // showConsole is dropped — replaced by autoSaveLogs which defaults off.
     expect(settings.targets.hybrasyl.mode).toBe('binary')
     expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
-    expect(settings.targets.hybrasyl.showConsole).toBe(true)
+    expect(settings.targets.hybrasyl.showConsole).toBeUndefined()
+    expect(settings.targets.hybrasyl.autoSaveLogs).toBe(false)
 
     await mgr.save(settings)
     const onDisk = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
@@ -413,6 +441,7 @@ describe('targets.hybrasyl', () => {
     expect(onDisk.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
     expect(onDisk.targets.hybrasyl.clientPath).toBeUndefined()
     expect(onDisk.targets.hybrasyl.dataPath).toBeUndefined()
+    expect(onDisk.targets.hybrasyl.showConsole).toBeUndefined()
   })
 
   it('migrates an old-shape .exe clientPath to mode=binary + binaryPath', async () => {
@@ -433,12 +462,14 @@ describe('targets.hybrasyl', () => {
     expect(settings.targets.hybrasyl.binaryPath).toBe('D:/client.exe')
     expect(settings.targets.hybrasyl.clientRepoPath).toBe('')
     expect(settings.targets.hybrasyl.clientBranch).toBeNull()
-    expect(settings.targets.hybrasyl.showConsole).toBe(true)
+    expect(settings.targets.hybrasyl.showConsole).toBeUndefined()
+    expect(settings.targets.hybrasyl.autoSaveLogs).toBe(false)
 
     await mgr.save(settings)
     const onDisk = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
     expect(onDisk.targets.hybrasyl.clientPath).toBeUndefined()
     expect(onDisk.targets.hybrasyl.dataPath).toBeUndefined()
+    expect(onDisk.targets.hybrasyl.showConsole).toBeUndefined()
   })
 
   it('migrates an old-shape .csproj clientPath to mode=repo + clientRepoPath', async () => {

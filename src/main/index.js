@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { spawn } from 'child_process'
+import { promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
@@ -133,8 +134,16 @@ app.whenReady().then(() => {
   let activeHybrasylCleanup = async () => {}
 
   function wireHybrasylChildLogs(child, cleanup) {
-    const stdout = createLineBuffer((line) => safeSend('hybrasyl:log', { stream: 'stdout', line }))
-    const stderr = createLineBuffer((line) => safeSend('hybrasyl:log', { stream: 'stderr', line }))
+    // Mirror what we send to the renderer into a local buffer so the auto-save
+    // path on exit can dump exactly what the user saw — without an extra round
+    // trip to ask the renderer for its lines.
+    const captured = []
+    const record = (stream) => (line) => {
+      captured.push({ stream, text: line })
+      safeSend('hybrasyl:log', { stream, line })
+    }
+    const stdout = createLineBuffer(record('stdout'))
+    const stderr = createLineBuffer(record('stderr'))
     child.stdout?.on('data', stdout.push)
     child.stderr?.on('data', stderr.push)
     child.stdout?.on('end', stdout.flush)
@@ -151,15 +160,94 @@ app.whenReady().then(() => {
       } catch (err) {
         console.warn('hybrasyl client cleanup failed:', err.message)
       }
+      // Auto-save: only fires for repo-mode launches (this is the only path
+      // that reaches wireHybrasylChildLogs) when the user has opted in AND the
+      // active server instance has a logDir. Failures are non-fatal — the
+      // pane still has the lines for a manual save.
+      try {
+        const settings = await settingsManager.load()
+        if (settings.targets.hybrasyl.autoSaveLogs) {
+          const dest = activeInstanceLogDir(settings)
+          if (dest) {
+            await writeAutoSaveLog(dest, captured, child.pid)
+          }
+        }
+      } catch (err) {
+        console.warn('hybrasyl client auto-save failed:', err.message)
+      }
       safeSend('hybrasyl:childExit', { pid: child.pid, code, signal })
     })
     child.on('error', (err) => {
-      safeSend('hybrasyl:log', {
-        stream: 'stderr',
-        line: `[spawn error] ${err.message}`
-      })
+      const errLine = `[spawn error] ${err.message}`
+      captured.push({ stream: 'stderr', text: errLine })
+      safeSend('hybrasyl:log', { stream: 'stderr', line: errLine })
     })
   }
+
+  // Resolve the active server instance's logDir, or null if no active instance
+  // is set or the active one has no logDir configured. Used by the client tab's
+  // auto-save feature: client logs piggyback on the server's log directory.
+  function activeInstanceLogDir(settings) {
+    const inst = settings.instances.find((i) => i.id === settings.activeInstance)
+    if (!inst) return null
+    return typeof inst.logDir === 'string' && inst.logDir.length > 0 ? inst.logDir : null
+  }
+
+  // Filesystem-safe local timestamp like 2026-04-29_153012. Used as the only
+  // varying part of an auto-saved filename so concurrent launches don't clash.
+  function logTimestamp(d = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0')
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+    )
+  }
+
+  function formatLogLines(lines) {
+    return lines
+      .map(({ stream, text }) => {
+        if (stream === 'stderr') return `[stderr] ${text}`
+        if (stream === 'exit') return `[exit] ${text}`
+        return text
+      })
+      .join('\n')
+  }
+
+  async function writeAutoSaveLog(logDir, lines, pid) {
+    await fs.mkdir(logDir, { recursive: true })
+    const filename = `hybrasyl-client-${logTimestamp()}-pid${pid ?? 'na'}.log`
+    const fullPath = join(logDir, filename)
+    await fs.writeFile(fullPath, formatLogLines(lines), 'utf-8')
+  }
+
+  // Manual "save log" button in LogPane — renderer formats its own buffer and
+  // ships the text here. We just open a save dialog and write. Returning the
+  // chosen path lets the renderer surface a "saved to …" toast.
+  ipcMain.handle('log:save', async (_, payload) => {
+    const content = typeof payload?.content === 'string' ? payload.content : ''
+    const defaultFileName =
+      typeof payload?.defaultFileName === 'string' && payload.defaultFileName.length > 0
+        ? payload.defaultFileName
+        : `log-${logTimestamp()}.log`
+    const settings = await settingsManager.load()
+    const defaultDir = activeInstanceLogDir(settings)
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save Log',
+      defaultPath: defaultDir ? join(defaultDir, defaultFileName) : defaultFileName,
+      filters: [
+        { name: 'Log files', extensions: ['log'] },
+        { name: 'Text files', extensions: ['txt'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+    try {
+      await fs.writeFile(result.filePath, content, 'utf-8')
+      return { ok: true, path: result.filePath }
+    } catch (err) {
+      return { ok: false, error: err.message }
+    }
+  })
 
   ipcMain.handle('client:launch', async (_, targetKind, _renderSettings, profile) => {
     // Spawn-path hardening: disk wins. The renderer's settings payload is
@@ -474,6 +562,55 @@ app.whenReady().then(() => {
       }
     }
     return running
+  })
+
+  // Confirm before closing if any repo-mode launches are still running. Repo
+  // launches own a git worktree and a dotnet child tree — bouncing them
+  // unintentionally costs the user their build/run state and can leave
+  // worktree refcounts stuck if cleanup races. Binary launches are detached
+  // and self-managed; no prompt for those. Triggered by titlebar X and Alt+F4
+  // (both fire the 'close' event); on user confirm we re-fire close so the
+  // existing before-quit cleanup runs on the second pass.
+  async function collectRepoRunning() {
+    const result = []
+    if (activeHybrasylChild && activeHybrasylChild.exitCode === null) {
+      result.push('Hybrasyl client (repo mode)')
+    }
+    try {
+      const settings = await settingsManager.load()
+      for (const [id, tracked] of instanceChildren) {
+        const inst = settings.instances.find((i) => i.id === id)
+        if (!inst || inst.mode !== 'repo') continue
+        const alive = tracked.kind === 'child' ? tracked.value.exitCode === null : true
+        if (alive) result.push(`Server "${inst.name}" (repo mode)`)
+      }
+    } catch (err) {
+      console.warn('quit-confirm settings load failed:', err.message)
+    }
+    return result
+  }
+
+  let closeConfirmed = false
+  mainWindow.on('close', async (event) => {
+    if (closeConfirmed) return
+    const repoRunning = await collectRepoRunning()
+    if (repoRunning.length === 0) return
+    event.preventDefault()
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Cancel', 'Quit'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Confirm Quit',
+      message: 'Repo-mode launches are still running.',
+      detail:
+        repoRunning.map((r) => `• ${r}`).join('\n') +
+        '\n\nQuitting will stop them and release their git worktrees.'
+    })
+    if (response === 1) {
+      closeConfirmed = true
+      mainWindow.close()
+    }
   })
 
   // Window controls

@@ -77,11 +77,14 @@ Launches the modern open-source Hybrasyl client — either a prebuilt
 - **.NET 10 runtime detection** — chip warns when the runtime is
   missing or only an older version is installed (source launches need
   `Microsoft.NETCore.App 10.x`).
-- **Console toggle** — `showConsole` controls `windowsHide` on the
-  spawn; defaults to hidden, opt in for crash dumps.
 - **Side LogPane** — for source launches, stdout/stderr stream into a
-  resizable side pane with auto-scroll and clear/jump-to-latest
-  controls. Disabled with a tooltip for `.exe` mode (no piped stdio).
+  resizable side pane with auto-scroll, clear, save-to-file, and
+  jump-to-latest controls. Disabled with a tooltip for `.exe` mode (no
+  piped stdio).
+- **Auto-save logs** — opt-in checkbox dumps the captured stdout/stderr
+  of each repo-mode launch to the active server instance's `logDir` on
+  client exit (`hybrasyl-client-<timestamp>-pid<n>.log`). Disabled when
+  no active server instance has a log directory set.
 
 Cross-platform in principle, since `dotnet run` works wherever .NET is
 installed. Windows is the primary tested target.

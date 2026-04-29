@@ -4,6 +4,7 @@ import Button from '@mui/material/Button'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import { hybrasylClientPathConfigured } from './actionButtonGate.js'
 
 export default function ActionButtons({ targetKind = 'legacy', settings, getActiveProfile }) {
   const [launching, setLaunching] = useState(false)
@@ -13,7 +14,7 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
   async function handleLaunch() {
     if (targetKind === 'legacy' && !settings.clientPath)
       return setSnack({ severity: 'warning', message: 'No client path set — open Settings' })
-    if (targetKind === 'hybrasyl' && !settings.targets?.hybrasyl?.clientPath)
+    if (targetKind === 'hybrasyl' && !hybrasylClientPathConfigured(settings))
       return setSnack({ severity: 'warning', message: 'No Hybrasyl client path set' })
 
     const profile = getActiveProfile()

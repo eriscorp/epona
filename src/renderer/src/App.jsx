@@ -63,7 +63,7 @@ const defaultSettings = {
       binaryPath: '',
       clientRepoPath: '',
       clientBranch: null,
-      showConsole: false
+      autoSaveLogs: false
     }
   },
   instances: [],
@@ -183,6 +183,26 @@ export default function App() {
     if (path) update({ clientPath: path })
   }
 
+  // Format buffered log lines and ship to main for a save dialog. The slug
+  // becomes the leading filename component; main appends a timestamp + .log.
+  // Stream tagging (stderr/exit) is preserved in the saved text so the file
+  // is meaningful when opened away from this UI.
+  async function saveLogToFile(lines, slug) {
+    if (!lines || lines.length === 0) return
+    const formatted = lines
+      .map(({ stream, text }) => {
+        if (stream === 'stderr') return `[stderr] ${text}`
+        if (stream === 'exit') return `[exit] ${text}`
+        return text
+      })
+      .join('\n')
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+    const result = await window.sparkAPI.saveLog(formatted, `${slug}-${ts}.log`)
+    if (result && !result.ok && !result.canceled) {
+      console.error('[log] save failed:', result.error)
+    }
+  }
+
   const currentTheme = themes[themeName] || hybrasylTheme
 
   return (
@@ -281,6 +301,9 @@ export default function App() {
                 onChange={update}
                 logPaneOpen={logPaneOpen}
                 onToggleLogPane={() => setLogPaneOpen((o) => !o)}
+                activeInstanceLogDir={
+                  settings.instances.find((i) => i.id === settings.activeInstance)?.logDir || ''
+                }
               />
               <ProfileSelector
                 profiles={settings.profiles}
@@ -360,6 +383,7 @@ export default function App() {
             title="Hybrasyl Client"
             lines={hybrasylLog}
             onClear={() => setHybrasylLog([])}
+            onSave={() => saveLogToFile(hybrasylLog, 'hybrasyl-client')}
             onClose={() => setLogPaneOpen(false)}
           />
         )}
@@ -372,6 +396,11 @@ export default function App() {
             }
             lines={instanceLogs[settings.activeInstance] ?? []}
             onClear={() => setInstanceLogs((prev) => ({ ...prev, [settings.activeInstance]: [] }))}
+            onSave={() => {
+              const inst = settings.instances.find((i) => i.id === settings.activeInstance)
+              const slug = (inst?.name ?? 'server-instance').replace(/[^A-Za-z0-9._-]+/g, '-')
+              return saveLogToFile(instanceLogs[settings.activeInstance] ?? [], slug)
+            }}
             onClose={() => setLogPaneOpen(false)}
           />
         )}

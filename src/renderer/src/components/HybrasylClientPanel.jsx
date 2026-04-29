@@ -62,7 +62,13 @@ function withSavedBranchPinned(branches, savedName) {
   return [{ name: savedName, current: false, remote: false, missing: true }, ...branches]
 }
 
-export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, onToggleLogPane }) {
+export default function HybrasylClientPanel({
+  hybrasyl,
+  onChange,
+  logPaneOpen,
+  onToggleLogPane,
+  activeInstanceLogDir
+}) {
   const [resolution, setResolution] = useState({ kind: null })
   const [runtime, setRuntime] = useState({ dotnetFound: null, netCoreApp10: null })
   // Branch lists keyed by repo csproj path so flipping back and forth doesn't
@@ -274,19 +280,32 @@ export default function HybrasylClientPanel({ hybrasyl, onChange, logPaneOpen, o
         </Tooltip>
       </Box>
 
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={!!hybrasyl.showConsole}
-            onChange={(e) =>
-              onChange({ targets: { hybrasyl: { ...hybrasyl, showConsole: e.target.checked } } })
-            }
-          />
+      <Tooltip
+        title={
+          activeInstanceLogDir
+            ? `Saves to ${activeInstanceLogDir} on client exit`
+            : 'No active server instance with a log directory — set one on the Server tab'
         }
-        label={<Typography variant="body2">Show console window</Typography>}
-        sx={{ m: 0 }}
-      />
+      >
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={!!hybrasyl.autoSaveLogs && !!activeInstanceLogDir}
+              disabled={!activeInstanceLogDir}
+              onChange={(e) =>
+                onChange({
+                  targets: { hybrasyl: { ...hybrasyl, autoSaveLogs: e.target.checked } }
+                })
+              }
+            />
+          }
+          label={
+            <Typography variant="body2">Automatically save logfiles to server logs</Typography>
+          }
+          sx={{ m: 0 }}
+        />
+      </Tooltip>
     </Box>
   )
 }

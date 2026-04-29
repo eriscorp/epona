@@ -5,9 +5,10 @@ import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import SaveAltIcon from '@mui/icons-material/SaveAlt'
 import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom'
 
-export default function LogPane({ title = 'Console', lines, onClear, onClose }) {
+export default function LogPane({ title = 'Console', lines, onClear, onSave, onClose }) {
   const scrollRef = useRef(null)
   const [pinnedToBottom, setPinnedToBottom] = useState(true)
 
@@ -58,6 +59,15 @@ export default function LogPane({ title = 'Console', lines, onClear, onClose }) 
           {title}
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.25 }}>
+          {onSave && (
+            <Tooltip title="Save log to file…">
+              <span>
+                <IconButton size="small" onClick={onSave} disabled={lines.length === 0}>
+                  <SaveAltIcon fontSize="inherit" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
           <Tooltip title="Clear">
             <IconButton size="small" onClick={onClear}>
               <DeleteSweepIcon fontSize="inherit" />
