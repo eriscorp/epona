@@ -23,5 +23,16 @@ win:
         - x64
 portable:
   artifactName: ${name}-${version}-portable.${ext}
+mac:
+  category: public.app-category.games
+  icon: resources/epona.png
+  identity: null
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
 beforeBuild: npx @electron/rebuild -f -w da-win32
