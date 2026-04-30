@@ -1,8 +1,8 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
-import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
+import { killProcessTree } from './processKill.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
@@ -453,29 +453,24 @@ app.whenReady().then(() => {
       return { success: true, wasRunning: true }
     }
 
-    // PID-tracked: reap the wrapper + its server child via taskkill /T.
-    // /F forces termination so Read-Host inside the wrapper can't veto it.
+    // PID-tracked: reap the wrapper + its server child. On Windows that's
+    // taskkill /F /T (force, with subtree); on POSIX it's SIGKILL to the
+    // process group. /F forces termination so Read-Host inside the wrapper
+    // can't veto it.
     const pid = tracked.value
-    return await new Promise((resolve) => {
-      const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(pid)], {
-        stdio: 'ignore',
-        windowsHide: true
-      })
-      tk.once('exit', async () => {
-        instanceChildren.delete(instanceId)
-        mainWindow.webContents.send('instance:childExit', {
-          instanceId,
-          pid,
-          code: null,
-          signal: 'SIGKILL'
-        })
-        await runCleanup()
-        resolve({ success: true, wasRunning: true })
-      })
-      tk.once('error', (err) => {
-        resolve({ success: false, error: `taskkill failed: ${err.message}` })
-      })
+    const result = await killProcessTree(pid)
+    if (!result.ok) {
+      return { success: false, error: `kill failed: ${result.error.message}` }
+    }
+    instanceChildren.delete(instanceId)
+    mainWindow.webContents.send('instance:childExit', {
+      instanceId,
+      pid,
+      code: null,
+      signal: 'SIGKILL'
     })
+    await runCleanup()
+    return { success: true, wasRunning: true }
   })
 
   // Reset = stop + relaunch in one IPC round-trip. Awaits process death
@@ -515,14 +510,7 @@ app.whenReady().then(() => {
       }
     } else {
       const pid = tracked.value
-      await new Promise((resolve) => {
-        const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(pid)], {
-          stdio: 'ignore',
-          windowsHide: true
-        })
-        tk.once('exit', resolve)
-        tk.once('error', resolve)
-      })
+      await killProcessTree(pid)
       instanceChildren.delete(instance.id)
       mainWindow.webContents.send('instance:childExit', {
         instanceId: instance.id,
@@ -656,15 +644,9 @@ app.on('before-quit', async (event) => {
           await Promise.race([exited, new Promise((r) => setTimeout(r, 2000))])
         }
       } else {
-        // PID-tracked: taskkill /F /T against the wrapper.
-        await new Promise((resolve) => {
-          const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(tracked.value)], {
-            stdio: 'ignore',
-            windowsHide: true
-          })
-          tk.once('exit', resolve)
-          tk.once('error', resolve)
-        })
+        // PID-tracked: kill the wrapper + its tree (taskkill on Windows,
+        // SIGKILL to the process group on POSIX).
+        await killProcessTree(tracked.value)
       }
     } catch (err) {
       console.warn(`instance ${id} kill on quit failed:`, err.message)
