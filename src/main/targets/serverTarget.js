@@ -225,15 +225,17 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
 async function launchBinary(instance) {
   const spec = buildBinarySpawn(instance)
   if (process.platform !== 'win32') {
-    // Non-Windows placeholder — not the path real users hit, but keeps the
-    // shape testable.
+    // No PowerShell wrapper on non-Windows — spawn the server directly and
+    // let the renderer's log panel surface its output via wireInstanceLogs.
+    // detached:true puts the child in its own process group so killProcessTree
+    // can SIGKILL the whole tree by negated pid.
     const child = spawn(spec.command, spec.args, {
+      cwd: instance.dataDir,
       env: { ...process.env, ...spec.env },
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe']
     })
-    child.unref()
-    return { success: true, pid: child.pid, cleanup: async () => {} }
+    return { success: true, child, cleanup: async () => {} }
   }
   const result = await spawnInPowerShellConsole({
     command: spec.command,
@@ -279,7 +281,8 @@ async function launchRepo(instance) {
       didWriteBuildProps = true
     }
 
-    // 3. Spawn via the same PowerShell wrapper as binary mode.
+    // 3. Spawn via the same PowerShell wrapper as binary mode (Windows only).
+    //    On non-Windows, spawn directly and let wireInstanceLogs surface output.
     const spec = buildRepoSpawn(instance, serverWorktreePath)
     if (process.platform !== 'win32') {
       const child = spawn(spec.command, spec.args, {
@@ -288,10 +291,9 @@ async function launchRepo(instance) {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe']
       })
-      child.unref()
       return {
         success: true,
-        pid: child.pid,
+        child,
         cleanup: async () => {
           if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
           await releaseXml()
