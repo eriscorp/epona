@@ -9,12 +9,10 @@ The flow at a glance:
 
 1. Pre-release sanity (local)
 2. Bump the version, commit, push
-3. Push a `v*` tag (or wait for the GH UI to create the tag on
-   release publish)
-4. Create the release in the GitHub UI — this is what gets you to a
-   release page with hand-written notes; the tag push triggers the
-   workflow that builds the portable exe and attaches it
-5. Discord notification fires automatically on success
+3. Push a `v*` tag — **this does not trigger the build**
+4. Draft the release in the GitHub UI from that tag, write notes
+5. Publish the release — this fires `release.yml`, which builds the
+   portable exe, attaches it, and pings Discord
 
 ---
 
@@ -66,16 +64,19 @@ even if they never see the GitHub release notes.
 
 ## 3. Tag the release
 
-The GH UI requires the tag to exist before you can create a release
-against it. Two equivalent options:
+Push the tag from CLI before opening the UI:
 
-- **Push the tag from CLI** before opening the UI — run
-  `git tag vX.Y.Z && git push origin vX.Y.Z`.
-- **Or let the GH UI create the tag** on release publish — type the
-  new `vX.Y.Z` into the "Choose a tag" dropdown in step 5 and it'll be
-  created when you click Publish.
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
 
-The `v` prefix is required — `release.yml` triggers on `tags: ['v*']`.
+This does **not** trigger the build — `release.yml` listens for the
+`release.published` event, not tag pushes. The tag just exists so the
+GH UI can build a release against it in step 5.
+
+The `v` prefix is conventional for tag-name display in the Discord
+post and the release page artifacts.
 
 ## 4. Draft the release notes
 
@@ -107,22 +108,22 @@ copies clean into the GH UI without rendering artifacts.
 
 1. Go to <https://github.com/hybrasyl/epona/releases> → **Draft a new
    release**.
-2. **Choose a tag** → pick the `vX.Y.Z` you pushed in step 3, or type
-   it fresh and the UI will create the tag on publish.
+2. **Choose a tag** → pick the `vX.Y.Z` you pushed in step 3.
 3. **Release title** → `vX.Y.Z` (or a short headline).
 4. Paste the markdown notes from step 4 into the description.
 5. Leave **Set as the latest release** checked.
 6. **Publish release**.
 
-Publishing fires `release.yml` (via the tag push):
+Publishing fires `release.yml` (via the `release.published` event):
 
 - Installs deps (`npm ci`).
 - Rebuilds the native addon (`npm run rebuild` → `da-win32`).
   Required because the addon is built against the Electron ABI.
 - Builds renderer + main bundles (`npm run build`).
 - Packages the portable exe (`electron-builder --win --publish never`).
-- Attaches `dist/*-portable.exe` to the release via
-  `softprops/action-gh-release@v2`.
+- Attaches `dist/*-portable.exe` to the just-published release via
+  `softprops/action-gh-release@v2` (notes you wrote in step 4 stay
+  intact — the action only adds files).
 - Posts a Discord announcement to the channel configured in the
   `DISCORD_WEBHOOK_URL` repo secret.
 
@@ -145,7 +146,8 @@ packaging are the slow steps).
 ## Pinned facts
 
 - Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-- Trigger: `push` of any tag matching `v*`
+- Trigger: `release.published` event — i.e. clicking **Publish** on a
+  draft release in the GitHub UI. Tag pushes by themselves do nothing.
 - Builds on: `windows-latest`, Node 24
 - Currently produces: Windows portable exe only. The portable target
   is configured in [`electron-builder.yml`](../electron-builder.yml)

@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -34,11 +33,10 @@ jobs:
       - name: Package portable exe
         run: npx electron-builder --win --publish never
 
-      - name: Create GitHub Release
+      - name: Attach portable exe to release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*-portable.exe
-          generate_release_notes: true
 
       - name: Notify Discord
         if: success()
