@@ -222,9 +222,15 @@ npm install
 npm run rebuild         # rebuild da-win32 against Electron's ABI
 npm run dev             # development (renderer hot-reload)
 npm run build:portable  # Windows portable .exe (output in dist/)
+npm run build:mac       # macOS dmg + zip (must run on macOS, unsigned)
+npm run build:linux     # Linux AppImage (must run from WSL2 or a Linux host)
 npm test                # vitest suite
 npm run lint            # eslint + prettier
 ```
+
+CI auto-publishes the Windows portable on tag push; macOS and Linux
+artifacts are produced locally by maintainers and attached to the
+release page when available.
 
 Releases are produced via GitHub Actions on `v*` tag push — see
 [`docs/release-process.md`](docs/release-process.md) for the full

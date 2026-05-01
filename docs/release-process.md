@@ -154,6 +154,15 @@ packaging are the slow steps).
 - Local equivalent: `npm run build:portable` (or `build:win` — they're
   identical right now). Both run `npm run build && electron-builder
   --win`, which is what CI does in two steps.
+- macOS / Linux are local-manual builds (not CI-published). On a mac:
+  `npm run build:mac` → `dist/Epona-x.y.z-{arm64,x64}.{dmg,zip}`. On a
+  Linux host or inside WSL2 (where `mksquashfs` exists):
+  `npm run build:linux` → `dist/epona-x.y.z-x86_64.AppImage`. Both
+  scripts override the `beforeBuild` hook via
+  `--config.beforeBuild=scripts/noop-before-build.cjs` so the
+  Windows-only `da-win32` rebuild is skipped. After local builds,
+  attach the artifacts to the release page by hand (release-edit →
+  "Attach binaries").
 - Native addon: `packages/da-win32/` is rebuilt against the Electron
   ABI in CI via `npm run rebuild`. Local builds also need this — the
   `beforeBuild` hook in `electron-builder.yml` invokes the same
