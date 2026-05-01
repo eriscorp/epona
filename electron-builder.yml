@@ -34,5 +34,13 @@ mac:
       arch: [arm64, x64]
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
+linux:
+  category: Game
+  icon: resources/epona.png
+  target:
+    - target: AppImage
+      arch: [x64]
+appImage:
+  artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
 beforeBuild: npx @electron/rebuild -f -w da-win32
