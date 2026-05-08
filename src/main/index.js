@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { killProcessTree } from './processKill.js'
+import { settingsSchema } from './schemas/settings.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
@@ -78,7 +79,10 @@ app.whenReady().then(() => {
 
   // Settings
   ipcMain.handle('settings:load', () => settingsManager.load())
-  ipcMain.handle('settings:save', (_, settings) => settingsManager.save(settings))
+  ipcMain.handle('settings:save', (_, settings) => {
+    const parsed = settingsSchema.parse(settings)
+    return settingsManager.save(parsed)
+  })
 
   // Client versions
   ipcMain.handle('versions:list', () => listVersions())

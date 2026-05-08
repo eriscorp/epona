@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -726,5 +726,65 @@ describe('worldDirectories migration', () => {
     const settings = await createSettingsManager(dir).load()
     expect(settings.worldDirectories).toHaveLength(1)
     expect(settings.worldDirectories[0].id).toBe('good')
+  })
+})
+
+describe('renameWithRetry behavior', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function ePermError() {
+    const err = new Error('EPERM: operation not permitted, rename')
+    err.code = 'EPERM'
+    return err
+  }
+
+  it('retries on EPERM and succeeds on later attempt', async () => {
+    const renameSpy = vi
+      .spyOn(fs, 'rename')
+      .mockImplementationOnce(() => Promise.reject(ePermError()))
+    const mgr = createSettingsManager(dir)
+    const original = await mgr.load()
+
+    await mgr.save({ ...original, theme: 'chadul' })
+
+    expect(renameSpy).toHaveBeenCalledTimes(2)
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded.theme).toBe('chadul')
+  })
+
+  it('falls back to unlink + rename after retries exhaust', async () => {
+    const renameSpy = vi
+      .spyOn(fs, 'rename')
+      .mockImplementationOnce(() => Promise.reject(ePermError()))
+      .mockImplementationOnce(() => Promise.reject(ePermError()))
+      .mockImplementationOnce(() => Promise.reject(ePermError()))
+    const unlinkSpy = vi.spyOn(fs, 'unlink')
+
+    const mgr = createSettingsManager(dir)
+    const original = await mgr.load()
+    await mgr.save({ ...original, theme: 'danaan' })
+
+    expect(renameSpy).toHaveBeenCalledTimes(4)
+    expect(unlinkSpy).toHaveBeenCalledWith(join(dir, 'settings.json'))
+
+    const reloaded = await createSettingsManager(dir).load()
+    expect(reloaded.theme).toBe('danaan')
+  })
+
+  it('re-throws non-EPERM errors without retrying', async () => {
+    const enospc = new Error('ENOSPC: no space left on device')
+    enospc.code = 'ENOSPC'
+    const renameSpy = vi.spyOn(fs, 'rename').mockImplementationOnce(() => Promise.reject(enospc))
+    // Suppress the resilience-pattern's console.error so the test output stays clean.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const mgr = createSettingsManager(dir)
+    const original = await mgr.load()
+    await expect(mgr.save({ ...original, theme: 'grinneal' })).rejects.toThrow(/ENOSPC/)
+
+    expect(renameSpy).toHaveBeenCalledTimes(1)
+    errSpy.mockRestore()
   })
 })
