@@ -25,6 +25,7 @@ import TerminalIcon from '@mui/icons-material/Terminal'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
+import RefreshIcon from '@mui/icons-material/Refresh'
 
 const PICKER_SX = {
   flex: 1,
@@ -154,27 +155,34 @@ export default function ServerInstancePanel({
     window.sparkAPI.readDataStore(selectedDataDir, selected.configFileName).then(setConfigDataStore)
   }, [selectedDataDir, selected?.configFileName])
 
-  // Load branches on demand for whichever repo paths the selected instance uses.
+  // Refetch branches for a repo path. Marks the entry loading so the UI can
+  // show a spinner and avoid mislabeling missing branches as "(loading…)".
+  function refreshBranches(p) {
+    if (!p) return
+    setBranchCache((prev) => ({
+      ...prev,
+      [p]: { branches: prev[p]?.branches ?? [], error: null, loading: true }
+    }))
+    window.sparkAPI.listGitBranches(p).then((result) => {
+      setBranchCache((prev) => ({
+        ...prev,
+        [p]: result.ok
+          ? { branches: result.branches, error: null, loading: false }
+          : { branches: [], error: result.error, loading: false }
+      }))
+    })
+  }
+
+  // Load branches on demand for whichever repo paths the selected instance
+  // uses. Initial fetch only — users hit the refresh button next to each
+  // dropdown for explicit re-listing.
   useEffect(() => {
     const paths = []
     if (isRepoMode && selected?.serverRepoPath) paths.push(selected.serverRepoPath)
     if (isRepoMode && useLocalXml && selected?.xmlRepoPath) paths.push(selected.xmlRepoPath)
     for (const p of paths) {
       if (branchCache[p] !== undefined) continue
-      window.sparkAPI.listGitBranches(p).then((result) => {
-        // Functional update + idempotency check: if a concurrent fetch already
-        // populated this entry (e.g. rapid path swap re-entered the effect),
-        // keep the first write rather than clobbering it.
-        setBranchCache((prev) => {
-          if (prev[p] !== undefined) return prev
-          return {
-            ...prev,
-            [p]: result.ok
-              ? { branches: result.branches, error: null }
-              : { branches: [], error: result.error }
-          }
-        })
-      })
+      refreshBranches(p)
     }
     // branchCache intentionally NOT in deps: entries are append-only, so the
     // closure's view is a subset of the live cache and the !== undefined check
@@ -287,21 +295,32 @@ export default function ServerInstancePanel({
   // results — covers (1) the loading window before the IPC returns, (2) the
   // branch having been deleted upstream, and (3) a git error suppressing the
   // listing entirely. Without this, MUI warns "out-of-range value" and the
-  // user sees an empty dropdown.
-  function withSavedBranchPinned(branches, savedName) {
+  // user sees an empty dropdown. `loading` distinguishes the in-flight case
+  // (label "(loading…)") from completed-but-not-found ("(missing)").
+  function withSavedBranchPinned(branches, savedName, loading) {
     if (!savedName || branches.some((b) => b.name === savedName)) return branches
-    return [{ name: savedName, current: false, remote: false, missing: true }, ...branches]
+    return [
+      { name: savedName, current: false, remote: false, missing: true, loading: !!loading },
+      ...branches
+    ]
   }
 
   const serverCacheEntry = selected?.serverRepoPath ? branchCache[selected.serverRepoPath] : null
   const xmlCacheEntry = selected?.xmlRepoPath ? branchCache[selected.xmlRepoPath] : null
   const serverBranchError = serverCacheEntry?.error ?? null
   const xmlBranchError = xmlCacheEntry?.error ?? null
+  const serverBranchLoading = !!serverCacheEntry?.loading
+  const xmlBranchLoading = !!xmlCacheEntry?.loading
   const serverBranches = withSavedBranchPinned(
     serverCacheEntry?.branches ?? [],
-    selected?.serverBranch
+    selected?.serverBranch,
+    serverBranchLoading
   )
-  const xmlBranches = withSavedBranchPinned(xmlCacheEntry?.branches ?? [], selected?.xmlBranch)
+  const xmlBranches = withSavedBranchPinned(
+    xmlCacheEntry?.branches ?? [],
+    selected?.xmlBranch,
+    xmlBranchLoading
+  )
 
   // ──────────── Tab content sections ────────────
 
@@ -340,34 +359,56 @@ export default function ServerInstancePanel({
             onPick={pickServerRepo}
             disabled={isRunning}
           />
-          <FormControl size="small" disabled={isRunning || !selected.serverRepoPath}>
-            <InputLabel shrink>Server Branch</InputLabel>
-            <Select
-              label="Server Branch"
-              notched
-              value={selected.serverBranch ?? CURRENT_CHECKOUT_VALUE}
-              onChange={(e) =>
-                updateSelected({
-                  serverBranch: e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
-                })
-              }
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <FormControl
+              size="small"
+              disabled={isRunning || !selected.serverRepoPath}
+              sx={{ flex: 1 }}
             >
-              <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
-              {serverBranches.map((b) => (
-                <MenuItem key={b.name} value={b.name}>
-                  {b.name}
-                  {b.current ? ' (current)' : ''}
-                  {b.remote ? ' (remote)' : ''}
-                  {b.missing ? ' (loading…)' : ''}
-                </MenuItem>
-              ))}
-            </Select>
-            {serverBranchError && (
-              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                Couldn&apos;t list branches: {serverBranchError}
-              </Typography>
-            )}
-          </FormControl>
+              <InputLabel shrink>Server Branch</InputLabel>
+              <Select
+                label="Server Branch"
+                notched
+                value={selected.serverBranch ?? CURRENT_CHECKOUT_VALUE}
+                onChange={(e) =>
+                  updateSelected({
+                    serverBranch: e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
+                  })
+                }
+              >
+                <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
+                {serverBranches.map((b) => (
+                  <MenuItem key={b.name} value={b.name}>
+                    {b.name}
+                    {b.current ? ' (current)' : ''}
+                    {b.remote ? ' (remote)' : ''}
+                    {b.missing ? (b.loading ? ' (loading…)' : ' (missing)') : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+              {serverBranchError && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  Couldn&apos;t list branches: {serverBranchError}
+                </Typography>
+              )}
+            </FormControl>
+            <Tooltip title="Refresh branch list">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => refreshBranches(selected.serverRepoPath)}
+                  disabled={isRunning || !selected.serverRepoPath || serverBranchLoading}
+                  sx={{ mt: 0.5 }}
+                >
+                  {serverBranchLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <RefreshIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         </>
       )}
     </Box>
@@ -406,35 +447,57 @@ export default function ServerInstancePanel({
                 onPick={pickXmlRepo}
                 disabled={isRunning}
               />
-              <FormControl size="small" disabled={isRunning || !selected.xmlRepoPath}>
-                <InputLabel shrink>XML Branch</InputLabel>
-                <Select
-                  label="XML Branch"
-                  notched
-                  value={selected.xmlBranch ?? ''}
-                  onChange={(e) => updateSelected({ xmlBranch: e.target.value })}
-                  displayEmpty
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <FormControl
+                  size="small"
+                  disabled={isRunning || !selected.xmlRepoPath}
+                  sx={{ flex: 1 }}
                 >
-                  {selected.xmlBranch === '' && (
-                    <MenuItem value="" disabled>
-                      (select a branch…)
-                    </MenuItem>
+                  <InputLabel shrink>XML Branch</InputLabel>
+                  <Select
+                    label="XML Branch"
+                    notched
+                    value={selected.xmlBranch ?? ''}
+                    onChange={(e) => updateSelected({ xmlBranch: e.target.value })}
+                    displayEmpty
+                  >
+                    {selected.xmlBranch === '' && (
+                      <MenuItem value="" disabled>
+                        (select a branch…)
+                      </MenuItem>
+                    )}
+                    {xmlBranches.map((b) => (
+                      <MenuItem key={b.name} value={b.name}>
+                        {b.name}
+                        {b.current ? ' (current)' : ''}
+                        {b.remote ? ' (remote)' : ''}
+                        {b.missing ? (b.loading ? ' (loading…)' : ' (missing)') : ''}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {xmlBranchError && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                      Couldn&apos;t list branches: {xmlBranchError}
+                    </Typography>
                   )}
-                  {xmlBranches.map((b) => (
-                    <MenuItem key={b.name} value={b.name}>
-                      {b.name}
-                      {b.current ? ' (current)' : ''}
-                      {b.remote ? ' (remote)' : ''}
-                      {b.missing ? ' (loading…)' : ''}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {xmlBranchError && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    Couldn&apos;t list branches: {xmlBranchError}
-                  </Typography>
-                )}
-              </FormControl>
+                </FormControl>
+                <Tooltip title="Refresh branch list">
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => refreshBranches(selected.xmlRepoPath)}
+                      disabled={isRunning || !selected.xmlRepoPath || xmlBranchLoading}
+                      sx={{ mt: 0.5 }}
+                    >
+                      {xmlBranchLoading ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <RefreshIcon fontSize="small" />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </Box>
             </>
           )}
         </>

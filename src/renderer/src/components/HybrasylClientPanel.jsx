@@ -13,7 +13,9 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import CircularProgress from '@mui/material/CircularProgress'
 import TerminalIcon from '@mui/icons-material/Terminal'
+import RefreshIcon from '@mui/icons-material/Refresh'
 
 const CURRENT_CHECKOUT_VALUE = '__current_checkout__'
 
@@ -57,9 +59,14 @@ function kindChip(kind) {
 // Pin a saved branch into the option list even if it's not in the fetched
 // results — covers the loading window before the IPC returns, the branch
 // having been deleted, and a git error suppressing the listing entirely.
-function withSavedBranchPinned(branches, savedName) {
+// `loading` distinguishes the in-flight case (label "(loading…)") from the
+// completed-but-not-found case (label "(missing)").
+function withSavedBranchPinned(branches, savedName, loading) {
   if (!savedName || branches.some((b) => b.name === savedName)) return branches
-  return [{ name: savedName, current: false, remote: false, missing: true }, ...branches]
+  return [
+    { name: savedName, current: false, remote: false, missing: true, loading: !!loading },
+    ...branches
+  ]
 }
 
 export default function HybrasylClientPanel({
@@ -96,23 +103,32 @@ export default function HybrasylClientPanel({
       .catch((err) => console.error('[hybrasyl] checkDotnetRuntime failed:', err))
   }, [])
 
+  // Refetch branches for a repo path. Marks the entry loading so the UI can
+  // show a spinner and avoid mislabeling missing branches as "(loading…)".
+  function refreshBranches(p) {
+    if (!p) return
+    setBranchCache((prev) => ({
+      ...prev,
+      [p]: { branches: prev[p]?.branches ?? [], error: null, loading: true }
+    }))
+    window.sparkAPI.listGitBranches(p).then((result) => {
+      setBranchCache((prev) => ({
+        ...prev,
+        [p]: result.ok
+          ? { branches: result.branches, error: null, loading: false }
+          : { branches: [], error: result.error, loading: false }
+      }))
+    })
+  }
+
   // Fetch branches whenever a csproj is configured in repo mode. Cached by
-  // path so flipping mode or pasting the same path twice doesn't refetch.
+  // path so flipping mode or pasting the same path twice doesn't refetch
+  // automatically — the user gets a refresh button for that.
   useEffect(() => {
     if (!isRepoMode || !hybrasyl.clientRepoPath) return
     const p = hybrasyl.clientRepoPath
     if (branchCache[p] !== undefined) return
-    window.sparkAPI.listGitBranches(p).then((result) => {
-      setBranchCache((prev) => {
-        if (prev[p] !== undefined) return prev
-        return {
-          ...prev,
-          [p]: result.ok
-            ? { branches: result.branches, error: null }
-            : { branches: [], error: result.error }
-        }
-      })
-    })
+    refreshBranches(p)
     // branchCache intentionally omitted — entries are append-only and the
     // !== undefined guard already short-circuits, so including it would just
     // re-run the effect on every cache write.
@@ -178,7 +194,12 @@ export default function HybrasylClientPanel({
 
   const cacheEntry = hybrasyl.clientRepoPath ? branchCache[hybrasyl.clientRepoPath] : null
   const branchError = cacheEntry?.error ?? null
-  const branches = withSavedBranchPinned(cacheEntry?.branches ?? [], hybrasyl.clientBranch)
+  const branchLoading = !!cacheEntry?.loading
+  const branches = withSavedBranchPinned(
+    cacheEntry?.branches ?? [],
+    hybrasyl.clientBranch,
+    branchLoading
+  )
   const resolvedChip = activePath ? kindChip(resolution.kind) : null
 
   return (
@@ -217,40 +238,58 @@ export default function HybrasylClientPanel({
             placeholder="(none — pick a client .csproj)"
             chip={resolvedChip}
           />
-          <FormControl size="small" disabled={!hybrasyl.clientRepoPath}>
-            <InputLabel shrink>Client Branch</InputLabel>
-            <Select
-              label="Client Branch"
-              notched
-              value={hybrasyl.clientBranch ?? CURRENT_CHECKOUT_VALUE}
-              onChange={(e) =>
-                onChange({
-                  targets: {
-                    hybrasyl: {
-                      ...hybrasyl,
-                      clientBranch:
-                        e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <FormControl size="small" disabled={!hybrasyl.clientRepoPath} sx={{ flex: 1 }}>
+              <InputLabel shrink>Client Branch</InputLabel>
+              <Select
+                label="Client Branch"
+                notched
+                value={hybrasyl.clientBranch ?? CURRENT_CHECKOUT_VALUE}
+                onChange={(e) =>
+                  onChange({
+                    targets: {
+                      hybrasyl: {
+                        ...hybrasyl,
+                        clientBranch:
+                          e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
+                      }
                     }
-                  }
-                })
-              }
-            >
-              <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
-              {branches.map((b) => (
-                <MenuItem key={b.name} value={b.name}>
-                  {b.name}
-                  {b.current ? ' (current)' : ''}
-                  {b.remote ? ' (remote)' : ''}
-                  {b.missing ? ' (loading…)' : ''}
-                </MenuItem>
-              ))}
-            </Select>
-            {branchError && (
-              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                Couldn&apos;t list branches: {branchError}
-              </Typography>
-            )}
-          </FormControl>
+                  })
+                }
+              >
+                <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
+                {branches.map((b) => (
+                  <MenuItem key={b.name} value={b.name}>
+                    {b.name}
+                    {b.current ? ' (current)' : ''}
+                    {b.remote ? ' (remote)' : ''}
+                    {b.missing ? (b.loading ? ' (loading…)' : ' (missing)') : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+              {branchError && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  Couldn&apos;t list branches: {branchError}
+                </Typography>
+              )}
+            </FormControl>
+            <Tooltip title="Refresh branch list">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => refreshBranches(hybrasyl.clientRepoPath)}
+                  disabled={!hybrasyl.clientRepoPath || branchLoading}
+                  sx={{ mt: 0.5 }}
+                >
+                  {branchLoading ? (
+                    <CircularProgress size={16} />
+                  ) : (
+                    <RefreshIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         </>
       )}
 

@@ -116,6 +116,46 @@ describe('worktreeManager', () => {
       const path = await ensureWorktree(repoPath, 'develop')
       expect(path).toBe(target)
     })
+
+    it('clears an empty stale dir and creates the worktree fresh', async () => {
+      // User reproduced the reported bug: directory exists at the target
+      // path but git has no registration for it. Without recovery, the
+      // subsequent `git worktree add` fails with exit 128 "already exists".
+      const target = resolvePath(repoPath, '.worktrees', 'feature__foo')
+      await fs.mkdir(target, { recursive: true })
+      const path = await ensureWorktree(repoPath, 'feature/foo')
+      expect(path).toBe(target)
+      expect((await fs.stat(path)).isDirectory()).toBe(true)
+      // Confirm it's a real worktree this time
+      expect(await fs.readFile(join(path, '.git'), 'utf-8')).toContain('worktrees')
+    })
+
+    it('refuses to clobber a worktree whose admin entry was deleted', async () => {
+      // Real worktree on disk, but git's admin entry has been removed entirely.
+      // `git worktree repair` cannot recreate a missing admin dir — only fixes
+      // path mismatches — so the orphaned `.git` pointer file leaves the dir
+      // looking like garbage. Could still contain user edits, so refuse to
+      // touch it and surface a clear error.
+      const target = resolvePath(repoPath, '.worktrees', 'develop')
+      await fs.mkdir(join(repoPath, '.worktrees'), { recursive: true })
+      await gitSync(repoPath, ['worktree', 'add', target, 'develop'])
+      await fs.rm(join(repoPath, '.git', 'worktrees', 'develop'), {
+        recursive: true,
+        force: true
+      })
+      await expect(ensureWorktree(repoPath, 'develop')).rejects.toThrow(/doesn't recognize it/)
+    })
+
+    it('refuses to clobber a non-empty stale dir with unknown contents', async () => {
+      // Could be user work — error out with a clear message rather than
+      // delete or force-overwrite.
+      const target = resolvePath(repoPath, '.worktrees', 'feature__foo')
+      await fs.mkdir(target, { recursive: true })
+      await fs.writeFile(join(target, 'mystery.txt'), 'do not lose me')
+      await expect(ensureWorktree(repoPath, 'feature/foo')).rejects.toThrow(/doesn't recognize it/)
+      // File should still be there — recovery must not touch it.
+      expect(await fs.readFile(join(target, 'mystery.txt'), 'utf-8')).toBe('do not lose me')
+    })
   })
 
   describe('releaseWorktree', () => {

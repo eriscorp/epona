@@ -115,12 +115,62 @@ export function ensureWorktree(repoPath, branch) {
     // Adoption check — is there already a worktree on disk for this branch?
     // Two cases land here: (a) Epona was restarted and our in-memory state is
     // empty; (b) a developer made the worktree manually outside Epona.
-    const onDisk = await listWorktreesOnDisk(repo)
-    const adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
+    let onDisk = await listWorktreesOnDisk(repo)
+    let adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
     if (adopted) {
       branchMap.set(branch, { path: adopted.path, refcount: 1 })
       refcounts.set(repo, branchMap)
       return adopted.path
+    }
+
+    // Stale-dir recovery — the target path may exist on disk without a
+    // matching git registration (failed prior `worktree remove`, manual
+    // mucking under `.git/worktrees/`, a crashed `worktree add`, etc.).
+    // Without this, the `worktree add` below fails with exit 128 "already
+    // exists" and the launch is blocked.
+    if (await pathExists(target)) {
+      // 1. Prune stale admin entries (idempotent; only removes entries whose
+      //    dirs are missing), then retry adoption — common case: prune clears
+      //    a broken admin entry that was hiding an otherwise valid worktree.
+      await runGit(repo, ['worktree', 'prune']).catch(() => {})
+      onDisk = await listWorktreesOnDisk(repo)
+      adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
+      if (adopted) {
+        branchMap.set(branch, { path: adopted.path, refcount: 1 })
+        refcounts.set(repo, branchMap)
+        return adopted.path
+      }
+
+      // 2. If the dir contains a `.git` pointer file, it looks like a real
+      //    worktree that lost its admin entry — try `git worktree repair` to
+      //    re-link, then re-list and adopt.
+      if (await pathExists(join(target, '.git'))) {
+        const repaired = await runGit(repo, ['worktree', 'repair', target])
+          .then(() => true)
+          .catch(() => false)
+        if (repaired) {
+          onDisk = await listWorktreesOnDisk(repo)
+          adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
+          if (adopted) {
+            branchMap.set(branch, { path: adopted.path, refcount: 1 })
+            refcounts.set(repo, branchMap)
+            return adopted.path
+          }
+        }
+      }
+
+      // 3. Empty dir → safe to remove and fall through to fresh add.
+      const entries = await fs.readdir(target).catch(() => null)
+      if (entries && entries.length === 0) {
+        await fs.rm(target, { recursive: true, force: true })
+      } else {
+        // 4. Non-empty dir with no recoverable worktree marker. Could be
+        //    user work — refuse to touch it and tell the user where to look.
+        throw new Error(
+          `Worktree directory exists at ${target} but git doesn't recognize it. ` +
+            `Remove it manually if you don't need its contents, then try again.`
+        )
+      }
     }
 
     // Fresh add. Ensure parent dir exists — `git worktree add` creates the
@@ -131,6 +181,15 @@ export function ensureWorktree(repoPath, branch) {
     refcounts.set(repo, branchMap)
     return target
   })
+}
+
+async function pathExists(p) {
+  try {
+    await fs.access(p)
+    return true
+  } catch {
+    return false
+  }
 }
 
 // Decrements the refcount; when it hits 0, removes the worktree via git.
