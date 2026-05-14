@@ -16,7 +16,7 @@ The window has three tabs, each driving a different launch target.
 
 ## Legacy Client tab
 
-<table align="right" cellpadding="10"><tr><td><img src="docs/images/epona_legacy.gif" width="450" alt="Legacy Client tab — in-memory client patching and profile switching" /></td></tr></table>
+<table align="right" cellpadding="10"><tr><td><img src="docs/images/epona_legacy.gif" width="350" alt="Legacy Client tab — in-memory client patching and profile switching" /></td></tr></table>
 
 In-memory patching of an unmodified DA client at launch. No files on
 disk are modified — every patch is written to the running process's
@@ -72,7 +72,7 @@ the fix is `lookup(profile.hostname, { family: 4 })` to force IPv4.
 
 ## Hybrasyl Client tab
 
-<table align="right" cellpadding="10"><tr><td><img src="docs/images/epona_hybclient.gif" width="450" alt="Hybrasyl Client tab — modern client launch with cfg templating and log pane" /></td></tr></table>
+<table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_hybclient.gif" width="450" alt="Hybrasyl Client tab — modern client launch with cfg templating and log pane" /></td></tr></table>
 
 Launches the modern open-source Hybrasyl client — either a prebuilt
 `.exe` or a `.csproj` source checkout via `dotnet run`.
@@ -105,7 +105,7 @@ installed. Windows is the primary tested target.
 
 ## Hybrasyl Server tab
 
-<table align="right" cellpadding="10"><tr><td><img src="docs/images/epona_server.gif" width="450" alt="Hybrasyl Server tab — multi-instance server orchestration" /></td></tr></table>
+<table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_server.gif" width="350" alt="Hybrasyl Server tab — multi-instance server orchestration" /></td></tr></table>
 
 Multi-instance management for local Hybrasyl server processes. The
 star feature of 2.0.
@@ -182,7 +182,7 @@ Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
 
 ## Settings & data
 
-<table align="right" cellpadding="10"><tr><td><img src="docs/images/epona_options.gif" width="450" alt="Settings pane — themes, world directories, and preferences" /></td></tr></table>
+<table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_options.gif" width="350" alt="Settings pane — themes, world directories, and preferences" /></td></tr></table>
 
 Settings persist to `%APPDATA%\Erisco\Epona\settings.json` (roaming).
 Chromium's cache and other Electron transients live separately under
