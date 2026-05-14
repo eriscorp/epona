@@ -16,7 +16,7 @@ The window has three tabs, each driving a different launch target.
 
 ## Legacy Client tab
 
-<img src="docs/images/epona_legacy.gif" align="right" hspace="10" width="450" alt="Legacy Client tab — in-memory client patching and profile switching" />
+![Legacy Client tab — in-memory client patching and profile switching](docs/images/epona_legacy.gif)
 
 In-memory patching of an unmodified DA client at launch. No files on
 disk are modified — every patch is written to the running process's
@@ -38,8 +38,6 @@ memory via Win32 kernel32 APIs.
 equivalent. Running on macOS or Linux requires a compatibility layer
 (Wine, CrossOver) and your mileage may vary; the tab shows an inline
 warning when launched on a non-`win32` platform.
-
-<br clear="all" />
 
 ### Supported client versions
 
@@ -72,7 +70,7 @@ the fix is `lookup(profile.hostname, { family: 4 })` to force IPv4.
 
 ## Hybrasyl Client tab
 
-<img src="docs/images/epona_hybclient.gif" align="right" hspace="10" width="450" alt="Hybrasyl Client tab — modern client launch with cfg templating and log pane" />
+![Hybrasyl Client tab — modern client launch with cfg templating and log pane](docs/images/epona_hybclient.gif)
 
 Launches the modern open-source Hybrasyl client — either a prebuilt
 `.exe` or a `.csproj` source checkout via `dotnet run`.
@@ -99,13 +97,11 @@ Launches the modern open-source Hybrasyl client — either a prebuilt
 Cross-platform in principle, since `dotnet run` works wherever .NET is
 installed. Windows is the primary tested target.
 
-<br clear="all" />
-
 ---
 
 ## Hybrasyl Server tab
 
-<img src="docs/images/epona_server.gif" align="right" hspace="10" width="450" alt="Hybrasyl Server tab — multi-instance server orchestration" />
+![Hybrasyl Server tab — multi-instance server orchestration](docs/images/epona_server.gif)
 
 Multi-instance management for local Hybrasyl server processes. The
 star feature of 2.0.
@@ -151,8 +147,6 @@ star feature of 2.0.
   output stays readable; the wrapper PID is captured so Stop can
   `taskkill /F /T` the entire process tree.
 
-<br clear="all" />
-
 ### World directories registry
 
 Pick a Hybrasyl world data dir (the inner repo containing
@@ -182,7 +176,7 @@ Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
 
 ## Settings & data
 
-<img src="docs/images/epona_options.gif" align="right" hspace="10" width="450" alt="Settings pane — themes, world directories, and preferences" />
+![Settings pane — themes, world directories, and preferences](docs/images/epona_options.gif)
 
 Settings persist to `%APPDATA%\Erisco\Epona\settings.json` (roaming).
 Chromium's cache and other Electron transients live separately under
@@ -199,8 +193,6 @@ Chromium's cache and other Electron transients live separately under
 - **Themes** — five themes: Hybrasyl, Chadul, Danaan, Grinneal
   (shared with Creidhne and Taliesin) and Spark (a faithful port of
   the original WPF launcher's dark theme).
-
-<br clear="all" />
 
 ---
 
