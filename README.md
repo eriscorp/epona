@@ -1,22 +1,22 @@
 # Epona
 
+<img src="docs/images/epona.png" align="right" hspace="10" width="320" alt="Epona — Legacy Client tab" />
+
 Dark Ages launcher + Hybrasyl server orchestrator. Single tool for
 launching legacy DA clients, launching modern Hybrasyl clients, and
 managing local Hybrasyl server instances — built on Electron + React +
 MUI, sharing a stack with [Creidhne](https://github.com/hybrasyl/creidhne)
 and [Taliesin](https://github.com/hybrasyl/taliesin).
 
-<p align="center">
-  <img src="docs/images/epona.png" alt="Epona — Legacy Client tab" width="320" />
-</p>
-
 The window has three tabs, each driving a different launch target.
+
+<br clear="all" />
 
 ---
 
 ## Legacy Client tab
 
-<img src="docs/images/epona_legacy.gif" align="right" width="450" alt="Legacy Client tab — in-memory client patching and profile switching" />
+<img src="docs/images/epona_legacy.gif" align="right" hspace="10" width="450" alt="Legacy Client tab — in-memory client patching and profile switching" />
 
 In-memory patching of an unmodified DA client at launch. No files on
 disk are modified — every patch is written to the running process's
@@ -72,7 +72,7 @@ the fix is `lookup(profile.hostname, { family: 4 })` to force IPv4.
 
 ## Hybrasyl Client tab
 
-<img src="docs/images/epona_hybclient.gif" align="right" width="450" alt="Hybrasyl Client tab — modern client launch with cfg templating and log pane" />
+<img src="docs/images/epona_hybclient.gif" align="right" hspace="10" width="450" alt="Hybrasyl Client tab — modern client launch with cfg templating and log pane" />
 
 Launches the modern open-source Hybrasyl client — either a prebuilt
 `.exe` or a `.csproj` source checkout via `dotnet run`.
@@ -105,7 +105,7 @@ installed. Windows is the primary tested target.
 
 ## Hybrasyl Server tab
 
-<img src="docs/images/epona_server.gif" align="right" width="450" alt="Hybrasyl Server tab — multi-instance server orchestration" />
+<img src="docs/images/epona_server.gif" align="right" hspace="10" width="450" alt="Hybrasyl Server tab — multi-instance server orchestration" />
 
 Multi-instance management for local Hybrasyl server processes. The
 star feature of 2.0.
@@ -182,7 +182,7 @@ Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
 
 ## Settings & data
 
-<img src="docs/images/epona_options.gif" align="right" width="450" alt="Settings pane — themes, world directories, and preferences" />
+<img src="docs/images/epona_options.gif" align="right" hspace="10" width="450" alt="Settings pane — themes, world directories, and preferences" />
 
 Settings persist to `%APPDATA%\Erisco\Epona\settings.json` (roaming).
 Chromium's cache and other Electron transients live separately under
