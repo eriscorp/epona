@@ -50,8 +50,10 @@ function emptyInstance(activeWorldDirectoryId) {
     binaryPath: '',
     serverRepoPath: '',
     serverBranch: null,
+    serverNoGit: false,
     xmlRepoPath: '',
     xmlBranch: null,
+    xmlNoGit: false,
     worldDirectoryId: activeWorldDirectoryId ?? '',
     logDir: '',
     configFileName: '',
@@ -124,6 +126,16 @@ export default function ServerInstancePanel({
   // Branch lists keyed by repo path so switching instances doesn't refetch
   // every time. { [repoPath]: { branches, error } | undefined }
   const [branchCache, setBranchCache] = useState({})
+  // .NET state for the runtime/SDK chip shown in repo mode. The server's
+  // repo-mode launches go through `dotnet run` which needs the SDK; binary
+  // mode just needs the runtime (.dll requires it; self-contained .exe
+  // doesn't, but the chip is unconditional below — small footprint, harmless
+  // when ignored).
+  const [runtime, setRuntime] = useState({
+    dotnetFound: null,
+    netCoreApp10: null,
+    sdk10: null
+  })
 
   const selected = instances.find((i) => i.id === selectedId) ?? null
   const isRunning = selected && runningIds.has(selected.id)
@@ -139,13 +151,31 @@ export default function ServerInstancePanel({
     : null
   const selectedDataDir = selectedWorldDir?.path ?? ''
 
-  useEffect(() => {
-    if (!selectedDataDir) {
+  // Lifted into a callable so both the initial fetch and the on-open rescan
+  // share the same code path. Files dropped into xml/serverconfigs/ at
+  // runtime should appear without an Epona restart — the Config-tab dropdown
+  // re-invokes this on every open.
+  function refreshServerConfigs(dir) {
+    if (!dir) {
       setAvailableConfigs([])
       return
     }
-    window.sparkAPI.listServerConfigs(selectedDataDir).then(setAvailableConfigs)
+    window.sparkAPI.listServerConfigs(dir).then(setAvailableConfigs)
+  }
+
+  useEffect(() => {
+    refreshServerConfigs(selectedDataDir)
   }, [selectedDataDir])
+
+  // Probe .NET runtime + SDK once on mount. Cheap call (two execFile shells)
+  // and the answer doesn't change without a restart, so no need to re-probe
+  // per repo-mode switch.
+  useEffect(() => {
+    window.sparkAPI
+      .checkDotnetRuntime()
+      .then(setRuntime)
+      .catch((err) => console.error('[server] checkDotnetRuntime failed:', err))
+  }, [])
 
   useEffect(() => {
     if (!selectedDataDir || !selected?.configFileName) {
@@ -178,8 +208,12 @@ export default function ServerInstancePanel({
   // dropdown for explicit re-listing.
   useEffect(() => {
     const paths = []
-    if (isRepoMode && selected?.serverRepoPath) paths.push(selected.serverRepoPath)
-    if (isRepoMode && useLocalXml && selected?.xmlRepoPath) paths.push(selected.xmlRepoPath)
+    if (isRepoMode && selected?.serverRepoPath && !selected.serverNoGit) {
+      paths.push(selected.serverRepoPath)
+    }
+    if (isRepoMode && useLocalXml && selected?.xmlRepoPath && !selected.xmlNoGit) {
+      paths.push(selected.xmlRepoPath)
+    }
     for (const p of paths) {
       if (branchCache[p] !== undefined) continue
       refreshBranches(p)
@@ -189,7 +223,14 @@ export default function ServerInstancePanel({
     // still skips already-loaded paths. Including it would re-fire the effect
     // on every cache write. (The react-hooks/exhaustive-deps rule isn't active
     // in this project, so no disable comment is needed.)
-  }, [isRepoMode, useLocalXml, selected?.serverRepoPath, selected?.xmlRepoPath])
+  }, [
+    isRepoMode,
+    useLocalXml,
+    selected?.serverRepoPath,
+    selected?.xmlRepoPath,
+    selected?.serverNoGit,
+    selected?.xmlNoGit
+  ])
 
   function updateSelected(patch) {
     if (!selected) return
@@ -246,28 +287,82 @@ export default function ServerInstancePanel({
     )
     if (p) updateSelected({ binaryPath: p })
   }
+  // Map a diagnoseGitRepo result to a snackbar payload + the patch fields the
+  // picker should write. The 'no_git' / 'not_repo' branches accept the path and
+  // flip a per-repo noGit flag so the launcher can skip the worktree dance and
+  // run dotnet directly. The 'no_path' / 'git_error' branches refuse the path.
+  async function diagnoseAndExplain(p) {
+    const diag = await window.sparkAPI.diagnoseGitRepo(p)
+    if (diag.ok) return { accept: true, noGit: false, snack: null }
+    if (diag.reason === 'no_git') {
+      return {
+        accept: true,
+        noGit: true,
+        snack: {
+          severity: 'warning',
+          duration: 10000,
+          message:
+            'Git not detected on PATH. Branch switching disabled. ' +
+            'Install: winget install --id Git.Git -e (then restart Epona).'
+        }
+      }
+    }
+    if (diag.reason === 'not_repo') {
+      return {
+        accept: true,
+        noGit: true,
+        snack: {
+          severity: 'warning',
+          duration: 8000,
+          message:
+            'No .git/ found in this folder or its parents. Branch switching disabled — ' +
+            'running directly from the picked folder.'
+        }
+      }
+    }
+    if (diag.reason === 'no_path') {
+      return {
+        accept: false,
+        noGit: false,
+        snack: { severity: 'error', message: "Folder doesn't exist or isn't accessible." }
+      }
+    }
+    return {
+      accept: false,
+      noGit: false,
+      snack: { severity: 'error', message: `Git error: ${diag.message ?? 'unknown'}` }
+    }
+  }
+
   async function pickServerRepo() {
     const p = await window.sparkAPI.pickDirectory(
       'Select Hybrasyl server repo',
       selected?.serverRepoPath
     )
     if (!p) return
-    const isRepo = await window.sparkAPI.isGitRepo(p)
-    if (!isRepo) {
-      setSnack({ severity: 'error', message: 'Not a git repository' })
-      return
-    }
-    updateSelected({ serverRepoPath: p })
+    const { accept, noGit, snack } = await diagnoseAndExplain(p)
+    if (snack) setSnack(snack)
+    if (!accept) return
+    // Drop a pinned branch only when noGit — branch switching is impossible
+    // there. On the happy path leave serverBranch alone so a user re-picking
+    // the same repo doesn't lose their selection.
+    const patch = { serverRepoPath: p, serverNoGit: noGit }
+    if (noGit) patch.serverBranch = null
+    updateSelected(patch)
   }
   async function pickXmlRepo() {
     const p = await window.sparkAPI.pickDirectory('Select Hybrasyl.Xml repo', selected?.xmlRepoPath)
     if (!p) return
-    const isRepo = await window.sparkAPI.isGitRepo(p)
-    if (!isRepo) {
-      setSnack({ severity: 'error', message: 'Not a git repository' })
-      return
+    const { accept, noGit, snack } = await diagnoseAndExplain(p)
+    if (snack) setSnack(snack)
+    if (!accept) return
+    const patch = { xmlRepoPath: p, xmlNoGit: noGit }
+    // Downgrade a branch-pinned local XML setup to in-place ('') when noGit
+    // forces it. Leaves null (NuGet mode) and '' (in-place) untouched.
+    if (noGit && typeof selected?.xmlBranch === 'string' && selected.xmlBranch !== '') {
+      patch.xmlBranch = ''
     }
-    updateSelected({ xmlRepoPath: p })
+    updateSelected(patch)
   }
   // Apply a worldDirectoryId selection: also re-derive logDir from the matching
   // path. Note: this overwrites any manual logDir override — switching the
@@ -322,6 +417,26 @@ export default function ServerInstancePanel({
     xmlBranchLoading
   )
 
+  // Repo-mode launches go through `dotnet run` which compiles via the SDK.
+  // Binary-mode .dll wrapping uses `dotnet <dll>` (runtime only); self-
+  // contained .exe needs neither. We always surface the chip in repo mode
+  // so the user sees missing-SDK before launch instead of inside a build
+  // error stream.
+  const runtimeChip = (() => {
+    if (runtime.dotnetFound === null) return { label: 'Checking .NET…', color: 'default' }
+    if (!runtime.dotnetFound) return { label: '.NET not installed', color: 'error' }
+    if (runtime.netCoreApp10 && runtime.sdk10) {
+      return { label: '.NET 10 runtime + SDK', color: 'success' }
+    }
+    if (runtime.netCoreApp10 && !runtime.sdk10) {
+      return { label: '.NET 10 SDK missing', color: 'warning' }
+    }
+    if (!runtime.netCoreApp10 && runtime.sdk10) {
+      return { label: '.NET 10 runtime missing', color: 'warning' }
+    }
+    return { label: '.NET 10 runtime + SDK missing', color: 'warning' }
+  })()
+
   // ──────────── Tab content sections ────────────
 
   const serverTab = selected && (
@@ -353,6 +468,17 @@ export default function ServerInstancePanel({
 
       {isRepoMode && (
         <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" color="text.button">
+              Runtime
+            </Typography>
+            <Chip
+              size="small"
+              label={runtimeChip.label}
+              color={runtimeChip.color}
+              variant="outlined"
+            />
+          </Box>
           <PathPicker
             label="Server Repo"
             value={selected.serverRepoPath}
@@ -362,7 +488,7 @@ export default function ServerInstancePanel({
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
             <FormControl
               size="small"
-              disabled={isRunning || !selected.serverRepoPath}
+              disabled={isRunning || !selected.serverRepoPath || selected.serverNoGit}
               sx={{ flex: 1 }}
             >
               <InputLabel shrink>Server Branch</InputLabel>
@@ -375,6 +501,11 @@ export default function ServerInstancePanel({
                     serverBranch: e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
                   })
                 }
+                onOpen={() =>
+                  !selected.serverNoGit &&
+                  selected.serverRepoPath &&
+                  refreshBranches(selected.serverRepoPath)
+                }
               >
                 <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
                 {serverBranches.map((b) => (
@@ -386,18 +517,33 @@ export default function ServerInstancePanel({
                   </MenuItem>
                 ))}
               </Select>
-              {serverBranchError && (
-                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                  Couldn&apos;t list branches: {serverBranchError}
+              {selected.serverNoGit ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5, fontStyle: 'italic' }}
+                >
+                  Git not available — server runs directly from the picked folder.
                 </Typography>
+              ) : (
+                serverBranchError && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    Couldn&apos;t list branches: {serverBranchError}
+                  </Typography>
+                )
               )}
             </FormControl>
-            <Tooltip title="Refresh branch list">
+            <Tooltip title={selected.serverNoGit ? 'Git not available' : 'Refresh branch list'}>
               <span>
                 <IconButton
                   size="small"
                   onClick={() => refreshBranches(selected.serverRepoPath)}
-                  disabled={isRunning || !selected.serverRepoPath || serverBranchLoading}
+                  disabled={
+                    isRunning ||
+                    !selected.serverRepoPath ||
+                    serverBranchLoading ||
+                    selected.serverNoGit
+                  }
                   sx={{ mt: 0.5 }}
                 >
                   {serverBranchLoading ? (
@@ -450,7 +596,7 @@ export default function ServerInstancePanel({
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                 <FormControl
                   size="small"
-                  disabled={isRunning || !selected.xmlRepoPath}
+                  disabled={isRunning || !selected.xmlRepoPath || selected.xmlNoGit}
                   sx={{ flex: 1 }}
                 >
                   <InputLabel shrink>XML Branch</InputLabel>
@@ -459,6 +605,11 @@ export default function ServerInstancePanel({
                     notched
                     value={selected.xmlBranch ?? ''}
                     onChange={(e) => updateSelected({ xmlBranch: e.target.value })}
+                    onOpen={() =>
+                      !selected.xmlNoGit &&
+                      selected.xmlRepoPath &&
+                      refreshBranches(selected.xmlRepoPath)
+                    }
                     displayEmpty
                   >
                     {selected.xmlBranch === '' && (
@@ -475,18 +626,30 @@ export default function ServerInstancePanel({
                       </MenuItem>
                     ))}
                   </Select>
-                  {xmlBranchError && (
-                    <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                      Couldn&apos;t list branches: {xmlBranchError}
+                  {selected.xmlNoGit ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ mt: 0.5, fontStyle: 'italic' }}
+                    >
+                      Git not available — XML runs directly from the picked folder.
                     </Typography>
+                  ) : (
+                    xmlBranchError && (
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                        Couldn&apos;t list branches: {xmlBranchError}
+                      </Typography>
+                    )
                   )}
                 </FormControl>
-                <Tooltip title="Refresh branch list">
+                <Tooltip title={selected.xmlNoGit ? 'Git not available' : 'Refresh branch list'}>
                   <span>
                     <IconButton
                       size="small"
                       onClick={() => refreshBranches(selected.xmlRepoPath)}
-                      disabled={isRunning || !selected.xmlRepoPath || xmlBranchLoading}
+                      disabled={
+                        isRunning || !selected.xmlRepoPath || xmlBranchLoading || selected.xmlNoGit
+                      }
                       sx={{ mt: 0.5 }}
                     >
                       {xmlBranchLoading ? (
@@ -588,6 +751,7 @@ export default function ServerInstancePanel({
           notched
           value={selected.configFileName}
           onChange={(e) => updateSelected({ configFileName: e.target.value })}
+          onOpen={() => refreshServerConfigs(selectedDataDir)}
           displayEmpty
         >
           {selected.configFileName === '' && (
@@ -845,7 +1009,7 @@ export default function ServerInstancePanel({
 
       <Snackbar
         open={!!snack}
-        autoHideDuration={4000}
+        autoHideDuration={snack?.duration ?? 4000}
         onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >

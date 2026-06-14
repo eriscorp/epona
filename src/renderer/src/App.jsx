@@ -19,6 +19,7 @@ import ServerInstancePanel from './components/ServerInstancePanel'
 import ActionButtons from './components/ActionButtons'
 import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
+import HelpDialog from './components/HelpDialog'
 
 const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
 const kindToIndex = (k) => {
@@ -78,6 +79,7 @@ export default function App() {
   const [detectedVersion, setDetectedVersion] = useState(null)
   const [themeName, setThemeName] = useState('hybrasyl')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
   const [logPaneOpen, setLogPaneOpen] = useState(false)
   const [hybrasylLog, setHybrasylLog] = useState([])
@@ -253,6 +255,7 @@ export default function App() {
             detectedVersion={detectedVersion}
             onLocateClient={handleLocateClient}
             onToggleSettings={() => setSettingsOpen((o) => !o)}
+            onOpenHelp={() => setHelpOpen(true)}
           />
           <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
 
@@ -413,6 +416,8 @@ export default function App() {
             onChange={update}
           />
         )}
+
+        <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
       </Box>
     </ThemeProvider>
   )

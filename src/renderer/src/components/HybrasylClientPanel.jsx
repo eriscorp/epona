@@ -14,6 +14,8 @@ import MenuItem from '@mui/material/MenuItem'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import CircularProgress from '@mui/material/CircularProgress'
+import Snackbar from '@mui/material/Snackbar'
+import Alert from '@mui/material/Alert'
 import TerminalIcon from '@mui/icons-material/Terminal'
 import RefreshIcon from '@mui/icons-material/Refresh'
 
@@ -77,10 +79,17 @@ export default function HybrasylClientPanel({
   activeInstanceLogDir
 }) {
   const [resolution, setResolution] = useState({ kind: null })
-  const [runtime, setRuntime] = useState({ dotnetFound: null, netCoreApp10: null })
+  const [runtime, setRuntime] = useState({
+    dotnetFound: null,
+    netCoreApp10: null,
+    sdk10: null
+  })
   // Branch lists keyed by repo csproj path so flipping back and forth doesn't
   // refetch every time. { [csprojPath]: { branches, error } | undefined }
   const [branchCache, setBranchCache] = useState({})
+  // Snackbar payload for the csproj-picker diagnose result. Same shape the
+  // server panel uses: { severity, message, duration? }.
+  const [snack, setSnack] = useState(null)
 
   const isRepoMode = hybrasyl.mode === 'repo'
   const activePath = isRepoMode ? hybrasyl.clientRepoPath : hybrasyl.binaryPath
@@ -123,16 +132,18 @@ export default function HybrasylClientPanel({
 
   // Fetch branches whenever a csproj is configured in repo mode. Cached by
   // path so flipping mode or pasting the same path twice doesn't refetch
-  // automatically — the user gets a refresh button for that.
+  // automatically — the user gets a refresh button for that. Skipped entirely
+  // when hybrasyl.noGit is set: branch switching is unavailable there and
+  // listBranches would just bounce with a "Not a git repository" error.
   useEffect(() => {
-    if (!isRepoMode || !hybrasyl.clientRepoPath) return
+    if (!isRepoMode || !hybrasyl.clientRepoPath || hybrasyl.noGit) return
     const p = hybrasyl.clientRepoPath
     if (branchCache[p] !== undefined) return
     refreshBranches(p)
     // branchCache intentionally omitted — entries are append-only and the
     // !== undefined guard already short-circuits, so including it would just
     // re-run the effect on every cache write.
-  }, [isRepoMode, hybrasyl.clientRepoPath])
+  }, [isRepoMode, hybrasyl.clientRepoPath, hybrasyl.noGit])
 
   function setMode(m) {
     if (!m || m === hybrasyl.mode) return
@@ -152,6 +163,51 @@ export default function HybrasylClientPanel({
     }
   }
 
+  // Map a diagnoseGitRepo result to a snackbar payload + which fields to set.
+  // Mirrors the server panel's helper so the two pickers stay in lockstep.
+  async function diagnoseAndExplain(p) {
+    const diag = await window.sparkAPI.diagnoseGitRepo(p)
+    if (diag.ok) return { accept: true, noGit: false, snack: null }
+    if (diag.reason === 'no_git') {
+      return {
+        accept: true,
+        noGit: true,
+        snack: {
+          severity: 'warning',
+          duration: 10000,
+          message:
+            'Git not detected on PATH. Branch switching disabled. ' +
+            'Install: winget install --id Git.Git -e (then restart Epona).'
+        }
+      }
+    }
+    if (diag.reason === 'not_repo') {
+      return {
+        accept: true,
+        noGit: true,
+        snack: {
+          severity: 'warning',
+          duration: 8000,
+          message:
+            'No .git/ found in this folder or its parents. Branch switching disabled — ' +
+            'running directly from the picked .csproj.'
+        }
+      }
+    }
+    if (diag.reason === 'no_path') {
+      return {
+        accept: false,
+        noGit: false,
+        snack: { severity: 'error', message: "Folder doesn't exist or isn't accessible." }
+      }
+    }
+    return {
+      accept: false,
+      noGit: false,
+      snack: { severity: 'error', message: `Git error: ${diag.message ?? 'unknown'}` }
+    }
+  }
+
   async function pickCsproj() {
     try {
       const path = await window.sparkAPI.pickFile(
@@ -159,15 +215,19 @@ export default function HybrasylClientPanel({
         [{ name: 'C# Project', extensions: ['csproj'] }],
         hybrasyl.clientRepoPath
       )
-      if (path) {
-        // Reset branch when the csproj changes — the saved branch belongs to
-        // a different repo and would be pinned-as-missing forever otherwise.
-        onChange({
-          targets: {
-            hybrasyl: { ...hybrasyl, clientRepoPath: path, clientBranch: null }
-          }
-        })
-      }
+      if (!path) return
+      const { accept, noGit, snack: snackPayload } = await diagnoseAndExplain(path)
+      if (snackPayload) setSnack(snackPayload)
+      if (!accept) return
+      // Reset clientBranch on any csproj change — pinning a branch from the old
+      // repo into the new one yields "missing" labels forever otherwise. When
+      // noGit, null also matches the "current checkout" sentinel the launcher
+      // treats as "use the picked dir in place".
+      onChange({
+        targets: {
+          hybrasyl: { ...hybrasyl, clientRepoPath: path, clientBranch: null, noGit }
+        }
+      })
     } catch (err) {
       console.error('[hybrasyl] pickCsproj failed:', err)
     }
@@ -182,15 +242,27 @@ export default function HybrasylClientPanel({
       : 'Show console'
     : 'Console output is only available for source (.csproj) launches'
 
-  const runtimeOk = runtime.netCoreApp10 === true
-  const runtimeChip =
-    runtime.dotnetFound === null
-      ? { label: 'Checking .NET…', color: 'default' }
-      : runtimeOk
-        ? { label: '.NET 10 detected', color: 'success' }
-        : runtime.dotnetFound
-          ? { label: '.NET 10 missing', color: 'warning' }
-          : { label: '.NET not installed', color: 'error' }
+  // Repo (.csproj) launches need both runtime AND SDK. Binary (.exe / .dll)
+  // launches only need the runtime. The chip shape distinguishes the cases so
+  // the user can tell which install they're missing from a glance.
+  const needsSdk = isRepoMode
+  const runtimeOk = runtime.netCoreApp10 === true && (!needsSdk || runtime.sdk10 === true)
+  const runtimeChip = (() => {
+    if (runtime.dotnetFound === null) return { label: 'Checking .NET…', color: 'default' }
+    if (!runtime.dotnetFound) return { label: '.NET not installed', color: 'error' }
+    if (runtimeOk) {
+      return needsSdk
+        ? { label: '.NET 10 runtime + SDK', color: 'success' }
+        : { label: '.NET 10 runtime', color: 'success' }
+    }
+    if (needsSdk && !runtime.sdk10 && runtime.netCoreApp10) {
+      return { label: '.NET 10 SDK missing', color: 'warning' }
+    }
+    if (needsSdk && !runtime.sdk10 && !runtime.netCoreApp10) {
+      return { label: '.NET 10 runtime + SDK missing', color: 'warning' }
+    }
+    return { label: '.NET 10 runtime missing', color: 'warning' }
+  })()
 
   const cacheEntry = hybrasyl.clientRepoPath ? branchCache[hybrasyl.clientRepoPath] : null
   const branchError = cacheEntry?.error ?? null
@@ -239,7 +311,11 @@ export default function HybrasylClientPanel({
             chip={resolvedChip}
           />
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <FormControl size="small" disabled={!hybrasyl.clientRepoPath} sx={{ flex: 1 }}>
+            <FormControl
+              size="small"
+              disabled={!hybrasyl.clientRepoPath || hybrasyl.noGit}
+              sx={{ flex: 1 }}
+            >
               <InputLabel shrink>Client Branch</InputLabel>
               <Select
                 label="Client Branch"
@@ -256,6 +332,11 @@ export default function HybrasylClientPanel({
                     }
                   })
                 }
+                onOpen={() =>
+                  !hybrasyl.noGit &&
+                  hybrasyl.clientRepoPath &&
+                  refreshBranches(hybrasyl.clientRepoPath)
+                }
               >
                 <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
                 {branches.map((b) => (
@@ -267,18 +348,28 @@ export default function HybrasylClientPanel({
                   </MenuItem>
                 ))}
               </Select>
-              {branchError && (
-                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                  Couldn&apos;t list branches: {branchError}
+              {hybrasyl.noGit ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5, fontStyle: 'italic' }}
+                >
+                  Git not available — client runs directly from the picked .csproj.
                 </Typography>
+              ) : (
+                branchError && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    Couldn&apos;t list branches: {branchError}
+                  </Typography>
+                )
               )}
             </FormControl>
-            <Tooltip title="Refresh branch list">
+            <Tooltip title={hybrasyl.noGit ? 'Git not available' : 'Refresh branch list'}>
               <span>
                 <IconButton
                   size="small"
                   onClick={() => refreshBranches(hybrasyl.clientRepoPath)}
-                  disabled={!hybrasyl.clientRepoPath || branchLoading}
+                  disabled={!hybrasyl.clientRepoPath || branchLoading || hybrasyl.noGit}
                   sx={{ mt: 0.5 }}
                 >
                   {branchLoading ? (
@@ -345,6 +436,17 @@ export default function HybrasylClientPanel({
           sx={{ m: 0 }}
         />
       </Tooltip>
+
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={snack?.duration ?? 4000}
+        onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snack?.severity} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
+          {snack?.message}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

@@ -23,8 +23,13 @@ const instanceSchema = z.object({
   binaryPath: z.string(),
   serverRepoPath: z.string(),
   serverBranch: z.string().nullable(),
+  // True when the picked server repo isn't inside a git working tree (or git
+  // isn't installed). Repo-mode launches skip the worktree/branch dance and
+  // run `dotnet run` directly from serverRepoPath. Defaulted via coerceInstance.
+  serverNoGit: z.boolean().optional().default(false),
   xmlRepoPath: z.string(),
   xmlBranch: z.string().nullable(),
+  xmlNoGit: z.boolean().optional().default(false),
   worldDirectoryId: z.string(),
   logDir: z.string(),
   configFileName: z.string(),
@@ -48,6 +53,10 @@ const hybrasylTargetSchema = z.object({
   binaryPath: z.string(),
   clientRepoPath: z.string(),
   clientBranch: z.string().nullable(),
+  // True when the picked client .csproj isn't inside a git working tree (or
+  // git isn't installed). Repo-mode launches skip the worktree/branch dance
+  // and run `dotnet run` directly from the picked csproj's directory.
+  noGit: z.boolean().optional().default(false),
   autoSaveLogs: z.boolean()
 })
 

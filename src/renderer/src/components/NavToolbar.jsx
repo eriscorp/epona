@@ -1,5 +1,6 @@
 import { Toolbar, IconButton, Tooltip, Divider, Box, Typography } from '@mui/material'
 import { GiSettingsKnobs, GiMagnifyingGlass } from 'react-icons/gi'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 
 const iconSx = {
   '& svg': {
@@ -20,7 +21,12 @@ const btnSx = {
   }
 }
 
-export default function NavToolbar({ detectedVersion, onLocateClient, onToggleSettings }) {
+export default function NavToolbar({
+  detectedVersion,
+  onLocateClient,
+  onToggleSettings,
+  onOpenHelp
+}) {
   return (
     <Toolbar variant="dense" sx={{ bgcolor: 'secondary.main', minHeight: 40, opacity: 0.85 }}>
       {detectedVersion ? (
@@ -53,6 +59,12 @@ export default function NavToolbar({ detectedVersion, onLocateClient, onToggleSe
       <Tooltip title="Settings">
         <IconButton sx={btnSx} onClick={onToggleSettings}>
           <GiSettingsKnobs />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Recommended installs (winget commands)">
+        <IconButton sx={btnSx} onClick={onOpenHelp}>
+          <HelpOutlineIcon />
         </IconButton>
       </Tooltip>
     </Toolbar>

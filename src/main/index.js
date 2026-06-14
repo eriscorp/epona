@@ -15,7 +15,7 @@ import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
-import { listBranches, isGitRepo } from './gitOps.js'
+import { listBranches, isGitRepo, diagnoseGitRepo } from './gitOps.js'
 import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
 
 let settingsManager
@@ -373,6 +373,7 @@ app.whenReady().then(() => {
     }
   })
   ipcMain.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
+  ipcMain.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
 
   // Resolve an instance's worldDirectoryId to a concrete dataDir path that
   // serverTarget understands. Returns null if the world directory is missing

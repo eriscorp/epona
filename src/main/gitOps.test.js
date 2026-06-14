@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { spawn } from 'child_process'
-import { isGitRepo, listBranches, gitToplevel } from './gitOps.js'
+import { isGitRepo, listBranches, gitToplevel, diagnoseGitRepo } from './gitOps.js'
 
 // Helpers — run a real git command in a real temp dir. Slower than mocking
 // but catches git-version drift and platform quirks; matches the project's
@@ -100,6 +100,33 @@ describe('gitOps', () => {
       expect(await gitToplevel(null)).toBeNull()
       expect(await gitToplevel(undefined)).toBeNull()
     })
+  })
+
+  describe('diagnoseGitRepo', () => {
+    it('returns { ok: true } for a real git repo', async () => {
+      expect(await diagnoseGitRepo(repoPath)).toEqual({ ok: true })
+    })
+    it('returns reason: not_repo for a directory that is not a git repo', async () => {
+      expect(await diagnoseGitRepo(nonRepoPath)).toEqual({ ok: false, reason: 'not_repo' })
+    })
+    it('returns reason: no_path for a non-existent path', async () => {
+      const bogus = join(tmpdir(), 'epona-does-not-exist-' + Date.now())
+      expect(await diagnoseGitRepo(bogus)).toEqual({ ok: false, reason: 'no_path' })
+    })
+    it('returns reason: no_path for empty / non-string input', async () => {
+      expect(await diagnoseGitRepo('')).toEqual({ ok: false, reason: 'no_path' })
+      expect(await diagnoseGitRepo(null)).toEqual({ ok: false, reason: 'no_path' })
+      expect(await diagnoseGitRepo(undefined)).toEqual({ ok: false, reason: 'no_path' })
+    })
+    it('returns { ok: true } for a file inside a git repo', async () => {
+      const filePath = join(repoPath, 'project-diag.csproj')
+      await fs.writeFile(filePath, '<Project />', 'utf-8')
+      expect(await diagnoseGitRepo(filePath)).toEqual({ ok: true })
+    })
+    // no_git (spawn ENOENT) is exercised manually by removing git.exe from PATH
+    // — mocking child_process here would conflict with the real-spawn tests
+    // above. The code path is a single `err.code === 'ENOENT'` check in the
+    // catch block, kept simple precisely so it doesn't need its own test rig.
   })
 
   describe('listBranches', () => {

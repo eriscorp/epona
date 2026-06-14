@@ -18,25 +18,65 @@ export function parseListRuntimesOutput(stdout) {
   return runtimes
 }
 
+// Parse the output of `dotnet --list-sdks`.
+// Each line looks like: "10.0.100 [C:\\Program Files\\dotnet\\sdk]"
+// Returns a list of { version }. The SDK has no name discriminant (unlike
+// runtimes, which split into NETCore/AspNetCore/WindowsDesktop), so the
+// shape is intentionally smaller than the runtime parser's.
+export function parseListSdksOutput(stdout) {
+  const sdks = []
+  for (const raw of stdout.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (line.length === 0) continue
+    // SDK lines start with the version, NOT a package name — distinguishes
+    // them from runtime lines if a caller ever feeds the wrong output in.
+    const match = line.match(/^(\d+\.\d+\.\d+\S*)\s+\[/)
+    if (!match) continue
+    sdks.push({ version: match[1] })
+  }
+  return sdks
+}
+
 export function hasRuntime(runtimes, name, majorVersion) {
   return runtimes.some(
     (r) => r.name === name && parseInt(r.version.split('.')[0], 10) === majorVersion
   )
 }
 
-// Side-effectful: shell out to `dotnet --list-runtimes`.
-// Returns { dotnetFound, netCoreApp10, runtimes }.
-// dotnetFound=false if the `dotnet` binary is missing or the call fails.
+export function hasSdk(sdks, majorVersion) {
+  return sdks.some((s) => parseInt(s.version.split('.')[0], 10) === majorVersion)
+}
+
+// Side-effectful: shell out to `dotnet --list-runtimes` and `--list-sdks` in
+// parallel. Returns { dotnetFound, netCoreApp10, sdk10, runtimes, sdks }.
+// dotnetFound=false if the `dotnet` binary is missing or any call fails.
+//
+// Why probe both: binary-mode launches against a self-contained .dll/.exe
+// need only the runtime, but repo-mode `dotnet run` invokes the build first
+// and needs the SDK. Showing only runtime status was misleading users into
+// a "✓ runtime detected, but my build still fails" loop.
 export async function checkDotnetRuntime() {
   try {
-    const { stdout } = await execFileAsync('dotnet', ['--list-runtimes'])
-    const runtimes = parseListRuntimesOutput(stdout)
+    const [{ stdout: rtOut }, { stdout: sdkOut }] = await Promise.all([
+      execFileAsync('dotnet', ['--list-runtimes']),
+      execFileAsync('dotnet', ['--list-sdks'])
+    ])
+    const runtimes = parseListRuntimesOutput(rtOut)
+    const sdks = parseListSdksOutput(sdkOut)
     return {
       dotnetFound: true,
       netCoreApp10: hasRuntime(runtimes, 'Microsoft.NETCore.App', 10),
-      runtimes
+      sdk10: hasSdk(sdks, 10),
+      runtimes,
+      sdks
     }
   } catch {
-    return { dotnetFound: false, netCoreApp10: false, runtimes: [] }
+    return {
+      dotnetFound: false,
+      netCoreApp10: false,
+      sdk10: false,
+      runtimes: [],
+      sdks: []
+    }
   }
 }

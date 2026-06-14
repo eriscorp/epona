@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('sparkAPI', {
     ipcRenderer.invoke('instance:readDataStore', dataDir, configFileName),
   listGitBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
   isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath),
+  diagnoseGitRepo: (repoPath) => ipcRenderer.invoke('git:diagnoseGitRepo', repoPath),
   isHybrasylDataDir: (dataDir) => ipcRenderer.invoke('instance:isHybrasylDataDir', dataDir),
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
   saveLog: (content, defaultFileName) =>

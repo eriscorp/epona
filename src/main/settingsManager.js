@@ -26,6 +26,10 @@ const DEFAULT_HYBRASYL_TARGET = {
   binaryPath: '',
   clientRepoPath: '',
   clientBranch: null,
+  // Whether the picked .csproj sits inside a git working tree. False is the
+  // safe default for existing settings — every clientRepoPath written before
+  // this field was added was validated as a git repo by the old picker.
+  noGit: false,
   autoSaveLogs: false
 }
 
@@ -41,8 +45,14 @@ export const DEFAULT_INSTANCE = {
   binaryPath: '',
   serverRepoPath: '',
   serverBranch: null,
+  // Set true when the picked server repo isn't inside a git working tree (or
+  // git isn't on PATH). Repo-mode launches skip ensureWorktree and run
+  // dotnet against serverRepoPath directly. False is safe for existing
+  // settings — old picker validated git presence before persisting.
+  serverNoGit: false,
   xmlRepoPath: '',
   xmlBranch: null,
+  xmlNoGit: false,
   worldDirectoryId: '',
   logDir: '',
   configFileName: '',
@@ -88,8 +98,10 @@ function coerceInstance(raw) {
     binaryPath: safe('binaryPath', 'string', DEFAULT_INSTANCE.binaryPath),
     serverRepoPath: safe('serverRepoPath', 'string', DEFAULT_INSTANCE.serverRepoPath),
     serverBranch: safeNullable('serverBranch', 'string', DEFAULT_INSTANCE.serverBranch),
+    serverNoGit: safe('serverNoGit', 'boolean', DEFAULT_INSTANCE.serverNoGit),
     xmlRepoPath: safe('xmlRepoPath', 'string', DEFAULT_INSTANCE.xmlRepoPath),
     xmlBranch: safeNullable('xmlBranch', 'string', DEFAULT_INSTANCE.xmlBranch),
+    xmlNoGit: safe('xmlNoGit', 'boolean', DEFAULT_INSTANCE.xmlNoGit),
     worldDirectoryId: safe('worldDirectoryId', 'string', DEFAULT_INSTANCE.worldDirectoryId),
     logDir: safe('logDir', 'string', DEFAULT_INSTANCE.logDir),
     configFileName: safe('configFileName', 'string', DEFAULT_INSTANCE.configFileName),
@@ -294,6 +306,10 @@ function withDefaults(data) {
             : typeof data?.targets?.hybrasyl?.clientBranch === 'string'
               ? data.targets.hybrasyl.clientBranch
               : DEFAULT_HYBRASYL_TARGET.clientBranch,
+        noGit:
+          typeof data?.targets?.hybrasyl?.noGit === 'boolean'
+            ? data.targets.hybrasyl.noGit
+            : DEFAULT_HYBRASYL_TARGET.noGit,
         autoSaveLogs:
           typeof data?.targets?.hybrasyl?.autoSaveLogs === 'boolean'
             ? data.targets.hybrasyl.autoSaveLogs

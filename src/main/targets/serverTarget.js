@@ -248,10 +248,13 @@ async function launchBinary(instance) {
 }
 
 async function launchRepo(instance) {
-  // 1. Resolve the server worktree (or use checkout in place if branch is null).
+  // 1. Resolve the server worktree. Skip the worktree dance when serverNoGit
+  //    is set (git isn't available, or the picked folder isn't a working tree)
+  //    or when no branch is pinned — both cases launch in place from the
+  //    picked repo path.
   let serverWorktreePath
   let releaseServer = async () => {}
-  if (instance.serverBranch) {
+  if (instance.serverBranch && !instance.serverNoGit) {
     serverWorktreePath = await ensureWorktree(instance.serverRepoPath, instance.serverBranch)
     releaseServer = () => releaseWorktree(instance.serverRepoPath, instance.serverBranch)
   } else {
@@ -260,10 +263,15 @@ async function launchRepo(instance) {
 
   // 2. If user opted into a local XML branch, ensure that worktree, sniff
   //    the server csproj, and write the Directory.Build.props redirect.
+  //    Under xmlNoGit, skip the worktree but still write build-props pointing
+  //    at the picked XML repo's csproj — local-XML override stays functional.
   let releaseXml = async () => {}
   let didWriteBuildProps = false
   try {
-    if (instance.xmlBranch) {
+    // xmlBranch !== null means "use local XML" (either '' = in-place or a
+    // branch name). Combined with xmlNoGit, force the in-place semantic.
+    const useLocalXml = instance.xmlBranch !== null && instance.xmlRepoPath
+    if (useLocalXml) {
       if (!(await csprojSupportsLocalXml(serverWorktreePath))) {
         await releaseServer()
         return {
@@ -274,8 +282,11 @@ async function launchRepo(instance) {
             'Update the server branch, or unset the XML branch on this instance.'
         }
       }
-      const xmlWorktreePath = await ensureWorktree(instance.xmlRepoPath, instance.xmlBranch)
-      releaseXml = () => releaseWorktree(instance.xmlRepoPath, instance.xmlBranch)
+      let xmlWorktreePath = instance.xmlRepoPath
+      if (instance.xmlBranch && !instance.xmlNoGit) {
+        xmlWorktreePath = await ensureWorktree(instance.xmlRepoPath, instance.xmlBranch)
+        releaseXml = () => releaseWorktree(instance.xmlRepoPath, instance.xmlBranch)
+      }
       const xmlCsproj = join(xmlWorktreePath, 'src', 'Hybrasyl.Xml.csproj')
       await writeBuildProps(serverWorktreePath, xmlCsproj)
       didWriteBuildProps = true

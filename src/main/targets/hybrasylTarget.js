@@ -106,10 +106,12 @@ export async function launch(config, profile, daClientPath) {
   // Worktree resolution for branch-pinned repo launches. ensureWorktree gives
   // us the worktree path; we rewrite the resolved csproj into the worktree
   // before building spawn args. cleanup() runs on success (after child exit)
-  // or on spawn failure to keep refcounts honest.
+  // or on spawn failure to keep refcounts honest. Skip the entire dance when
+  // config.noGit is set — the picked csproj isn't inside a git working tree
+  // (or git isn't installed) and the launch runs in place from resolved.cwd.
   let worktreePath = null
   let releaseFn = async () => {}
-  if (isRepo && config.clientBranch) {
+  if (isRepo && config.clientBranch && !config.noGit) {
     try {
       const repoRoot = await gitToplevel(resolved.cwd)
       if (!repoRoot) {

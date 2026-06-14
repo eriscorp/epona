@@ -100,9 +100,12 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
     setWorldDirDialog(null)
   }
   function deleteWorldDir(id) {
-    // The delete button is disabled when in-use, so this is a defensive guard
-    // for any programmatic call.
-    if (worldDirInUseBy(id).length > 0) return
+    // No "in use" guard: users want to clean up registry entries without
+    // first re-pointing every instance. Instances with a dangling
+    // worldDirectoryId fail at launch time with a clear "World directory
+    // not selected — pick one in settings" message (instance:start guard
+    // in main/index.js), and the Config tab dropdown shows the gap so the
+    // user can re-pick.
     const worldDirectories = settings.worldDirectories.filter((w) => w.id !== id)
     const patch = { worldDirectories }
     if (settings.activeWorldDirectory === id) {
@@ -333,19 +336,13 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
                       <Tooltip
                         title={
                           inUseCount > 0
-                            ? `In use by ${inUseCount} instance${inUseCount === 1 ? '' : 's'}`
+                            ? `Delete — ${inUseCount} instance${inUseCount === 1 ? '' : 's'} will need a new world directory picked`
                             : 'Delete'
                         }
                       >
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => deleteWorldDir(wd.id)}
-                            disabled={inUseCount > 0}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </span>
+                        <IconButton size="small" onClick={() => deleteWorldDir(wd.id)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
                       </Tooltip>
                     </ListItemSecondaryAction>
                   </ListItem>
