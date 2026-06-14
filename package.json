@@ -1,6 +1,6 @@
 {
   "name": "epona",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Dark Ages game launcher",
   "main": "./out/main/index.js",
   "author": "Caeldeth",
