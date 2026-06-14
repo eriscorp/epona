@@ -12,7 +12,14 @@ env:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Pinned to windows-2022 (VS 2022 / version 17). windows-latest has
+    # rolled to an image with VS 18 (the "Microsoft Visual Studio\18"
+    # path), and node-gyp 11.5.0 can't parse that version string — its
+    # PowerShell-based VS finder returns "undefined" and then hits a
+    # stdio buffer overflow, killing the native-addon postinstall.
+    # Revisit once node-gyp ships VS 18 detection (and our local Node 24
+    # dev env confirms the new gyp works against da-win32).
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
