@@ -1,4 +1,6 @@
 #include <napi.h>
+
+#ifdef _WIN32
 #include <windows.h>
 
 // Helper: BigInt <-> HANDLE (stored as uint64_t)
@@ -149,5 +151,19 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("closeHandle",            Napi::Function::New(env, CloseHandle_));
   return exports;
 }
+
+#else  // !_WIN32
+
+// da-win32 wraps Win32 process-interop APIs and is only require()'d on
+// Windows (index.js loads it unconditionally, but src/main/targets/
+// legacyTarget.js gates that require behind process.platform === 'win32').
+// On other platforms we still need a buildable, loadable addon so `npm ci`
+// / electron-builder install-app-deps can compile the package — it just
+// exports nothing.
+Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  return exports;
+}
+
+#endif  // _WIN32
 
 NODE_API_MODULE(da_win32, Init)

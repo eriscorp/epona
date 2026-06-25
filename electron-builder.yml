@@ -1,4 +1,4 @@
-appId: com.darkages.epona
+appId: co.eris.epona
 productName: Epona
 directories:
   buildResources: build
@@ -26,20 +26,29 @@ portable:
 mac:
   category: public.app-category.games
   icon: resources/epona.png
-  identity: null
+  # da-win32 is a Windows-only native module; on macOS it compiles to an
+  # empty stub that's never require()'d (the load is gated behind
+  # process.platform === 'win32'). The stub is byte-identical across arches
+  # and can't be lipo-merged, so tell @electron/universal to ship it as-is
+  # rather than failing the arch merge.
+  x64ArchFiles: '**/da_win32.node'
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
   target:
     - target: dmg
-      arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
+      arch: universal
 dmg:
-  artifactName: ${name}-${version}-${arch}.${ext}
+  artifactName: ${name}-${version}.${ext}
 linux:
   category: Game
   icon: resources/epona.png
+  maintainer: Hybrasyl Maintainers <hybrasyl@eris.co>
   target:
-    - target: AppImage
-      arch: [x64]
+    - deb
+    - AppImage
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
