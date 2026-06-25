@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { resolveDotnetPath } from './dotnet.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -57,9 +58,10 @@ export function hasSdk(sdks, majorVersion) {
 // a "✓ runtime detected, but my build still fails" loop.
 export async function checkDotnetRuntime() {
   try {
+    const dotnet = await resolveDotnetPath()
     const [{ stdout: rtOut }, { stdout: sdkOut }] = await Promise.all([
-      execFileAsync('dotnet', ['--list-runtimes']),
-      execFileAsync('dotnet', ['--list-sdks'])
+      execFileAsync(dotnet, ['--list-runtimes']),
+      execFileAsync(dotnet, ['--list-sdks'])
     ])
     const runtimes = parseListRuntimesOutput(rtOut)
     const sdks = parseListSdksOutput(sdkOut)

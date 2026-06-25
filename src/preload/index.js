@@ -12,8 +12,8 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   openExeDialog: (defaultPath) => ipcRenderer.invoke('dialog:openExe', defaultPath),
   pickFile: (title, filters, defaultPath) =>
     ipcRenderer.invoke('dialog:openFile', title, filters, defaultPath),
-  pickDirectory: (title, defaultPath) =>
-    ipcRenderer.invoke('dialog:openDirectory', title, defaultPath),
+  pickDirectory: (title, defaultPath, message) =>
+    ipcRenderer.invoke('dialog:openDirectory', title, defaultPath, message),
   detectHybrasylPath: (path) => ipcRenderer.invoke('hybrasyl:detectPath', path),
   checkDotnetRuntime: () => ipcRenderer.invoke('hybrasyl:checkRuntime'),
   launch: (targetKind, settings, profile) =>

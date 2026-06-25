@@ -23,28 +23,46 @@ const btnSx = {
 
 export default function NavToolbar({
   detectedVersion,
+  clientPath,
   onLocateClient,
   onToggleSettings,
   onOpenHelp
 }) {
+  const isWindows = window.sparkAPI.platform === 'win32'
+  // Windows shows the detected legacy-client version (memory-patch target).
+  // Non-Windows points at a Dark Ages asset folder, which carries no version —
+  // so report whether assets have been located, and which folder.
+  const assetsName = clientPath
+    ? clientPath
+        .replace(/[\\/]+$/, '')
+        .split(/[\\/]/)
+        .pop()
+    : ''
+  const status = isWindows
+    ? detectedVersion
+      ? { found: true, label: `Client: ${detectedVersion}` }
+      : { found: false, label: 'No client detected' }
+    : clientPath
+      ? { found: true, label: `Assets: ${assetsName}` }
+      : { found: false, label: 'Assets Not Found' }
   return (
     <Toolbar variant="dense" sx={{ bgcolor: 'secondary.main', minHeight: 40, opacity: 0.85 }}>
-      {detectedVersion ? (
+      {status.found ? (
         <Typography
           variant="caption"
           sx={{ color: 'text.button', opacity: 0.9, letterSpacing: '0.1em' }}
         >
-          <strong>Client: {detectedVersion}</strong>
+          <strong>{status.label}</strong>
         </Typography>
       ) : (
         <Typography variant="caption" sx={{ color: 'text.disabled', opacity: 0.9 }}>
-          No client detected
+          {status.label}
         </Typography>
       )}
 
       <Box sx={{ flexGrow: 1 }} />
 
-      <Tooltip title="Locate Client">
+      <Tooltip title={isWindows ? 'Locate Client' : 'Locate Assets'}>
         <IconButton sx={btnSx} onClick={onLocateClient}>
           <GiMagnifyingGlass />
         </IconButton>
@@ -62,7 +80,9 @@ export default function NavToolbar({
         </IconButton>
       </Tooltip>
 
-      <Tooltip title="Recommended installs (winget commands)">
+      <Tooltip
+        title={isWindows ? 'Recommended installs (winget commands)' : 'Recommended installs'}
+      >
         <IconButton sx={btnSx} onClick={onOpenHelp}>
           <HelpOutlineIcon />
         </IconButton>

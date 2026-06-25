@@ -32,13 +32,20 @@ let settingsManager
 const instanceChildren = new Map()
 
 function createWindow() {
+  const isMac = process.platform === 'darwin'
   const mainWindow = new BrowserWindow({
     width: 480,
     height: 800,
     resizable: false,
     show: false,
     autoHideMenuBar: true,
-    frame: false,
+    // macOS keeps the frameless look but shows the native traffic-light controls
+    // (hiddenInset insets them into our custom title bar); trafficLightPosition
+    // centers them in the 36px-tall bar. Windows/Linux stay fully frameless and
+    // use the in-app minimize/close controls in TitleBar.
+    ...(isMac
+      ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 10 } }
+      : { frame: false }),
     icon: join(__dirname, '../../resources/epona.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -75,7 +82,49 @@ app.whenReady().then(() => {
     app.setAppUserModelId(app.isPackaged ? 'com.darkages.epona' : process.execPath)
   }
 
-  const mainWindow = createWindow()
+  // Single main window, but re-creatable. On macOS, closing the window doesn't
+  // quit the app (see window-all-closed below) — it destroys the window while
+  // the app keeps running, and re-opening via the dock fires app.on('activate').
+  // Every IPC handler closes over this `mainWindow` binding, so activate must
+  // reassign it; otherwise handlers keep calling methods on the destroyed
+  // window and throw "Object has been destroyed" (e.g. the resize IPC that
+  // fires when the Settings pane opens).
+  let mainWindow
+
+  function createAndWireMainWindow() {
+    mainWindow = createWindow()
+
+    // Confirm-on-close is per-window state — a window recreated via the dock
+    // needs its own handler and a fresh closeConfirmed flag. Repo-mode launches
+    // own a git worktree + dotnet child tree; bouncing them unintentionally
+    // costs build/run state and can wedge worktree refcounts, so prompt first.
+    // Titlebar X and Alt+F4 both fire 'close'; on confirm we re-fire close so
+    // the before-quit cleanup runs on the second pass.
+    let closeConfirmed = false
+    mainWindow.on('close', async (event) => {
+      if (closeConfirmed) return
+      const repoRunning = await collectRepoRunning()
+      if (repoRunning.length === 0) return
+      event.preventDefault()
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Cancel', 'Quit'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Confirm Quit',
+        message: 'Repo-mode launches are still running.',
+        detail:
+          repoRunning.map((r) => `• ${r}`).join('\n') +
+          '\n\nQuitting will stop them and release their git worktrees.'
+      })
+      if (response === 1) {
+        closeConfirmed = true
+        mainWindow.close()
+      }
+    })
+  }
+
+  createAndWireMainWindow()
 
   // Settings
   ipcMain.handle('settings:load', () => settingsManager.load())
@@ -106,9 +155,12 @@ app.whenReady().then(() => {
     })
     return result.canceled ? null : result.filePaths[0]
   })
-  ipcMain.handle('dialog:openDirectory', async (_, title, defaultPath) => {
+  ipcMain.handle('dialog:openDirectory', async (_, title, defaultPath, message) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: title || 'Select Directory',
+      // macOS renders `message` prominently inside the dialog — use it to spell
+      // out what the picked folder should contain. Ignored on other platforms.
+      message: typeof message === 'string' && message.length > 0 ? message : undefined,
       defaultPath: dialogDefault(defaultPath),
       properties: ['openDirectory']
     })
@@ -557,13 +609,9 @@ app.whenReady().then(() => {
     return running
   })
 
-  // Confirm before closing if any repo-mode launches are still running. Repo
-  // launches own a git worktree and a dotnet child tree — bouncing them
-  // unintentionally costs the user their build/run state and can leave
-  // worktree refcounts stuck if cleanup races. Binary launches are detached
-  // and self-managed; no prompt for those. Triggered by titlebar X and Alt+F4
-  // (both fire the 'close' event); on user confirm we re-fire close so the
-  // existing before-quit cleanup runs on the second pass.
+  // Collect human-readable labels for any repo-mode launches still running, so
+  // the close handler (in createAndWireMainWindow) can list them in the quit
+  // confirmation. Binary launches are detached and self-managed — not listed.
   async function collectRepoRunning() {
     const result = []
     if (activeHybrasylChild && activeHybrasylChild.exitCode === null) {
@@ -583,29 +631,6 @@ app.whenReady().then(() => {
     return result
   }
 
-  let closeConfirmed = false
-  mainWindow.on('close', async (event) => {
-    if (closeConfirmed) return
-    const repoRunning = await collectRepoRunning()
-    if (repoRunning.length === 0) return
-    event.preventDefault()
-    const { response } = await dialog.showMessageBox(mainWindow, {
-      type: 'question',
-      buttons: ['Cancel', 'Quit'],
-      defaultId: 0,
-      cancelId: 0,
-      title: 'Confirm Quit',
-      message: 'Repo-mode launches are still running.',
-      detail:
-        repoRunning.map((r) => `• ${r}`).join('\n') +
-        '\n\nQuitting will stop them and release their git worktrees.'
-    })
-    if (response === 1) {
-      closeConfirmed = true
-      mainWindow.close()
-    }
-  })
-
   // Window controls
   ipcMain.on('window:minimize', () => mainWindow.minimize())
   ipcMain.on('window:close', () => mainWindow.close())
@@ -622,7 +647,7 @@ app.whenReady().then(() => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createAndWireMainWindow()
   })
 })
 

@@ -44,13 +44,22 @@ const emptyWorldDir = { name: '', path: '' }
 export default function SettingsPane({ settings, versions, onClose, onChange }) {
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
   const [worldDirDialog, setWorldDirDialog] = useState(null) // null | { mode, worldDir }
+  const isWindows = window.sparkAPI.platform === 'win32'
 
   async function browseClient() {
     try {
-      const path = await window.sparkAPI.openExeDialog(settings.clientPath)
+      // Windows: the Dark Ages.exe. macOS/Linux: the DA assets folder (no .exe
+      // to run there — the Hybrasyl client only needs the asset directory).
+      const path = isWindows
+        ? await window.sparkAPI.openExeDialog(settings.clientPath)
+        : await window.sparkAPI.pickDirectory(
+            'Select Dark Ages assets folder',
+            settings.clientPath,
+            'Choose the folder containing your Dark Ages assets (the install directory with its .dat files).'
+          )
       if (path) onChange({ clientPath: path })
     } catch (err) {
-      console.error('[settings] openExeDialog failed:', err)
+      console.error('[settings] client path browse failed:', err)
     }
   }
 
@@ -179,14 +188,14 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
         {/* Client */}
         <Box>
           <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-            Client Executable
+            {isWindows ? 'Client Executable' : 'Client Path'}
           </Typography>
           <TextField
             fullWidth
             size="small"
             value={settings.clientPath}
             onChange={(e) => onChange({ clientPath: e.target.value })}
-            placeholder="Path to Darkages.exe"
+            placeholder={isWindows ? 'Path to Darkages.exe' : 'Path to Dark Ages assets folder'}
             inputProps={{ style: { fontSize: 12 } }}
           />
           <Button
@@ -199,22 +208,25 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
           </Button>
         </Box>
 
-        {/* Client Version */}
-        <FormControl fullWidth size="small">
-          <InputLabel>Client Version</InputLabel>
-          <Select
-            value={settings.version}
-            label="Client Version"
-            onChange={(e) => onChange({ version: e.target.value })}
-          >
-            <MenuItem value="auto">Auto-detect</MenuItem>
-            {versions.map((v) => (
-              <MenuItem key={v.versionCode} value={v.versionCode}>
-                {v.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {/* Client Version — legacy-client memory-patch target; irrelevant on
+            non-Windows, where the path points at an asset folder with no version. */}
+        {isWindows && (
+          <FormControl fullWidth size="small">
+            <InputLabel>Client Version</InputLabel>
+            <Select
+              value={settings.version}
+              label="Client Version"
+              onChange={(e) => onChange({ version: e.target.value })}
+            >
+              <MenuItem value="auto">Auto-detect</MenuItem>
+              {versions.map((v) => (
+                <MenuItem key={v.versionCode} value={v.versionCode}>
+                  {v.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
 
         <Divider />
 
