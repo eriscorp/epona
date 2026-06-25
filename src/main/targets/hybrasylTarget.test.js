@@ -55,13 +55,50 @@ describe('resolvePath', () => {
     expect(result.cwd).toBe(projDir)
   })
 
-  it('returns invalid for unsupported extensions', async () => {
+  it('classifies a .dll file as kind "dll" with cwd at its directory', async () => {
+    const dllPath = join(dir, 'GameClient.dll')
+    await fs.writeFile(dllPath, 'stub', 'utf-8')
+
+    const result = await resolvePath(dllPath)
+    expect(result.kind).toBe('dll')
+    expect(result.dllPath).toBe(dllPath)
+    expect(result.cwd).toBe(dir)
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    'classifies an extension-less executable as kind "exe" on non-Windows (apphost)',
+    async () => {
+      const appHost = join(dir, 'GameClient')
+      await fs.writeFile(appHost, 'stub', 'utf-8')
+      await fs.chmod(appHost, 0o755)
+
+      const result = await resolvePath(appHost)
+      expect(result.kind).toBe('exe')
+      expect(result.exePath).toBe(appHost)
+      expect(result.cwd).toBe(dir)
+    }
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'returns invalid for a non-executable extension-less file on non-Windows',
+    async () => {
+      const plain = join(dir, 'README')
+      await fs.writeFile(plain, 'stub', 'utf-8')
+      await fs.chmod(plain, 0o644)
+
+      const result = await resolvePath(plain)
+      expect(result.kind).toBe('invalid')
+    }
+  )
+
+  it('returns invalid for unsupported, non-executable extensions', async () => {
     const slnPath = join(dir, 'client.sln')
     await fs.writeFile(slnPath, 'stub', 'utf-8')
+    await fs.chmod(slnPath, 0o644)
 
     const result = await resolvePath(slnPath)
     expect(result.kind).toBe('invalid')
-    expect(result.reason).toMatch(/\.exe or \.csproj/)
+    expect(result.reason).toMatch(/\.dll.*\.csproj/)
   })
 
   it('matches .exe / .csproj case-insensitively', async () => {
@@ -80,6 +117,19 @@ describe('buildSpawnArgs', () => {
       command: 'C:/client/client.exe',
       args: [],
       cwd: 'C:/client'
+    })
+  })
+
+  it('returns `dotnet <dll>` for dll kind', () => {
+    const args = buildSpawnArgs({
+      kind: 'dll',
+      dllPath: '/opt/client/GameClient.dll',
+      cwd: '/opt/client'
+    })
+    expect(args).toEqual({
+      command: 'dotnet',
+      args: ['/opt/client/GameClient.dll'],
+      cwd: '/opt/client'
     })
   })
 
@@ -114,7 +164,11 @@ describe('launch (pre-spawn validation)', () => {
   it('errors when daClientPath is empty', async () => {
     const result = await launch({ mode: 'binary', binaryPath: '' }, null, '')
     expect(result.success).toBe(false)
-    expect(result.error).toMatch(/Dark Ages client path not set/)
+    expect(result.error).toMatch(
+      process.platform === 'win32'
+        ? /Dark Ages client path not set/
+        : /Dark Ages assets path not set/
+    )
   })
 
   it('errors on an unknown mode', async () => {
@@ -135,7 +189,7 @@ describe('launch (pre-spawn validation)', () => {
       join(dir, 'Darkages.exe')
     )
     expect(result.success).toBe(false)
-    expect(result.error).toMatch(/Binary mode requires a \.exe path/)
+    expect(result.error).toMatch(/Binary mode requires an executable or \.dll/)
   })
 
   it('errors when repo mode is given a .exe path', async () => {

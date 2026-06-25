@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { ThemeProvider, CssBaseline, GlobalStyles, alpha } from '@mui/material'
+import { useState, useEffect, forwardRef } from 'react'
+import { ThemeProvider, CssBaseline, GlobalStyles, alpha, Tooltip } from '@mui/material'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
@@ -26,6 +26,30 @@ const kindToIndex = (k) => {
   const i = TAB_ORDER.indexOf(k)
   return i >= 0 ? i : 0
 }
+
+// Which tab to open on startup. The Legacy client is Windows-only (it patches
+// the running Dark Ages.exe via native Win32 APIs), so never land a non-Windows
+// user on it — fall back to the Hybrasyl client tab.
+const startupTabIndex = (targetKind, isWindows) => {
+  const i = kindToIndex(targetKind)
+  if (!isWindows && TAB_ORDER[i] === 'legacy') return kindToIndex('hybrasyl')
+  return i
+}
+
+// The disabled Legacy tab on non-Windows, with a hover tooltip. A disabled
+// element doesn't fire pointer events, so the tooltip anchors on a span wrapper;
+// the props <Tabs> injects into its children (value/selected/onChange/etc.) are
+// forwarded to the real Tab rather than spread onto the span (which would warn
+// about unknown DOM attributes).
+const LegacyTabDisabled = forwardRef(function LegacyTabDisabled(props, ref) {
+  return (
+    <Tooltip title="Legacy client is only supported on Windows">
+      <Box component="span" sx={{ flexGrow: 1, display: 'flex' }}>
+        <Tab {...props} ref={ref} disabled sx={{ flexGrow: 1 }} />
+      </Box>
+    </Tooltip>
+  )
+})
 
 const MAIN_W = 480
 const PANE_W = 360
@@ -74,13 +98,16 @@ const defaultSettings = {
 }
 
 export default function App() {
+  const isWindows = window.sparkAPI.platform === 'win32'
   const [settings, setSettings] = useState(defaultSettings)
   const [versions, setVersions] = useState([])
   const [detectedVersion, setDetectedVersion] = useState(null)
   const [themeName, setThemeName] = useState('hybrasyl')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState(0)
+  const [activeTab, setActiveTab] = useState(() =>
+    startupTabIndex(defaultSettings.targetKind, window.sparkAPI.platform === 'win32')
+  )
   const [logPaneOpen, setLogPaneOpen] = useState(false)
   const [hybrasylLog, setHybrasylLog] = useState([])
   const [instanceLogs, setInstanceLogs] = useState({}) // { [instanceId]: [{stream, text}, ...] }
@@ -90,7 +117,7 @@ export default function App() {
     window.sparkAPI.loadSettings().then((s) => {
       setSettings((prev) => ({ ...prev, ...s }))
       if (s.theme && themes[s.theme]) setThemeName(s.theme)
-      if (s.targetKind) setActiveTab(kindToIndex(s.targetKind))
+      if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind, isWindows))
       if (s.clientPath) {
         window.sparkAPI.detectVersion(s.clientPath).then((result) => {
           setDetectedVersion(result.found ? result.name : null)
@@ -181,7 +208,16 @@ export default function App() {
   }
 
   async function handleLocateClient() {
-    const path = await window.sparkAPI.openExeDialog(settings.clientPath)
+    // Windows: pick the Dark Ages.exe (also the legacy memory-patch target).
+    // macOS/Linux: there's no .exe to run — point Epona at the DA assets folder,
+    // which is all the Hybrasyl client needs (DA_ASSET_PATH).
+    const path = isWindows
+      ? await window.sparkAPI.openExeDialog(settings.clientPath)
+      : await window.sparkAPI.pickDirectory(
+          'Select Dark Ages assets folder',
+          settings.clientPath,
+          'Choose the folder containing your Dark Ages assets (the install directory with its .dat files).'
+        )
     if (path) update({ clientPath: path })
   }
 
@@ -253,6 +289,7 @@ export default function App() {
           <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
           <NavToolbar
             detectedVersion={detectedVersion}
+            clientPath={settings.clientPath}
             onLocateClient={handleLocateClient}
             onToggleSettings={() => setSettingsOpen((o) => !o)}
             onOpenHelp={() => setHelpOpen(true)}
@@ -268,9 +305,13 @@ export default function App() {
             variant="fullWidth"
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >
-            <Tab label="Legacy Client" />
-            <Tab label="Hybrasyl Client" />
-            <Tab label="Hybrasyl Server" />
+            {isWindows ? (
+              <Tab value={0} label="Legacy Client" />
+            ) : (
+              <LegacyTabDisabled value={0} label="Legacy Client" />
+            )}
+            <Tab value={1} label="Hybrasyl Client" />
+            <Tab value={2} label="Hybrasyl Server" />
           </Tabs>
           <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
 

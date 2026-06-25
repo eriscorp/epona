@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import { dirname, relative, join, resolve as resolveAbs } from 'path'
 import { gitToplevel } from '../gitOps.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
+import { resolveDotnetPath } from '../dotnet.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -23,23 +24,47 @@ export async function resolvePath(configuredPath) {
   }
 
   const lower = configuredPath.toLowerCase()
-  if (lower.endsWith('.exe')) {
-    return { kind: 'exe', exePath: configuredPath, cwd: dirname(configuredPath) }
-  }
   if (lower.endsWith('.csproj')) {
     return { kind: 'repo', csprojPath: configuredPath, cwd: dirname(configuredPath) }
   }
-  return { kind: 'invalid', reason: 'path must be a .exe or .csproj file' }
+  if (lower.endsWith('.dll')) {
+    // Framework-dependent build with no apphost — run via `dotnet <dll>`.
+    return { kind: 'dll', dllPath: configuredPath, cwd: dirname(configuredPath) }
+  }
+  if (lower.endsWith('.exe')) {
+    return { kind: 'exe', exePath: configuredPath, cwd: dirname(configuredPath) }
+  }
+  // On macOS/Linux the published client is an apphost with no extension (e.g.
+  // `GameClient`). Accept any file carrying an executable bit as a directly
+  // spawnable binary. Windows doesn't encode executability in mode bits, so
+  // extension-less files fall through to invalid there — which is correct,
+  // since a Windows client binary is always a .exe.
+  if (process.platform !== 'win32' && (stat.mode & 0o111) !== 0) {
+    return { kind: 'exe', exePath: configuredPath, cwd: dirname(configuredPath) }
+  }
+  return {
+    kind: 'invalid',
+    reason:
+      process.platform === 'win32'
+        ? 'path must be a .exe, .dll, or .csproj file'
+        : 'path must be an executable, .dll, or .csproj file'
+  }
 }
 
-// Pure: shape the command/args/cwd for child_process.spawn based on a resolved path.
-export function buildSpawnArgs(resolved) {
+// Pure: shape the command/args/cwd for child_process.spawn based on a resolved
+// path. `dotnetPath` is the dotnet executable to invoke for dll/repo launches
+// (resolved via resolveDotnetPath so GUI launches find it); defaults to the
+// bare 'dotnet' for callers/tests that don't care about resolution.
+export function buildSpawnArgs(resolved, dotnetPath = 'dotnet') {
   if (resolved.kind === 'exe') {
     return { command: resolved.exePath, args: [], cwd: resolved.cwd }
   }
+  if (resolved.kind === 'dll') {
+    return { command: dotnetPath, args: [resolved.dllPath], cwd: resolved.cwd }
+  }
   if (resolved.kind === 'repo') {
     return {
-      command: 'dotnet',
+      command: dotnetPath,
       args: ['run', '--project', resolved.csprojPath, '--configuration', 'Debug'],
       cwd: resolved.cwd
     }
@@ -79,7 +104,9 @@ export async function launch(config, profile, daClientPath) {
     return {
       success: false,
       error:
-        'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
+        process.platform === 'win32'
+          ? 'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
+          : 'Dark Ages assets path not set — use the Locate Assets button on the toolbar to pick a folder containing Dark Ages assets.'
     }
   }
 
@@ -94,8 +121,8 @@ export async function launch(config, profile, daClientPath) {
   // Mode/kind sanity check: the resolved kind must match the requested mode,
   // otherwise the user has a stale binaryPath/clientRepoPath that disagrees
   // with the toggle. Refuse rather than launching the wrong artefact.
-  if (config.mode === 'binary' && resolved.kind !== 'exe') {
-    return { success: false, error: 'Binary mode requires a .exe path' }
+  if (config.mode === 'binary' && resolved.kind !== 'exe' && resolved.kind !== 'dll') {
+    return { success: false, error: 'Binary mode requires an executable or .dll path' }
   }
   if (config.mode === 'repo' && resolved.kind !== 'repo') {
     return { success: false, error: 'Repo mode requires a .csproj path' }
@@ -135,13 +162,27 @@ export async function launch(config, profile, daClientPath) {
     }
   }
 
-  const { command, args, cwd } = buildSpawnArgs(resolved)
+  // Resolve dotnet only for the launch kinds that need it; a direct binary
+  // (exe/apphost) spawn doesn't touch dotnet at all.
+  const dotnetPath =
+    resolved.kind === 'repo' || resolved.kind === 'dll' ? await resolveDotnetPath() : 'dotnet'
+  const { command, args, cwd } = buildSpawnArgs(resolved, dotnetPath)
 
   // DA_ASSET_PATH is universally needed: the client's fallback is
   // `<binary>/..` which is wrong for both prebuilt-exe and `dotnet run`
   // layouts. DA_HOST / DA_HOST_PORT only override when the active profile
   // is non-empty; without them the client falls back to its hardcoded host.
-  const env = { ...process.env, DA_ASSET_PATH: dirname(daClientPath) }
+  //
+  // daClientPath is either a file (Windows: Dark Ages.exe) or a directory (how
+  // non-Windows users point Epona at their DA assets via "Locate Assets"). Use
+  // a directory as-is; for a file, use its containing directory.
+  let assetPath = dirname(daClientPath)
+  try {
+    if ((await fs.stat(daClientPath)).isDirectory()) assetPath = daClientPath
+  } catch {
+    // Path is gone — keep dirname() and let the client's own fallback cope.
+  }
+  const env = { ...process.env, DA_ASSET_PATH: assetPath }
   if (profile?.hostname) {
     env.DA_HOST = profile.hostname
     env.DA_HOST_PORT = String(profile.port)

@@ -26,6 +26,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import { gitInstallHint, redisInstallCommand } from '../installHints'
 
 const PICKER_SX = {
   flex: 1,
@@ -303,7 +304,7 @@ export default function ServerInstancePanel({
           duration: 10000,
           message:
             'Git not detected on PATH. Branch switching disabled. ' +
-            'Install: winget install --id Git.Git -e (then restart Epona).'
+            gitInstallHint(window.sparkAPI.platform)
         }
       }
     }
@@ -818,14 +819,15 @@ export default function ServerInstancePanel({
             title={
               <Box>
                 <Typography variant="caption" sx={{ display: 'block' }}>
-                  WSL Redis can drop forwarded connections under load on Windows. Memurai is a
-                  native Windows Redis-compatible alternative.
+                  {window.sparkAPI.platform === 'win32'
+                    ? 'WSL Redis can drop forwarded connections under load on Windows. Memurai is a native Windows Redis-compatible alternative.'
+                    : 'Redis-compatible server backing the Hybrasyl server data store.'}
                 </Typography>
                 <Typography
                   variant="caption"
                   sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace' }}
                 >
-                  winget install Memurai.MemuraiDeveloper
+                  {redisInstallCommand(window.sparkAPI.platform)}
                 </Typography>
               </Box>
             }

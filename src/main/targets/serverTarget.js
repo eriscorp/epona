@@ -6,6 +6,7 @@ import { isPortInUse } from '../portProbe.js'
 import { readDataStore } from '../serverConfigs.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { writeBuildProps, removeBuildProps } from '../buildProps.js'
+import { resolveDotnetPath } from '../dotnet.js'
 
 // Resolve the on-disk path a user's configFileName selection points at.
 // Useful for UI "file exists?" checks; the server itself doesn't need the
@@ -60,12 +61,12 @@ function buildServerArgs(instance) {
 // Pure: build the { command, args, env } the server should be spawned with
 // for a binary-mode instance. Accepts either a built .dll (wrapped by
 // `dotnet <dll>`) or a self-contained .exe (invoked directly).
-export function buildBinarySpawn(instance) {
+export function buildBinarySpawn(instance, dotnetPath = 'dotnet') {
   const env = buildEnv(instance)
   const args = buildServerArgs(instance)
   const isExe = /\.exe$/i.test(instance.binaryPath)
   if (isExe) return { command: instance.binaryPath, args, env }
-  return { command: 'dotnet', args: [instance.binaryPath, ...args], env }
+  return { command: dotnetPath, args: [instance.binaryPath, ...args], env }
 }
 
 // Pure: build the { command, args, env } for a repo-mode instance. Always
@@ -73,11 +74,11 @@ export function buildBinarySpawn(instance) {
 // `--no-launch-profile` skips Properties/launchSettings.json (we control env
 // via the explicit env block). `--configuration Debug` matches what a
 // developer would do interactively.
-export function buildRepoSpawn(instance, serverWorktreePath) {
+export function buildRepoSpawn(instance, serverWorktreePath, dotnetPath = 'dotnet') {
   const env = buildEnv(instance)
   const csproj = join(serverWorktreePath, 'hybrasyl', 'Hybrasyl.csproj')
   return {
-    command: 'dotnet',
+    command: dotnetPath,
     args: [
       'run',
       '--project',
@@ -223,7 +224,7 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
 //                                       any worktrees and removes Directory.Build.props
 //   { success: false, error }
 async function launchBinary(instance) {
-  const spec = buildBinarySpawn(instance)
+  const spec = buildBinarySpawn(instance, await resolveDotnetPath())
   if (process.platform !== 'win32') {
     // No PowerShell wrapper on non-Windows — spawn the server directly and
     // let the renderer's log panel surface its output via wireInstanceLogs.
@@ -294,7 +295,7 @@ async function launchRepo(instance) {
 
     // 3. Spawn via the same PowerShell wrapper as binary mode (Windows only).
     //    On non-Windows, spawn directly and let wireInstanceLogs surface output.
-    const spec = buildRepoSpawn(instance, serverWorktreePath)
+    const spec = buildRepoSpawn(instance, serverWorktreePath, await resolveDotnetPath())
     if (process.platform !== 'win32') {
       const child = spawn(spec.command, spec.args, {
         cwd: serverWorktreePath,
@@ -369,17 +370,26 @@ export async function launch(instance) {
         redisTarget.host === 'localhost' ||
         redisTarget.host === '127.0.0.1' ||
         redisTarget.host === '::1'
-      const wslHint = isLoopback
-        ? ` WSL tip: try \`wsl --shutdown\` then restart Redis, or install Memurai ` +
-          `(\`winget install Memurai.MemuraiDeveloper\`) for native Windows Redis.`
-        : ''
+      // Platform-specific "how to fix" hint — Memurai/WSL only make sense on
+      // Windows; macOS/Linux get the native Redis install line.
+      let hint
+      if (!isLoopback) {
+        hint = ' Point the instance at a reachable Redis.'
+      } else if (process.platform === 'win32') {
+        hint =
+          ' Start Memurai/Valkey, or for WSL Redis try `wsl --shutdown` then restart it.' +
+          ' Install Memurai with `winget install Memurai.MemuraiDeveloper` for native Windows Redis.'
+      } else if (process.platform === 'darwin') {
+        hint = ' Start Redis locally (e.g. `brew install redis` then `brew services start redis`).'
+      } else {
+        hint = ' Start Redis locally (e.g. `sudo apt install redis-server`).'
+      }
       return {
         success: false,
         error:
           `Redis unreachable at ${redisTarget.host}:${redisTarget.port} ` +
-          `(${redis.error}; from ${redisTarget.source}). ` +
-          `Start Memurai/Valkey or point the instance at a reachable Redis.` +
-          wslHint
+          `(${redis.error}; from ${redisTarget.source}).` +
+          hint
       }
     }
   }

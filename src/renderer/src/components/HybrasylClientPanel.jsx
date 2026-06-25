@@ -18,6 +18,7 @@ import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import TerminalIcon from '@mui/icons-material/Terminal'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import { gitInstallHint } from '../installHints'
 
 const CURRENT_CHECKOUT_VALUE = '__current_checkout__'
 
@@ -52,7 +53,8 @@ function PathPicker({ label, value, onPick, placeholder, chip }) {
 }
 
 function kindChip(kind) {
-  if (kind === 'exe') return { label: 'Prebuilt .exe', color: 'success' }
+  if (kind === 'exe') return { label: 'Prebuilt binary', color: 'success' }
+  if (kind === 'dll') return { label: 'Prebuilt .dll (dotnet)', color: 'success' }
   if (kind === 'repo') return { label: 'Source (dotnet run)', color: 'info' }
   if (kind === 'invalid') return { label: 'Invalid', color: 'error' }
   return null
@@ -152,9 +154,19 @@ export default function HybrasylClientPanel({
 
   async function pickBinary() {
     try {
+      // On Windows the client binary is always a .exe; on macOS/Linux it's an
+      // extension-less apphost (e.g. `GameClient`) or a framework-dependent
+      // .dll, so don't gate the picker to .exe there.
+      const filters =
+        window.sparkAPI.platform === 'win32'
+          ? [{ name: 'Hybrasyl client (.exe)', extensions: ['exe'] }]
+          : [
+              { name: 'Hybrasyl client', extensions: ['*'] },
+              { name: '.NET assembly (.dll)', extensions: ['dll'] }
+            ]
       const path = await window.sparkAPI.pickFile(
         'Select Hybrasyl client binary',
-        [{ name: 'Hybrasyl client (.exe)', extensions: ['exe'] }],
+        filters,
         hybrasyl.binaryPath
       )
       if (path) onChange({ targets: { hybrasyl: { ...hybrasyl, binaryPath: path } } })
@@ -177,7 +189,7 @@ export default function HybrasylClientPanel({
           duration: 10000,
           message:
             'Git not detected on PATH. Branch switching disabled. ' +
-            'Install: winget install --id Git.Git -e (then restart Epona).'
+            gitInstallHint(window.sparkAPI.platform)
         }
       }
     }
@@ -293,10 +305,14 @@ export default function HybrasylClientPanel({
 
       {!isRepoMode && (
         <PathPicker
-          label="Binary Path (.exe)"
+          label={window.sparkAPI.platform === 'win32' ? 'Binary Path (.exe)' : 'Binary Path'}
           value={hybrasyl.binaryPath}
           onPick={pickBinary}
-          placeholder="(none — pick a client .exe)"
+          placeholder={
+            window.sparkAPI.platform === 'win32'
+              ? '(none — pick a client .exe)'
+              : '(none — pick a client binary or .dll)'
+          }
           chip={resolvedChip}
         />
       )}
