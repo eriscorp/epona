@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
-import { promises as fs } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { killProcessTree } from './processKill.js'
@@ -19,6 +19,27 @@ import { listBranches, isGitRepo, diagnoseGitRepo } from './gitOps.js'
 import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
 
 let settingsManager
+
+// One-time migration: older Epona stored settings under the Roaming profile
+// (app.getPath('appData')). We now use Local. On first launch after the switch,
+// copy an existing Roaming settings.json (and its backup) into the Local dir so
+// returning users keep their config. No-op on macOS/Linux (old === new dir).
+function migrateSettingsFromRoaming(settingsPath) {
+  try {
+    const oldDir = join(app.getPath('appData'), 'Erisco', 'Epona')
+    if (oldDir === settingsPath) return // same location (non-Windows) — no-op
+    const newPrimary = join(settingsPath, 'settings.json')
+    if (existsSync(newPrimary)) return // already migrated / fresh local settings
+    const oldPrimary = join(oldDir, 'settings.json')
+    if (!existsSync(oldPrimary)) return // nothing to migrate
+    mkdirSync(settingsPath, { recursive: true })
+    copyFileSync(oldPrimary, newPrimary)
+    const oldBackup = join(oldDir, 'settings.bak.json')
+    if (existsSync(oldBackup)) copyFileSync(oldBackup, join(settingsPath, 'settings.bak.json'))
+  } catch {
+    /* best effort — settings manager falls back to defaults */
+  }
+}
 
 // Tracked server instances. Lifted to module scope so the before-quit handler
 // can iterate and kill them before sweeping worktrees — otherwise running
@@ -72,10 +93,18 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Settings in %APPDATA%/Erisco/Epona (roaming), cache in %LOCALAPPDATA%/Erisco/Epona (local)
-  const settingsPath = join(app.getPath('appData'), 'Erisco', 'Epona')
-  const cachePath = join(app.getPath('cache'), 'Erisco', 'Epona')
+  // %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
+  // no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
+  const localAppData =
+    process.platform === 'win32'
+      ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
+      : app.getPath('appData')
+
+  const settingsPath = join(localAppData, 'Erisco', 'Epona')
+  const cachePath = join(localAppData, 'Erisco', 'Epona')
   app.setPath('userData', cachePath)
+
+  migrateSettingsFromRoaming(settingsPath)
   settingsManager = createSettingsManager(settingsPath)
 
   if (process.platform === 'win32') {
