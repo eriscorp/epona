@@ -1,6 +1,6 @@
 {
   "name": "epona",
-  "version": "2.2.0",
+  "version": "2.3.1",
   "description": "Dark Ages game launcher",
   "main": "./out/main/index.js",
   "author": "Hybrasyl Maintainers <hybrasyl@eris.co>",
