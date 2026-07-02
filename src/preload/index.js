@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld('electron', electronAPI)
 
 contextBridge.exposeInMainWorld('sparkAPI', {
   platform: process.platform,
+  // Signals the main process that the renderer has hydrated its settings, so
+  // the splash can be dismissed and the (already-populated) main window shown.
+  appReady: () => ipcRenderer.send('app:ready'),
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   listVersions: () => ipcRenderer.invoke('versions:list'),
