@@ -10,7 +10,8 @@
   ],
   "scripts": {
     "format": "prettier --write .",
-    "lint": "eslint . --ext .js,.jsx,.cjs,.mjs --fix",
+    "lint": "eslint . --fix",
+    "lint:check": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "electron-vite preview -- --trace-warnings",
