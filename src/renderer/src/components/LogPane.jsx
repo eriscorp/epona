@@ -7,6 +7,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import SaveAltIcon from '@mui/icons-material/SaveAlt'
 import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom'
+import { PANEL_BORDER } from '../uiConstants.js'
 
 export default function LogPane({ title = 'Console', lines, onClear, onSave, onClose }) {
   const scrollRef = useRef(null)
@@ -39,7 +40,7 @@ export default function LogPane({ title = 'Console', lines, onClear, onSave, onC
         minWidth: 0,
         height: '100%',
         position: 'relative',
-        borderLeft: '1px solid rgba(255,255,255,0.15)',
+        borderLeft: PANEL_BORDER,
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'background.paper'
@@ -52,7 +53,7 @@ export default function LogPane({ title = 'Console', lines, onClear, onSave, onC
           justifyContent: 'space-between',
           px: 1,
           py: 0.5,
-          borderBottom: '1px solid rgba(255,255,255,0.15)'
+          borderBottom: PANEL_BORDER
         }}
       >
         <Typography variant="caption" color="text.button" sx={{ pl: 0.5 }}>

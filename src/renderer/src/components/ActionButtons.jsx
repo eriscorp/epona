@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Snackbar from '@mui/material/Snackbar'
-import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import SnackbarHost from './SnackbarHost.jsx'
 import { hybrasylClientPathConfigured } from './actionButtonGate.js'
 
 export default function ActionButtons({ targetKind = 'legacy', settings, getActiveProfile }) {
@@ -69,16 +68,7 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
         </Button>
       </Box>
 
-      <Snackbar
-        open={!!snack}
-        autoHideDuration={4000}
-        onClose={() => setSnack(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snack?.severity} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
-          {snack?.message}
-        </Alert>
-      </Snackbar>
+      <SnackbarHost snack={snack} onClose={() => setSnack(null)} />
     </>
   )
 }

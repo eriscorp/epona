@@ -1,4 +1,7 @@
 import { createTheme, responsiveFontSizes } from '@mui/material/styles'
+import { STATUS_COLORS, FANTASY_SHAPE, fantasyTypography } from './shared'
+
+const danaanHeadingColor = '#2a1e08'
 
 const danaanTheme = responsiveFontSizes(
   createTheme({
@@ -28,59 +31,20 @@ const danaanTheme = responsiveFontSizes(
         dark: '#1a1008'
       },
       divider: 'rgba(184,146,42,0.3)',
-      error: { main: '#ff0000' },
-      warning: { main: '#FFFF00' },
-      info: { main: '#6de7f7' },
-      success: { main: '#38ff4f' }
+      ...STATUS_COLORS
     },
 
     typography: {
-      fontFamily: '"Crimson Pro", Georgia, serif',
-      h1: {
-        fontFamily: '"Cinzel Decorative", serif',
-        letterSpacing: '0.22em',
-        fontWeight: 400,
-        color: '#2a1e08'
-      },
-      h2: {
-        fontFamily: '"Cinzel", serif',
-        letterSpacing: '0.08em',
-        fontWeight: 400,
-        color: '#2a1e08'
-      },
-      h3: {
-        fontFamily: '"Cinzel", serif',
-        letterSpacing: '0.06em',
-        fontWeight: 400,
-        color: '#2a1e08'
-      },
-      h4: {
-        fontFamily: '"Cinzel", serif',
-        letterSpacing: '0.06em',
-        fontWeight: 400,
-        color: '#2a1e08'
-      },
-      h5: {
-        fontFamily: '"Cinzel", serif',
-        letterSpacing: '0.06em',
-        fontWeight: 400,
-        color: '#2a1e08'
-      },
-      h6: {
-        fontFamily: '"Cinzel", serif',
-        letterSpacing: '0.06em',
-        fontWeight: 400,
-        color: '#2a1e08'
-      },
-      button: {
-        fontFamily: '"Cinzel", serif',
-        letterSpacing: '0.12em',
-        textTransform: 'uppercase'
-      },
-      caption: { fontFamily: '"Cinzel", serif', letterSpacing: '0.18em', fontSize: '0.7rem' }
+      ...fantasyTypography,
+      h1: { ...fantasyTypography.h1, color: danaanHeadingColor },
+      h2: { ...fantasyTypography.h2, color: danaanHeadingColor },
+      h3: { ...fantasyTypography.h3, color: danaanHeadingColor },
+      h4: { ...fantasyTypography.h4, color: danaanHeadingColor },
+      h5: { ...fantasyTypography.h5, color: danaanHeadingColor },
+      h6: { ...fantasyTypography.h6, color: danaanHeadingColor }
     },
 
-    shape: { borderRadius: 2 },
+    shape: FANTASY_SHAPE,
 
     components: {
       MuiCssBaseline: {

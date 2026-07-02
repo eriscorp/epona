@@ -11,8 +11,6 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
-import Snackbar from '@mui/material/Snackbar'
-import Alert from '@mui/material/Alert'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import ToggleButton from '@mui/material/ToggleButton'
@@ -25,19 +23,14 @@ import TerminalIcon from '@mui/icons-material/Terminal'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
-import RefreshIcon from '@mui/icons-material/Refresh'
-import { gitInstallHint, redisInstallCommand } from '../installHints'
+import PathPicker from './PathPicker'
+import BranchSelector from './BranchSelector'
+import SnackbarHost from './SnackbarHost'
+import { useGitBranches, withSavedBranchPinned } from '../useGitBranches'
+import { diagnoseAndExplain } from '../gitDiagnose'
+import { runtimeChip } from '../runtimeChip'
+import { redisInstallCommand } from '../installHints'
 
-const PICKER_SX = {
-  flex: 1,
-  fontFamily: 'monospace',
-  fontSize: 11,
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis'
-}
-
-const CURRENT_CHECKOUT_VALUE = '__current_checkout__'
 const TAB_SERVER = 0
 const TAB_XML = 1
 const TAB_CONFIG = 2
@@ -83,27 +76,6 @@ function deriveLogDir(dataDir) {
   return `${dataDir.replace(/[\\/]+$/, '')}${sep}logs`
 }
 
-function PathPicker({ label, value, onPick, disabled, extraAction }) {
-  return (
-    <Box>
-      <Typography variant="caption" color="text.button" sx={{ display: 'block', mb: 0.5 }}>
-        {label}
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-        <Typography variant="body2" sx={{ ...PICKER_SX, opacity: value ? 1 : 0.5 }}>
-          {value || '(not set)'}
-        </Typography>
-        {onPick && (
-          <Button size="small" variant="outlined" disabled={disabled} onClick={onPick}>
-            Browse…
-          </Button>
-        )}
-        {extraAction}
-      </Box>
-    </Box>
-  )
-}
-
 export default function ServerInstancePanel({
   instances,
   selectedId,
@@ -126,7 +98,7 @@ export default function ServerInstancePanel({
   const [configDataStore, setConfigDataStore] = useState(null)
   // Branch lists keyed by repo path so switching instances doesn't refetch
   // every time. { [repoPath]: { branches, error } | undefined }
-  const [branchCache, setBranchCache] = useState({})
+  const { branchCache, refreshBranches } = useGitBranches()
   // .NET state for the runtime/SDK chip shown in repo mode. The server's
   // repo-mode launches go through `dotnet run` which needs the SDK; binary
   // mode just needs the runtime (.dll requires it; self-contained .exe
@@ -185,24 +157,6 @@ export default function ServerInstancePanel({
     }
     window.sparkAPI.readDataStore(selectedDataDir, selected.configFileName).then(setConfigDataStore)
   }, [selectedDataDir, selected?.configFileName])
-
-  // Refetch branches for a repo path. Marks the entry loading so the UI can
-  // show a spinner and avoid mislabeling missing branches as "(loading…)".
-  function refreshBranches(p) {
-    if (!p) return
-    setBranchCache((prev) => ({
-      ...prev,
-      [p]: { branches: prev[p]?.branches ?? [], error: null, loading: true }
-    }))
-    window.sparkAPI.listGitBranches(p).then((result) => {
-      setBranchCache((prev) => ({
-        ...prev,
-        [p]: result.ok
-          ? { branches: result.branches, error: null, loading: false }
-          : { branches: [], error: result.error, loading: false }
-      }))
-    })
-  }
 
   // Load branches on demand for whichever repo paths the selected instance
   // uses. Initial fetch only — users hit the refresh button next to each
@@ -288,60 +242,15 @@ export default function ServerInstancePanel({
     )
     if (p) updateSelected({ binaryPath: p })
   }
-  // Map a diagnoseGitRepo result to a snackbar payload + the patch fields the
-  // picker should write. The 'no_git' / 'not_repo' branches accept the path and
-  // flip a per-repo noGit flag so the launcher can skip the worktree dance and
-  // run dotnet directly. The 'no_path' / 'git_error' branches refuse the path.
-  async function diagnoseAndExplain(p) {
-    const diag = await window.sparkAPI.diagnoseGitRepo(p)
-    if (diag.ok) return { accept: true, noGit: false, snack: null }
-    if (diag.reason === 'no_git') {
-      return {
-        accept: true,
-        noGit: true,
-        snack: {
-          severity: 'warning',
-          duration: 10000,
-          message:
-            'Git not detected on PATH. Branch switching disabled. ' +
-            gitInstallHint(window.sparkAPI.platform)
-        }
-      }
-    }
-    if (diag.reason === 'not_repo') {
-      return {
-        accept: true,
-        noGit: true,
-        snack: {
-          severity: 'warning',
-          duration: 8000,
-          message:
-            'No .git/ found in this folder or its parents. Branch switching disabled — ' +
-            'running directly from the picked folder.'
-        }
-      }
-    }
-    if (diag.reason === 'no_path') {
-      return {
-        accept: false,
-        noGit: false,
-        snack: { severity: 'error', message: "Folder doesn't exist or isn't accessible." }
-      }
-    }
-    return {
-      accept: false,
-      noGit: false,
-      snack: { severity: 'error', message: `Git error: ${diag.message ?? 'unknown'}` }
-    }
-  }
-
   async function pickServerRepo() {
     const p = await window.sparkAPI.pickDirectory(
       'Select Hybrasyl server repo',
       selected?.serverRepoPath
     )
     if (!p) return
-    const { accept, noGit, snack } = await diagnoseAndExplain(p)
+    const { accept, noGit, snack } = await diagnoseAndExplain(p, {
+      notRepoNoun: 'running directly from the picked folder.'
+    })
     if (snack) setSnack(snack)
     if (!accept) return
     // Drop a pinned branch only when noGit — branch switching is impossible
@@ -354,7 +263,9 @@ export default function ServerInstancePanel({
   async function pickXmlRepo() {
     const p = await window.sparkAPI.pickDirectory('Select Hybrasyl.Xml repo', selected?.xmlRepoPath)
     if (!p) return
-    const { accept, noGit, snack } = await diagnoseAndExplain(p)
+    const { accept, noGit, snack } = await diagnoseAndExplain(p, {
+      notRepoNoun: 'running directly from the picked folder.'
+    })
     if (snack) setSnack(snack)
     if (!accept) return
     const patch = { xmlRepoPath: p, xmlNoGit: noGit }
@@ -387,20 +298,6 @@ export default function ServerInstancePanel({
     }
   }
 
-  // Pin a saved branch into the option list even if it's not in the fetched
-  // results — covers (1) the loading window before the IPC returns, (2) the
-  // branch having been deleted upstream, and (3) a git error suppressing the
-  // listing entirely. Without this, MUI warns "out-of-range value" and the
-  // user sees an empty dropdown. `loading` distinguishes the in-flight case
-  // (label "(loading…)") from completed-but-not-found ("(missing)").
-  function withSavedBranchPinned(branches, savedName, loading) {
-    if (!savedName || branches.some((b) => b.name === savedName)) return branches
-    return [
-      { name: savedName, current: false, remote: false, missing: true, loading: !!loading },
-      ...branches
-    ]
-  }
-
   const serverCacheEntry = selected?.serverRepoPath ? branchCache[selected.serverRepoPath] : null
   const xmlCacheEntry = selected?.xmlRepoPath ? branchCache[selected.xmlRepoPath] : null
   const serverBranchError = serverCacheEntry?.error ?? null
@@ -423,20 +320,7 @@ export default function ServerInstancePanel({
   // contained .exe needs neither. We always surface the chip in repo mode
   // so the user sees missing-SDK before launch instead of inside a build
   // error stream.
-  const runtimeChip = (() => {
-    if (runtime.dotnetFound === null) return { label: 'Checking .NET…', color: 'default' }
-    if (!runtime.dotnetFound) return { label: '.NET not installed', color: 'error' }
-    if (runtime.netCoreApp10 && runtime.sdk10) {
-      return { label: '.NET 10 runtime + SDK', color: 'success' }
-    }
-    if (runtime.netCoreApp10 && !runtime.sdk10) {
-      return { label: '.NET 10 SDK missing', color: 'warning' }
-    }
-    if (!runtime.netCoreApp10 && runtime.sdk10) {
-      return { label: '.NET 10 runtime missing', color: 'warning' }
-    }
-    return { label: '.NET 10 runtime + SDK missing', color: 'warning' }
-  })()
+  const chip = runtimeChip(runtime, { needsSdk: true })
 
   // ──────────── Tab content sections ────────────
 
@@ -464,6 +348,7 @@ export default function ServerInstancePanel({
           value={selected.binaryPath}
           onPick={pickBinary}
           disabled={isRunning}
+          placeholder="(not set)"
         />
       )}
 
@@ -473,89 +358,33 @@ export default function ServerInstancePanel({
             <Typography variant="caption" color="text.button">
               Runtime
             </Typography>
-            <Chip
-              size="small"
-              label={runtimeChip.label}
-              color={runtimeChip.color}
-              variant="outlined"
-            />
+            <Chip size="small" label={chip.label} color={chip.color} variant="outlined" />
           </Box>
           <PathPicker
             label="Server Repo"
             value={selected.serverRepoPath}
             onPick={pickServerRepo}
             disabled={isRunning}
+            placeholder="(not set)"
           />
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <FormControl
-              size="small"
-              disabled={isRunning || !selected.serverRepoPath || selected.serverNoGit}
-              sx={{ flex: 1 }}
-            >
-              <InputLabel shrink>Server Branch</InputLabel>
-              <Select
-                label="Server Branch"
-                notched
-                value={selected.serverBranch ?? CURRENT_CHECKOUT_VALUE}
-                onChange={(e) =>
-                  updateSelected({
-                    serverBranch: e.target.value === CURRENT_CHECKOUT_VALUE ? null : e.target.value
-                  })
-                }
-                onOpen={() =>
-                  !selected.serverNoGit &&
-                  selected.serverRepoPath &&
-                  refreshBranches(selected.serverRepoPath)
-                }
-              >
-                <MenuItem value={CURRENT_CHECKOUT_VALUE}>(current checkout)</MenuItem>
-                {serverBranches.map((b) => (
-                  <MenuItem key={b.name} value={b.name}>
-                    {b.name}
-                    {b.current ? ' (current)' : ''}
-                    {b.remote ? ' (remote)' : ''}
-                    {b.missing ? (b.loading ? ' (loading…)' : ' (missing)') : ''}
-                  </MenuItem>
-                ))}
-              </Select>
-              {selected.serverNoGit ? (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 0.5, fontStyle: 'italic' }}
-                >
-                  Git not available — server runs directly from the picked folder.
-                </Typography>
-              ) : (
-                serverBranchError && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    Couldn&apos;t list branches: {serverBranchError}
-                  </Typography>
-                )
-              )}
-            </FormControl>
-            <Tooltip title={selected.serverNoGit ? 'Git not available' : 'Refresh branch list'}>
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={() => refreshBranches(selected.serverRepoPath)}
-                  disabled={
-                    isRunning ||
-                    !selected.serverRepoPath ||
-                    serverBranchLoading ||
-                    selected.serverNoGit
-                  }
-                  sx={{ mt: 0.5 }}
-                >
-                  {serverBranchLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <RefreshIcon fontSize="small" />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
-          </Box>
+          <BranchSelector
+            label="Server Branch"
+            value={selected.serverBranch}
+            branches={serverBranches}
+            disabled={isRunning || !selected.serverRepoPath || selected.serverNoGit}
+            loading={serverBranchLoading}
+            noGit={selected.serverNoGit}
+            error={serverBranchError}
+            onChange={(v) => updateSelected({ serverBranch: v })}
+            onOpen={() =>
+              !selected.serverNoGit &&
+              selected.serverRepoPath &&
+              refreshBranches(selected.serverRepoPath)
+            }
+            onRefresh={() => refreshBranches(selected.serverRepoPath)}
+            allowCurrentCheckout
+            noGitText="Git not available — server runs directly from the picked folder."
+          />
         </>
       )}
     </Box>
@@ -593,75 +422,25 @@ export default function ServerInstancePanel({
                 value={selected.xmlRepoPath}
                 onPick={pickXmlRepo}
                 disabled={isRunning}
+                placeholder="(not set)"
               />
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <FormControl
-                  size="small"
-                  disabled={isRunning || !selected.xmlRepoPath || selected.xmlNoGit}
-                  sx={{ flex: 1 }}
-                >
-                  <InputLabel shrink>XML Branch</InputLabel>
-                  <Select
-                    label="XML Branch"
-                    notched
-                    value={selected.xmlBranch ?? ''}
-                    onChange={(e) => updateSelected({ xmlBranch: e.target.value })}
-                    onOpen={() =>
-                      !selected.xmlNoGit &&
-                      selected.xmlRepoPath &&
-                      refreshBranches(selected.xmlRepoPath)
-                    }
-                    displayEmpty
-                  >
-                    {selected.xmlBranch === '' && (
-                      <MenuItem value="" disabled>
-                        (select a branch…)
-                      </MenuItem>
-                    )}
-                    {xmlBranches.map((b) => (
-                      <MenuItem key={b.name} value={b.name}>
-                        {b.name}
-                        {b.current ? ' (current)' : ''}
-                        {b.remote ? ' (remote)' : ''}
-                        {b.missing ? (b.loading ? ' (loading…)' : ' (missing)') : ''}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {selected.xmlNoGit ? (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ mt: 0.5, fontStyle: 'italic' }}
-                    >
-                      Git not available — XML runs directly from the picked folder.
-                    </Typography>
-                  ) : (
-                    xmlBranchError && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                        Couldn&apos;t list branches: {xmlBranchError}
-                      </Typography>
-                    )
-                  )}
-                </FormControl>
-                <Tooltip title={selected.xmlNoGit ? 'Git not available' : 'Refresh branch list'}>
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => refreshBranches(selected.xmlRepoPath)}
-                      disabled={
-                        isRunning || !selected.xmlRepoPath || xmlBranchLoading || selected.xmlNoGit
-                      }
-                      sx={{ mt: 0.5 }}
-                    >
-                      {xmlBranchLoading ? (
-                        <CircularProgress size={16} />
-                      ) : (
-                        <RefreshIcon fontSize="small" />
-                      )}
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </Box>
+              <BranchSelector
+                label="XML Branch"
+                value={selected.xmlBranch}
+                branches={xmlBranches}
+                disabled={isRunning || !selected.xmlRepoPath || selected.xmlNoGit}
+                loading={xmlBranchLoading}
+                noGit={selected.xmlNoGit}
+                error={xmlBranchError}
+                onChange={(v) => updateSelected({ xmlBranch: v })}
+                onOpen={() =>
+                  !selected.xmlNoGit &&
+                  selected.xmlRepoPath &&
+                  refreshBranches(selected.xmlRepoPath)
+                }
+                onRefresh={() => refreshBranches(selected.xmlRepoPath)}
+                noGitText="Git not available — XML runs directly from the picked folder."
+              />
             </>
           )}
         </>
@@ -735,6 +514,7 @@ export default function ServerInstancePanel({
         value={selected.logDir}
         onPick={pickLogDir}
         disabled={isRunning}
+        placeholder="(not set)"
         extraAction={
           <Tooltip title="Open log folder in Explorer">
             <span>
@@ -1009,16 +789,7 @@ export default function ServerInstancePanel({
         </>
       )}
 
-      <Snackbar
-        open={!!snack}
-        autoHideDuration={snack?.duration ?? 4000}
-        onClose={() => setSnack(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snack?.severity} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
-          {snack?.message}
-        </Alert>
-      </Snackbar>
+      <SnackbarHost snack={snack} onClose={() => setSnack(null)} />
     </>
   )
 }

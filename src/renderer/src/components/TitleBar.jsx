@@ -1,23 +1,8 @@
 import { Toolbar, IconButton, Tooltip, Box, Typography } from '@mui/material'
 import { GiContract, GiDeathSkull } from 'react-icons/gi'
+import { toolbarBtnSx } from './toolbarStyles'
 
-const iconSx = {
-  '& svg': {
-    fontSize: '1.4em',
-    stroke: 'rgba(0,0,0,0.25)',
-    strokeWidth: 44
-  }
-}
-
-const winBtnSx = {
-  WebkitAppRegion: 'no-drag',
-  color: 'text.button',
-  ...iconSx,
-  '&:hover': {
-    backgroundColor: 'info.main',
-    color: 'text.dark'
-  }
-}
+const winBtnSx = toolbarBtnSx
 
 export default function TitleBar() {
   // macOS draws the native traffic-light controls over the top-left of this bar

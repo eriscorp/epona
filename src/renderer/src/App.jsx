@@ -20,6 +20,8 @@ import ActionButtons from './components/ActionButtons'
 import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
+import { formatLogLines } from '../../shared/logFormat.js'
+import { PANEL_BORDER_COLOR } from './uiConstants.js'
 
 const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
 const kindToIndex = (k) => {
@@ -106,12 +108,19 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(() =>
-    startupTabIndex(defaultSettings.targetKind, window.sparkAPI.platform === 'win32')
+    startupTabIndex(defaultSettings.targetKind, isWindows)
   )
   const [logPaneOpen, setLogPaneOpen] = useState(false)
   const [hybrasylLog, setHybrasylLog] = useState([])
   const [instanceLogs, setInstanceLogs] = useState({}) // { [instanceId]: [{stream, text}, ...] }
   const [runningInstances, setRunningInstances] = useState(new Set())
+
+  const removeRunning = (id) =>
+    setRunningInstances((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
 
   useEffect(() => {
     window.sparkAPI.loadSettings().then((s) => {
@@ -123,6 +132,10 @@ export default function App() {
           setDetectedVersion(result.found ? result.name : null)
         })
       }
+      // Settings are hydrated and applied — tell the main process to dismiss the
+      // splash and reveal the main window (now painting a populated first frame).
+      // detectVersion above stays fire-and-forget and must not gate the reveal.
+      window.sparkAPI.appReady()
     })
     window.sparkAPI.listVersions().then(setVersions)
   }, [])
@@ -161,11 +174,7 @@ export default function App() {
             })
           }
         })
-        setRunningInstances((prev) => {
-          const next = new Set(prev)
-          next.delete(instanceId)
-          return next
-        })
+        removeRunning(instanceId)
       }
     )
     return () => {
@@ -227,13 +236,7 @@ export default function App() {
   // is meaningful when opened away from this UI.
   async function saveLogToFile(lines, slug) {
     if (!lines || lines.length === 0) return
-    const formatted = lines
-      .map(({ stream, text }) => {
-        if (stream === 'stderr') return `[stderr] ${text}`
-        if (stream === 'exit') return `[exit] ${text}`
-        return text
-      })
-      .join('\n')
+    const formatted = formatLogLines(lines)
     const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
     const result = await window.sparkAPI.saveLog(formatted, `${slug}-${ts}.log`)
     if (result && !result.ok && !result.canceled) {
@@ -286,7 +289,7 @@ export default function App() {
           }}
         >
           <TitleBar />
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
           <NavToolbar
             detectedVersion={detectedVersion}
             clientPath={settings.clientPath}
@@ -294,7 +297,7 @@ export default function App() {
             onToggleSettings={() => setSettingsOpen((o) => !o)}
             onOpenHelp={() => setHelpOpen(true)}
           />
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
           <Tabs
             value={activeTab}
@@ -313,11 +316,11 @@ export default function App() {
             <Tab value={1} label="Hybrasyl Client" />
             <Tab value={2} label="Hybrasyl Server" />
           </Tabs>
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
           {activeTab === 0 && (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-              {window.sparkAPI.platform !== 'win32' && (
+              {!isWindows && (
                 <Alert severity="warning" variant="outlined">
                   Legacy Client requires Windows — it patches the running .exe via native Win32
                   APIs. On macOS or Linux you&apos;ll need a compatibility layer (Wine, CrossOver,
@@ -396,11 +399,7 @@ export default function App() {
                   // UI's running flag anyway — the user is telling us the
                   // instance is no longer running, and the console window
                   // closure is the real stop signal.
-                  setRunningInstances((prev) => {
-                    const next = new Set(prev)
-                    next.delete(instanceId)
-                    return next
-                  })
+                  removeRunning(instanceId)
                   return result
                 }}
                 onReset={async (instance) => {
@@ -409,11 +408,7 @@ export default function App() {
                   // — leave the flag set. On failure the previous process was
                   // killed but relaunch failed, so treat as stopped.
                   if (!result.success) {
-                    setRunningInstances((prev) => {
-                      const next = new Set(prev)
-                      next.delete(instance.id)
-                      return next
-                    })
+                    removeRunning(instance.id)
                   }
                   return result
                 }}
