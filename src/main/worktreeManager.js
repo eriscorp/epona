@@ -1,6 +1,6 @@
-import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { join, resolve as resolvePath } from 'path'
+import { runGit } from './gitExec.js'
 
 // Refcounted git-worktree lifecycle. Two server instances on the same branch
 // share one worktree on disk; the worktree is removed when the last instance
@@ -25,32 +25,9 @@ function withMutex(repoPath, fn) {
   return next
 }
 
-function runGit(cwd, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', cwd, ...args], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    })
-    let stdout = ''
-    let stderr = ''
-    child.stdout.on('data', (c) => {
-      stdout += c.toString()
-    })
-    child.stderr.on('data', (c) => {
-      stderr += c.toString()
-    })
-    child.once('error', reject)
-    child.once('exit', (code) => {
-      if (code === 0) resolve({ stdout, stderr })
-      else
-        reject(
-          new Error(
-            `git ${args.join(' ')} failed (exit ${code}): ${stderr.trim() || '(no stderr)'}`
-          )
-        )
-    })
-  })
-}
+// runGit is shared from gitExec.js (same spawn scaffold gitOps.js uses). Its
+// stdout is trailing-trimmed, which is harmless here — worktree porcelain
+// parsing trims per line — and it rejects on non-zero exit exactly as before.
 
 // Branch name → directory-name-safe form. Stable: same branch always maps to
 // the same dir. `/` → `__` so feature/foo lands at .worktrees/feature__foo.
@@ -102,26 +79,28 @@ export function ensureWorktree(repoPath, branch) {
   const repo = resolvePath(repoPath)
   return withMutex(repo, async () => {
     const branchMap = refcounts.get(repo) ?? new Map()
+    // Record (or overwrite) this branch's worktree entry and persist the map.
+    const track = (path, refcount) => {
+      branchMap.set(branch, { path, refcount })
+      refcounts.set(repo, branchMap)
+      return path
+    }
     const existing = branchMap.get(branch)
     if (existing) {
-      existing.refcount += 1
-      branchMap.set(branch, existing)
-      refcounts.set(repo, branchMap)
-      return existing.path
+      return track(existing.path, existing.refcount + 1)
     }
 
     const target = worktreePath(repo, branch)
+    // Is there already a worktree on disk for this (branch or target path)?
+    const findAdopted = (list) =>
+      list.find((e) => e.branch === branch || resolvePath(e.path) === target)
 
     // Adoption check — is there already a worktree on disk for this branch?
     // Two cases land here: (a) Epona was restarted and our in-memory state is
     // empty; (b) a developer made the worktree manually outside Epona.
     let onDisk = await listWorktreesOnDisk(repo)
-    let adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
-    if (adopted) {
-      branchMap.set(branch, { path: adopted.path, refcount: 1 })
-      refcounts.set(repo, branchMap)
-      return adopted.path
-    }
+    let adopted = findAdopted(onDisk)
+    if (adopted) return track(adopted.path, 1)
 
     // Stale-dir recovery — the target path may exist on disk without a
     // matching git registration (failed prior `worktree remove`, manual
@@ -134,12 +113,8 @@ export function ensureWorktree(repoPath, branch) {
       //    a broken admin entry that was hiding an otherwise valid worktree.
       await runGit(repo, ['worktree', 'prune']).catch(() => {})
       onDisk = await listWorktreesOnDisk(repo)
-      adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
-      if (adopted) {
-        branchMap.set(branch, { path: adopted.path, refcount: 1 })
-        refcounts.set(repo, branchMap)
-        return adopted.path
-      }
+      adopted = findAdopted(onDisk)
+      if (adopted) return track(adopted.path, 1)
 
       // 2. If the dir contains a `.git` pointer file, it looks like a real
       //    worktree that lost its admin entry — try `git worktree repair` to
@@ -150,12 +125,8 @@ export function ensureWorktree(repoPath, branch) {
           .catch(() => false)
         if (repaired) {
           onDisk = await listWorktreesOnDisk(repo)
-          adopted = onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)
-          if (adopted) {
-            branchMap.set(branch, { path: adopted.path, refcount: 1 })
-            refcounts.set(repo, branchMap)
-            return adopted.path
-          }
+          adopted = findAdopted(onDisk)
+          if (adopted) return track(adopted.path, 1)
         }
       }
 
@@ -177,9 +148,7 @@ export function ensureWorktree(repoPath, branch) {
     // leaf dir but expects the parent to be there.
     await fs.mkdir(join(repo, '.worktrees'), { recursive: true })
     await runGit(repo, ['worktree', 'add', target, branch])
-    branchMap.set(branch, { path: target, refcount: 1 })
-    refcounts.set(repo, branchMap)
-    return target
+    return track(target, 1)
   })
 }
 
@@ -219,21 +188,6 @@ export function releaseWorktree(repoPath, branch) {
       // worktree GC UI.
       return { removed: false, retained: true, error: err.message }
     }
-  })
-}
-
-// Lists worktrees on disk under <repoPath>/.worktrees/ that no in-memory
-// instance is referencing. Used by the (future) Settings cleanup UI; not
-// auto-pruned because dirty worktrees may hold valuable in-progress work.
-export async function listOrphanWorktrees(repoPath) {
-  const repo = resolvePath(repoPath)
-  const onDisk = await listWorktreesOnDisk(repo)
-  const tracked = refcounts.get(repo)
-  const trackedPaths = new Set([...(tracked?.values() ?? [])].map((e) => resolvePath(e.path)))
-  const worktreesDir = resolvePath(repo, '.worktrees')
-  return onDisk.filter((e) => {
-    const p = resolvePath(e.path)
-    return p.startsWith(worktreesDir) && !trackedPaths.has(p)
   })
 }
 

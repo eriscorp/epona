@@ -7,7 +7,6 @@ import {
   sanitizeBranchName,
   ensureWorktree,
   releaseWorktree,
-  listOrphanWorktrees,
   releaseAll,
   _resetForTests
 } from './worktreeManager.js'
@@ -177,30 +176,6 @@ describe('worktreeManager', () => {
       expect(r.retained).toBe(true)
       // Path should still exist on disk
       expect((await fs.stat(path)).isDirectory()).toBe(true)
-    })
-  })
-
-  describe('listOrphanWorktrees', () => {
-    it('reports worktrees on disk that no instance is tracking', async () => {
-      // Make a worktree out-of-band (Epona doesn't know about it)
-      const target = resolvePath(repoPath, '.worktrees', 'develop')
-      await fs.mkdir(join(repoPath, '.worktrees'), { recursive: true })
-      await gitSync(repoPath, ['worktree', 'add', target, 'develop'])
-      const orphans = await listOrphanWorktrees(repoPath)
-      expect(orphans.some((o) => resolvePath(o.path) === target)).toBe(true)
-    })
-
-    it('excludes tracked worktrees', async () => {
-      await ensureWorktree(repoPath, 'develop')
-      const orphans = await listOrphanWorktrees(repoPath)
-      const developPath = resolvePath(repoPath, '.worktrees', 'develop')
-      expect(orphans.some((o) => resolvePath(o.path) === developPath)).toBe(false)
-    })
-
-    it('excludes the main worktree (not under .worktrees/)', async () => {
-      const orphans = await listOrphanWorktrees(repoPath)
-      // The main checkout itself should never appear — it's not under .worktrees/
-      expect(orphans.some((o) => resolvePath(o.path) === resolvePath(repoPath))).toBe(false)
     })
   })
 

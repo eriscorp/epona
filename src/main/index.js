@@ -17,8 +17,18 @@ import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
 import { listBranches, isGitRepo, diagnoseGitRepo } from './gitOps.js'
 import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
+import { createSplashWindow } from './splash.js'
+import { formatLogLines } from '../shared/logFormat.js'
 
 let settingsManager
+
+// Splash + reveal coordination. The main window is created hidden and only
+// shown once the renderer signals it has hydrated its settings ('app:ready'),
+// so the first visible frame is already populated (no flash of empty UI).
+// splashWindow is module-scoped so createWindow's ready-to-show handler can see
+// it; revealMainWindow lives inside whenReady where the mainWindow binding is.
+let splashWindow = null
+let mainWindowRevealed = false
 
 // One-time migration: older Epona stored settings under the Roaming profile
 // (app.getPath('appData')). We now use Local. On first launch after the switch,
@@ -52,6 +62,20 @@ function migrateSettingsFromRoaming(settingsPath) {
 //   cleanup: async () => void  — releases worktrees / removes Directory.Build.props
 const instanceChildren = new Map()
 
+// Kill a tracked child and wait for it to actually exit, capped by timeoutMs so
+// a hung process can't block the caller. Shared by instance:stop / instance:reset
+// (5s) and the before-quit sweep (2s). wireInstanceLogs handles the map delete +
+// childExit emit when the exit fires.
+function raceChildExit(child, timeoutMs) {
+  const exited = new Promise((resolve) => child.once('exit', resolve))
+  try {
+    child.kill()
+  } catch {
+    /* already gone */
+  }
+  return Promise.race([exited, new Promise((r) => setTimeout(r, timeoutMs))])
+}
+
 function createWindow() {
   const isMac = process.platform === 'darwin'
   const mainWindow = new BrowserWindow({
@@ -81,7 +105,10 @@ function createWindow() {
   }
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // First launch is gated on the renderer's 'app:ready' signal (revealed by
+    // revealMainWindow, which also tears down the splash). Only auto-show when
+    // there's no splash — e.g. a window re-created on macOS activate.
+    if (!splashWindow) mainWindow.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -152,6 +179,27 @@ app.whenReady().then(() => {
       }
     })
   }
+
+  // Reveal the (hidden) main window and tear down the splash. Guarded so it
+  // runs once, whether triggered by the renderer's 'app:ready' signal or the
+  // safety timeout below.
+  function revealMainWindow() {
+    if (mainWindowRevealed) return
+    mainWindowRevealed = true
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy()
+    splashWindow = null
+  }
+
+  // Show the splash immediately, then create the (hidden) main window. Reveal
+  // on the renderer's 'app:ready' signal, with a safety timeout so a renderer
+  // that throws before signalling can't leave the app permanently invisible.
+  splashWindow = createSplashWindow()
+  ipcMain.on('app:ready', revealMainWindow)
+  setTimeout(revealMainWindow, 15000)
 
   createAndWireMainWindow()
 
@@ -288,16 +336,6 @@ app.whenReady().then(() => {
     )
   }
 
-  function formatLogLines(lines) {
-    return lines
-      .map(({ stream, text }) => {
-        if (stream === 'stderr') return `[stderr] ${text}`
-        if (stream === 'exit') return `[exit] ${text}`
-        return text
-      })
-      .join('\n')
-  }
-
   async function writeAutoSaveLog(logDir, lines, pid) {
     await fs.mkdir(logDir, { recursive: true })
     const filename = `hybrasyl-client-${logTimestamp()}-pid${pid ?? 'na'}.log`
@@ -377,8 +415,7 @@ app.whenReady().then(() => {
       // Strip non-serialisable fields from the IPC response. exe launches:
       // leave any previous child alone (multi-instance is allowed), no pipes
       // to wire.
-      const { child: _child, cleanup: _cleanup, ...safe } = result
-      return safe
+      return toSafeResult(result)
     }
     return { success: false, error: `Unknown targetKind: ${targetKind}` }
   })
@@ -465,36 +502,29 @@ app.whenReady().then(() => {
     return { ...instance, dataDir: wd.path }
   }
 
-  ipcMain.handle('instance:start', async (_, supplied) => {
+  // Shared preamble for instance:start / instance:reset — validate the payload,
+  // re-resolve the instance from disk by id (spawn-path hardening: the renderer
+  // can't supply forged paths), and attach its world dir. Returns { instance }
+  // on success or { error } for the handler to surface.
+  async function resolveSuppliedInstance(supplied) {
     if (!supplied || typeof supplied.id !== 'string') {
-      return { success: false, error: 'invalid instance payload' }
+      return { error: 'invalid instance payload' }
     }
-    // Spawn-path hardening: re-resolve the instance from disk by id so the
-    // renderer can't supply forged paths. Unsaved edits will fail this lookup,
-    // forcing a save before launch.
     const settings = await settingsManager.load()
     const persisted = settings.instances.find((i) => i.id === supplied.id)
     if (!persisted) {
-      return { success: false, error: 'instance not in saved settings — save changes first' }
+      return { error: 'instance not in saved settings — save changes first' }
     }
     const instance = resolveInstanceForLaunch(settings, persisted)
     if (!instance) {
-      return {
-        success: false,
-        error: 'World directory not selected for this instance — pick one in settings.'
-      }
+      return { error: 'World directory not selected for this instance — pick one in settings.' }
     }
-    const existing = instanceChildren.get(instance.id)
-    if (existing) {
-      const alive = existing.kind === 'child' ? existing.value.exitCode === null : true
-      if (alive) {
-        return {
-          success: false,
-          error: 'instance is already running — stop it first',
-          pid: existing.kind === 'child' ? existing.value.pid : existing.value
-        }
-      }
-    }
+    return { instance }
+  }
+
+  // Launch a server instance, track its child/pid in instanceChildren, and
+  // return the IPC-safe response. Shared by instance:start and instance:reset.
+  async function spawnAndTrackInstance(instance) {
     const result = await launchServer(instance)
     const cleanup = result.cleanup ?? (async () => {})
     if (result.success && result.child) {
@@ -503,8 +533,35 @@ app.whenReady().then(() => {
     } else if (result.success && result.pid) {
       instanceChildren.set(instance.id, { kind: 'pid', value: result.pid, cleanup })
     }
+    return toSafeResult(result)
+  }
+
+  // Strip the non-serialisable child/cleanup fields off a launch result before
+  // it crosses the IPC boundary.
+  function toSafeResult(result) {
     const { child: _child, cleanup: _cleanup, ...safe } = result
     return safe
+  }
+
+  // Is a tracked entry still alive? Child entries are alive until their process
+  // exits; pid (console-wrapper) entries are assumed alive while tracked.
+  function isTrackedAlive(tracked) {
+    return tracked.kind === 'child' ? tracked.value.exitCode === null : true
+  }
+
+  ipcMain.handle('instance:start', async (_, supplied) => {
+    const resolved = await resolveSuppliedInstance(supplied)
+    if (resolved.error) return { success: false, error: resolved.error }
+    const instance = resolved.instance
+    const existing = instanceChildren.get(instance.id)
+    if (existing && isTrackedAlive(existing)) {
+      return {
+        success: false,
+        error: 'instance is already running — stop it first',
+        pid: existing.kind === 'child' ? existing.value.pid : existing.value
+      }
+    }
+    return spawnAndTrackInstance(instance)
   })
 
   ipcMain.handle('instance:stop', async (_, instanceId) => {
@@ -526,15 +583,8 @@ app.whenReady().then(() => {
         return { success: true, wasRunning: false }
       }
       // Await actual exit before returning so a fast Stop→Start can't see the
-      // child still tracked. wireInstanceLogs handles the delete + event emit
-      // when exit fires; we cap the wait so a hung child can't block the IPC.
-      const exited = new Promise((resolve) => tracked.value.once('exit', resolve))
-      try {
-        tracked.value.kill()
-      } catch {
-        /* already gone */
-      }
-      await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))])
+      // child still tracked.
+      await raceChildExit(tracked.value, 5000)
       await runCleanup()
       return { success: true, wasRunning: true }
     }
@@ -564,36 +614,16 @@ app.whenReady().then(() => {
   // port bind. The renderer keeps the running flag set across the gap so
   // the UI doesn't flicker mid-restart.
   ipcMain.handle('instance:reset', async (_, supplied) => {
-    if (!supplied || typeof supplied.id !== 'string') {
-      return { success: false, error: 'invalid instance payload' }
-    }
     // Same disk-wins resolution as instance:start.
-    const settings = await settingsManager.load()
-    const persisted = settings.instances.find((i) => i.id === supplied.id)
-    if (!persisted) {
-      return { success: false, error: 'instance not in saved settings — save changes first' }
-    }
-    const instance = resolveInstanceForLaunch(settings, persisted)
-    if (!instance) {
-      return {
-        success: false,
-        error: 'World directory not selected for this instance — pick one in settings.'
-      }
-    }
+    const resolved = await resolveSuppliedInstance(supplied)
+    if (resolved.error) return { success: false, error: resolved.error }
+    const instance = resolved.instance
     const tracked = instanceChildren.get(instance.id)
     if (!tracked) return { success: false, error: 'instance is not running' }
 
     if (tracked.kind === 'child') {
-      if (tracked.value.exitCode === null) {
-        const exited = new Promise((resolve) => tracked.value.once('exit', resolve))
-        try {
-          tracked.value.kill()
-        } catch {
-          /* already gone */
-        }
-        // Cap so a stuck process can't deadlock the UI.
-        await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))])
-      }
+      // Cap so a stuck process can't deadlock the UI.
+      if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 5000)
     } else {
       const pid = tracked.value
       await killProcessTree(pid)
@@ -612,28 +642,15 @@ app.whenReady().then(() => {
       console.warn(`instance ${instance.id} cleanup failed during reset:`, err.message)
     }
 
-    const result = await launchServer(instance)
-    const cleanup = result.cleanup ?? (async () => {})
-    if (result.success && result.child) {
-      instanceChildren.set(instance.id, { kind: 'child', value: result.child, cleanup })
-      wireInstanceLogs(instance.id, result.child)
-    } else if (result.success && result.pid) {
-      instanceChildren.set(instance.id, { kind: 'pid', value: result.pid, cleanup })
-    }
-    const { child: _child, cleanup: _cleanup, ...safe } = result
-    return safe
+    return spawnAndTrackInstance(instance)
   })
 
   ipcMain.handle('instance:listRunning', async () => {
     const running = []
     for (const [id, tracked] of instanceChildren) {
-      if (tracked.kind === 'child') {
-        if (tracked.value.exitCode === null) {
-          running.push({ instanceId: id, pid: tracked.value.pid })
-        }
-      } else {
-        running.push({ instanceId: id, pid: tracked.value })
-      }
+      if (!isTrackedAlive(tracked)) continue
+      const pid = tracked.kind === 'child' ? tracked.value.pid : tracked.value
+      running.push({ instanceId: id, pid })
     }
     return running
   })
@@ -651,8 +668,7 @@ app.whenReady().then(() => {
       for (const [id, tracked] of instanceChildren) {
         const inst = settings.instances.find((i) => i.id === id)
         if (!inst || inst.mode !== 'repo') continue
-        const alive = tracked.kind === 'child' ? tracked.value.exitCode === null : true
-        if (alive) result.push(`Server "${inst.name}" (repo mode)`)
+        if (isTrackedAlive(tracked)) result.push(`Server "${inst.name}" (repo mode)`)
       }
     } catch (err) {
       console.warn('quit-confirm settings load failed:', err.message)
@@ -697,11 +713,7 @@ app.on('before-quit', async (event) => {
   for (const [id, tracked] of instanceChildren) {
     try {
       if (tracked.kind === 'child') {
-        if (tracked.value.exitCode === null) {
-          const exited = new Promise((r) => tracked.value.once('exit', r))
-          tracked.value.kill()
-          await Promise.race([exited, new Promise((r) => setTimeout(r, 2000))])
-        }
+        if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 2000)
       } else {
         // PID-tracked: kill the wrapper + its tree (taskkill on Windows,
         // SIGKILL to the process group on POSIX).

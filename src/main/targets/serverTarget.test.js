@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  resolveConfigFile,
-  stripXmlExt,
-  buildBinarySpawn,
-  buildRepoSpawn,
-  validateForLaunch
-} from './serverTarget.js'
+import { stripXmlExt, buildBinarySpawn, buildRepoSpawn, validateForLaunch } from './serverTarget.js'
 import { join } from 'path'
 
 const BASE_INSTANCE = {
@@ -40,20 +34,6 @@ const REPO_INSTANCE = {
   xmlRepoPath: '',
   xmlBranch: null
 }
-
-describe('resolveConfigFile', () => {
-  it('defaults the filename to config.xml when none is given', () => {
-    expect(resolveConfigFile('D:/ceridwen')).toBe(
-      join('D:/ceridwen', 'xml', 'serverconfigs', 'config.xml')
-    )
-  })
-
-  it('uses the supplied config filename', () => {
-    expect(resolveConfigFile('D:/ceridwen', 'qa.xml')).toBe(
-      join('D:/ceridwen', 'xml', 'serverconfigs', 'qa.xml')
-    )
-  })
-})
 
 describe('stripXmlExt', () => {
   it('strips a lower-case .xml suffix', () => {

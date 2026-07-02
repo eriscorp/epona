@@ -8,13 +8,6 @@ import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { writeBuildProps, removeBuildProps } from '../buildProps.js'
 import { resolveDotnetPath } from '../dotnet.js'
 
-// Resolve the on-disk path a user's configFileName selection points at.
-// Useful for UI "file exists?" checks; the server itself doesn't need the
-// full path — it takes `--config <name>` and resolves inside `--datadir`.
-export function resolveConfigFile(dataDir, configFileName = 'config.xml') {
-  return join(dataDir, 'xml', 'serverconfigs', configFileName)
-}
-
 // Strip a case-insensitive .xml suffix; the server's `--config` flag wants
 // the bare name (e.g. "local"), not the filename ("local.xml").
 export function stripXmlExt(name) {
@@ -268,6 +261,14 @@ async function launchRepo(instance) {
   //    at the picked XML repo's csproj — local-XML override stays functional.
   let releaseXml = async () => {}
   let didWriteBuildProps = false
+  // Single teardown for every exit path — undo build-props, then release the
+  // XML worktree, then the server worktree. Reads the mutable vars at call time
+  // so it reflects whatever setup completed before it runs.
+  const cleanup = async () => {
+    if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
+    await releaseXml()
+    await releaseServer()
+  }
   try {
     // xmlBranch !== null means "use local XML" (either '' = in-place or a
     // branch name). Combined with xmlNoGit, force the in-place semantic.
@@ -303,15 +304,7 @@ async function launchRepo(instance) {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe']
       })
-      return {
-        success: true,
-        child,
-        cleanup: async () => {
-          if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
-          await releaseXml()
-          await releaseServer()
-        }
-      }
+      return { success: true, child, cleanup }
     }
     const result = await spawnInPowerShellConsole({
       command: spec.command,
@@ -321,20 +314,10 @@ async function launchRepo(instance) {
     })
     if (!result.success) {
       // Spawn failed — undo what we set up so the next attempt is clean.
-      if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
-      await releaseXml()
-      await releaseServer()
+      await cleanup()
       return result
     }
-    return {
-      success: true,
-      pid: result.pid,
-      cleanup: async () => {
-        if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
-        await releaseXml()
-        await releaseServer()
-      }
-    }
+    return { success: true, pid: result.pid, cleanup }
   } catch (err) {
     // Any setup step (worktree add, build-props write) blew up — undo and report.
     // Cleanup failures during error recovery are themselves swallowed: the

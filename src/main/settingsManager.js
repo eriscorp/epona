@@ -1,6 +1,7 @@
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { randomUUID } from 'crypto'
+import { basenameOfPath } from '../shared/pathBasename.js'
 
 const DEFAULT_PROFILES = [
   {
@@ -198,19 +199,13 @@ function normalizeWorldDirPath(p) {
   return p.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
-function deriveWorldDirName(p) {
-  const cleaned = p.replace(/[\\/]+$/, '').replace(/\\/g, '/')
-  const segs = cleaned.split('/').filter(Boolean)
-  return segs[segs.length - 1] || cleaned
-}
-
 function coerceWorldDirectory(raw) {
   if (!raw || typeof raw !== 'object') return null
   if (typeof raw.id !== 'string' || raw.id.length === 0) return null
   if (typeof raw.path !== 'string' || raw.path.length === 0) return null
   return {
     id: raw.id,
-    name: typeof raw.name === 'string' ? raw.name : deriveWorldDirName(raw.path),
+    name: typeof raw.name === 'string' ? raw.name : basenameOfPath(raw.path),
     path: raw.path
   }
 }
@@ -239,7 +234,7 @@ function migrateWorldDirectories(data) {
         let id = byNormPath.get(norm)
         if (!id) {
           id = randomUUID()
-          dirs.push({ id, name: deriveWorldDirName(inst.dataDir), path: inst.dataDir })
+          dirs.push({ id, name: basenameOfPath(inst.dataDir), path: inst.dataDir })
           byNormPath.set(norm, id)
         }
         inst.worldDirectoryId = id
@@ -343,8 +338,11 @@ export function createSettingsManager(userDataPath) {
     data = await tryReadJson(backup)
     if (data) {
       console.warn('Recovered settings from backup')
-      await save(withDefaults(data))
-      return withDefaults(data)
+      // withDefaults is a pure transform — run it once and reuse for both the
+      // rewrite-to-primary and the return value.
+      const recovered = withDefaults(data)
+      await save(recovered)
+      return recovered
     }
 
     console.warn('No valid settings found, using defaults')
