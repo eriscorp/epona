@@ -138,6 +138,8 @@ export default function App() {
       window.sparkAPI.appReady()
     })
     window.sparkAPI.listVersions().then(setVersions)
+    // Runs once on mount; isWindows is session-constant (platform never changes).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

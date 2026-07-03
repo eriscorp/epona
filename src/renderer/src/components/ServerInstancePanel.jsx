@@ -20,7 +20,7 @@ import Tab from '@mui/material/Tab'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import TerminalIcon from '@mui/icons-material/Terminal'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import PathPicker from './PathPicker'
@@ -173,11 +173,11 @@ export default function ServerInstancePanel({
       if (branchCache[p] !== undefined) continue
       refreshBranches(p)
     }
-    // branchCache intentionally NOT in deps: entries are append-only, so the
-    // closure's view is a subset of the live cache and the !== undefined check
-    // still skips already-loaded paths. Including it would re-fire the effect
-    // on every cache write. (The react-hooks/exhaustive-deps rule isn't active
-    // in this project, so no disable comment is needed.)
+    // branchCache/refreshBranches intentionally NOT in deps: entries are
+    // append-only, so the closure's view is a subset of the live cache and the
+    // !== undefined check still skips already-loaded paths. Including them would
+    // re-fire the effect on every cache write / render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isRepoMode,
     useLocalXml,

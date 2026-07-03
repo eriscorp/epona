@@ -1,6 +1,6 @@
 import { Toolbar, IconButton, Tooltip, Divider, Box, Typography } from '@mui/material'
 import { GiSettingsKnobs, GiMagnifyingGlass } from 'react-icons/gi'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined'
 import { toolbarBtnSx } from './toolbarStyles'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 

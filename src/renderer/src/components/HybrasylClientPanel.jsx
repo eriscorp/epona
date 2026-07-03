@@ -75,9 +75,10 @@ export default function HybrasylClientPanel({
     const p = hybrasyl.clientRepoPath
     if (branchCache[p] !== undefined) return
     refreshBranches(p)
-    // branchCache intentionally omitted — entries are append-only and the
-    // !== undefined guard already short-circuits, so including it would just
-    // re-run the effect on every cache write.
+    // branchCache/refreshBranches intentionally omitted — cache entries are
+    // append-only and the !== undefined guard short-circuits, so including them
+    // would just re-run the effect on every cache write / render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRepoMode, hybrasyl.clientRepoPath, hybrasyl.noGit])
 
   function setMode(m) {
