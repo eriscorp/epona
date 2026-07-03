@@ -8,8 +8,35 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import SaveAltIcon from '@mui/icons-material/SaveAlt'
 import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom'
 import { PANEL_BORDER } from '../uiConstants.js'
+import { useRuntime } from '../store/runtimeStore.js'
+import { formatLogLines } from '../../../shared/logFormat.js'
 
-export default function LogPane({ title = 'Console', lines, onClear, onSave, onClose }) {
+// Stable empty reference so the selector doesn't return a fresh [] every store
+// update (which would defeat zustand's identity check and re-render on churn).
+const EMPTY = []
+
+// `source` is 'hybrasyl' or a server-instance id. LogPane subscribes to just
+// that slice of the runtime store, so log streaming re-renders only this pane
+// — not App and its panels. `slug` is the save-dialog filename stem.
+export default function LogPane({ title = 'Console', source, slug, onClose }) {
+  const lines = useRuntime((s) =>
+    source === 'hybrasyl' ? s.hybrasylLog : (s.instanceLogs[source] ?? EMPTY)
+  )
+  const clearHybrasyl = useRuntime((s) => s.clearHybrasyl)
+  const clearInstance = useRuntime((s) => s.clearInstance)
+  const onClear = () => (source === 'hybrasyl' ? clearHybrasyl() : clearInstance(source))
+
+  // Format the buffered lines and ship to main for a save dialog. Stream tags
+  // (stderr/exit) are preserved so the file reads meaningfully on its own.
+  async function onSave() {
+    if (lines.length === 0) return
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+    const result = await window.sparkAPI.saveLog(formatLogLines(lines), `${slug}-${ts}.log`)
+    if (result && !result.ok && !result.canceled) {
+      console.error('[log] save failed:', result.error)
+    }
+  }
+
   const scrollRef = useRef(null)
   const [pinnedToBottom, setPinnedToBottom] = useState(true)
 
