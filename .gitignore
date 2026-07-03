@@ -8,6 +8,7 @@ node_modules/
 # =========================
 dist/
 out/
+coverage/
 
 # Native addon build
 packages/da-win32/build/

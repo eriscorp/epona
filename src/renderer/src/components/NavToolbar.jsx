@@ -1,25 +1,10 @@
 import { Toolbar, IconButton, Tooltip, Divider, Box, Typography } from '@mui/material'
 import { GiSettingsKnobs, GiMagnifyingGlass } from 'react-icons/gi'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined'
+import { toolbarBtnSx } from './toolbarStyles'
+import { basenameOfPath } from '../../../shared/pathBasename.js'
 
-const iconSx = {
-  '& svg': {
-    fontSize: '1.4em',
-    stroke: 'rgba(0,0,0,0.25)',
-    strokeWidth: 44
-  }
-}
-
-const btnSx = {
-  WebkitAppRegion: 'no-drag',
-  mx: -0.5,
-  color: 'text.button',
-  ...iconSx,
-  '&:hover': {
-    backgroundColor: 'info.main',
-    color: 'text.dark'
-  }
-}
+const btnSx = { ...toolbarBtnSx, mx: -0.5 }
 
 export default function NavToolbar({
   detectedVersion,
@@ -32,12 +17,7 @@ export default function NavToolbar({
   // Windows shows the detected legacy-client version (memory-patch target).
   // Non-Windows points at a Dark Ages asset folder, which carries no version —
   // so report whether assets have been located, and which folder.
-  const assetsName = clientPath
-    ? clientPath
-        .replace(/[\\/]+$/, '')
-        .split(/[\\/]/)
-        .pop()
-    : ''
+  const assetsName = clientPath ? basenameOfPath(clientPath) : ''
   const status = isWindows
     ? detectedVersion
       ? { found: true, label: `Client: ${detectedVersion}` }

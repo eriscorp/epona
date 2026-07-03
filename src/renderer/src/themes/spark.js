@@ -1,4 +1,5 @@
 import { createTheme, responsiveFontSizes } from '@mui/material/styles'
+import { STATUS_COLORS } from './shared'
 
 const sparkTheme = responsiveFontSizes(
   createTheme({
@@ -28,10 +29,8 @@ const sparkTheme = responsiveFontSizes(
         dark: '#181818'
       },
       divider: '#282828',
-      error: { main: '#ff0000' },
-      warning: { main: '#FFFF00' },
-      info: { main: '#3080D0' },
-      success: { main: '#38ff4f' }
+      ...STATUS_COLORS,
+      info: { main: '#3080D0' }
     },
 
     typography: {

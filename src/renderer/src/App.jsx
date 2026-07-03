@@ -20,6 +20,10 @@ import ActionButtons from './components/ActionButtons'
 import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
+import { PANEL_BORDER_COLOR } from './uiConstants.js'
+import { defaultSettings } from '../../shared/defaultSettings.js'
+import { useSettings } from './store/settingsStore.js'
+import { useRuntime } from './store/runtimeStore.js'
 
 const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
 const kindToIndex = (k) => {
@@ -54,7 +58,6 @@ const LegacyTabDisabled = forwardRef(function LegacyTabDisabled(props, ref) {
 const MAIN_W = 480
 const PANE_W = 360
 const WINDOW_H = 800
-const LOG_CAP = 2000
 
 const themes = {
   hybrasyl: hybrasylTheme,
@@ -64,108 +67,60 @@ const themes = {
   spark: sparkTheme
 }
 
-const defaultSettings = {
-  targetKind: 'legacy',
-  clientPath: '',
-  version: 'auto',
-  skipIntro: true,
-  multipleInstances: true,
-  hideWalls: false,
-  theme: 'hybrasyl',
-  activeProfile: 'official',
-  profiles: [
-    {
-      id: 'official',
-      name: 'Dark Ages (Official)',
-      hostname: 'da0.kru.com',
-      port: 2610,
-      redirect: false
-    }
-  ],
-  targets: {
-    hybrasyl: {
-      mode: 'binary',
-      binaryPath: '',
-      clientRepoPath: '',
-      clientBranch: null,
-      autoSaveLogs: false
-    }
-  },
-  instances: [],
-  activeInstance: null,
-  worldDirectories: [],
-  activeWorldDirectory: null
-}
-
 export default function App() {
   const isWindows = window.sparkAPI.platform === 'win32'
-  const [settings, setSettings] = useState(defaultSettings)
-  const [versions, setVersions] = useState([])
-  const [detectedVersion, setDetectedVersion] = useState(null)
-  const [themeName, setThemeName] = useState('hybrasyl')
+  // Persisted settings + client-version detection live in the settings store
+  // (unit-tested, debounced save). Logs live in the runtime store so streaming
+  // re-renders only the LogPane. Ephemeral UI toggles stay local.
+  const settings = useSettings((s) => s.settings)
+  const versions = useSettings((s) => s.versions)
+  const detectedVersion = useSettings((s) => s.detectedVersion)
+  const update = useSettings((s) => s.update)
+  const hydrate = useSettings((s) => s.hydrate)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(() =>
-    startupTabIndex(defaultSettings.targetKind, window.sparkAPI.platform === 'win32')
+    startupTabIndex(defaultSettings.targetKind, isWindows)
   )
   const [logPaneOpen, setLogPaneOpen] = useState(false)
-  const [hybrasylLog, setHybrasylLog] = useState([])
-  const [instanceLogs, setInstanceLogs] = useState({}) // { [instanceId]: [{stream, text}, ...] }
   const [runningInstances, setRunningInstances] = useState(new Set())
 
-  useEffect(() => {
-    window.sparkAPI.loadSettings().then((s) => {
-      setSettings((prev) => ({ ...prev, ...s }))
-      if (s.theme && themes[s.theme]) setThemeName(s.theme)
-      if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind, isWindows))
-      if (s.clientPath) {
-        window.sparkAPI.detectVersion(s.clientPath).then((result) => {
-          setDetectedVersion(result.found ? result.name : null)
-        })
-      }
+  const removeRunning = (id) =>
+    setRunningInstances((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
     })
-    window.sparkAPI.listVersions().then(setVersions)
+
+  useEffect(() => {
+    hydrate().then((s) => {
+      if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind, isWindows))
+      // Settings are hydrated and applied — tell the main process to dismiss the
+      // splash and reveal the main window (now painting a populated first frame).
+      window.sparkAPI.appReady()
+    })
+    // Runs once on mount; hydrate is a stable store action, isWindows is constant.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    const offLog = window.sparkAPI.onHybrasylLog(({ stream, line }) => {
-      setHybrasylLog((prev) => {
-        const next = prev.concat({ stream, text: line })
-        return next.length > LOG_CAP ? next.slice(next.length - LOG_CAP) : next
-      })
-    })
+    // Route the main→renderer log/exit streams into the runtime store. App
+    // itself doesn't subscribe to the logs, so a busy stream re-renders only
+    // the LogPane, not the whole tree.
+    const { appendHybrasyl, appendInstance } = useRuntime.getState()
+    const offLog = window.sparkAPI.onHybrasylLog(({ stream, line }) => appendHybrasyl(stream, line))
     const offExit = window.sparkAPI.onHybrasylChildExit(({ pid, code, signal }) => {
       const label = signal ? `signal ${signal}` : `exit code ${code}`
-      setHybrasylLog((prev) =>
-        prev.concat({ stream: 'exit', text: `— process ${pid} ended (${label}) —` })
-      )
+      appendHybrasyl('exit', `— process ${pid} ended (${label}) —`)
     })
-    const offInstanceLog = window.sparkAPI.onInstanceLog(({ instanceId, stream, line }) => {
-      setInstanceLogs((prev) => {
-        const prior = prev[instanceId] ?? []
-        const next = prior.concat({ stream, text: line })
-        const trimmed = next.length > LOG_CAP ? next.slice(next.length - LOG_CAP) : next
-        return { ...prev, [instanceId]: trimmed }
-      })
-    })
+    const offInstanceLog = window.sparkAPI.onInstanceLog(({ instanceId, stream, line }) =>
+      appendInstance(instanceId, stream, line)
+    )
     const offInstanceExit = window.sparkAPI.onInstanceChildExit(
       ({ instanceId, pid, code, signal }) => {
         const label = signal ? `signal ${signal}` : `exit code ${code}`
-        setInstanceLogs((prev) => {
-          const prior = prev[instanceId] ?? []
-          return {
-            ...prev,
-            [instanceId]: prior.concat({
-              stream: 'exit',
-              text: `— process ${pid} ended (${label}) —`
-            })
-          }
-        })
-        setRunningInstances((prev) => {
-          const next = new Set(prev)
-          next.delete(instanceId)
-          return next
-        })
+        appendInstance(instanceId, 'exit', `— process ${pid} ended (${label}) —`)
+        removeRunning(instanceId)
       }
     )
     return () => {
@@ -180,28 +135,6 @@ export default function App() {
     const width = MAIN_W + (settingsOpen ? PANE_W : 0) + (logPaneOpen ? PANE_W : 0)
     window.sparkAPI.resizeWindow(width, WINDOW_H)
   }, [logPaneOpen, settingsOpen])
-
-  function update(patch) {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch }
-      // Fire-and-forget save: log on failure so it isn't silent.
-      window.sparkAPI
-        .saveSettings(next)
-        .catch((err) => console.error('[settings] saveSettings rejected:', err))
-      if (patch.theme && themes[patch.theme]) setThemeName(patch.theme)
-      return next
-    })
-
-    if (patch.clientPath !== undefined) {
-      if (patch.clientPath) {
-        window.sparkAPI.detectVersion(patch.clientPath).then((result) => {
-          setDetectedVersion(result.found ? result.name : null)
-        })
-      } else {
-        setDetectedVersion(null)
-      }
-    }
-  }
 
   function getActiveProfile() {
     return settings.profiles.find((p) => p.id === settings.activeProfile) || settings.profiles[0]
@@ -221,27 +154,7 @@ export default function App() {
     if (path) update({ clientPath: path })
   }
 
-  // Format buffered log lines and ship to main for a save dialog. The slug
-  // becomes the leading filename component; main appends a timestamp + .log.
-  // Stream tagging (stderr/exit) is preserved in the saved text so the file
-  // is meaningful when opened away from this UI.
-  async function saveLogToFile(lines, slug) {
-    if (!lines || lines.length === 0) return
-    const formatted = lines
-      .map(({ stream, text }) => {
-        if (stream === 'stderr') return `[stderr] ${text}`
-        if (stream === 'exit') return `[exit] ${text}`
-        return text
-      })
-      .join('\n')
-    const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
-    const result = await window.sparkAPI.saveLog(formatted, `${slug}-${ts}.log`)
-    if (result && !result.ok && !result.canceled) {
-      console.error('[log] save failed:', result.error)
-    }
-  }
-
-  const currentTheme = themes[themeName] || hybrasylTheme
+  const currentTheme = themes[settings.theme] || hybrasylTheme
 
   return (
     <ThemeProvider theme={currentTheme}>
@@ -286,7 +199,7 @@ export default function App() {
           }}
         >
           <TitleBar />
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
           <NavToolbar
             detectedVersion={detectedVersion}
             clientPath={settings.clientPath}
@@ -294,7 +207,7 @@ export default function App() {
             onToggleSettings={() => setSettingsOpen((o) => !o)}
             onOpenHelp={() => setHelpOpen(true)}
           />
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
           <Tabs
             value={activeTab}
@@ -313,11 +226,11 @@ export default function App() {
             <Tab value={1} label="Hybrasyl Client" />
             <Tab value={2} label="Hybrasyl Server" />
           </Tabs>
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
           {activeTab === 0 && (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-              {window.sparkAPI.platform !== 'win32' && (
+              {!isWindows && (
                 <Alert severity="warning" variant="outlined">
                   Legacy Client requires Windows — it patches the running .exe via native Win32
                   APIs. On macOS or Linux you&apos;ll need a compatibility layer (Wine, CrossOver,
@@ -396,11 +309,7 @@ export default function App() {
                   // UI's running flag anyway — the user is telling us the
                   // instance is no longer running, and the console window
                   // closure is the real stop signal.
-                  setRunningInstances((prev) => {
-                    const next = new Set(prev)
-                    next.delete(instanceId)
-                    return next
-                  })
+                  removeRunning(instanceId)
                   return result
                 }}
                 onReset={async (instance) => {
@@ -409,11 +318,7 @@ export default function App() {
                   // — leave the flag set. On failure the previous process was
                   // killed but relaunch failed, so treat as stopped.
                   if (!result.success) {
-                    setRunningInstances((prev) => {
-                      const next = new Set(prev)
-                      next.delete(instance.id)
-                      return next
-                    })
+                    removeRunning(instance.id)
                   }
                   return result
                 }}
@@ -424,27 +329,24 @@ export default function App() {
 
         {logPaneOpen && activeTab !== 2 && (
           <LogPane
+            source="hybrasyl"
             title="Hybrasyl Client"
-            lines={hybrasylLog}
-            onClear={() => setHybrasylLog([])}
-            onSave={() => saveLogToFile(hybrasylLog, 'hybrasyl-client')}
+            slug="hybrasyl-client"
             onClose={() => setLogPaneOpen(false)}
           />
         )}
 
         {logPaneOpen && activeTab === 2 && (
           <LogPane
+            source={settings.activeInstance}
             title={
               settings.instances.find((i) => i.id === settings.activeInstance)?.name ??
               'Server Instance'
             }
-            lines={instanceLogs[settings.activeInstance] ?? []}
-            onClear={() => setInstanceLogs((prev) => ({ ...prev, [settings.activeInstance]: [] }))}
-            onSave={() => {
-              const inst = settings.instances.find((i) => i.id === settings.activeInstance)
-              const slug = (inst?.name ?? 'server-instance').replace(/[^A-Za-z0-9._-]+/g, '-')
-              return saveLogToFile(instanceLogs[settings.activeInstance] ?? [], slug)
-            }}
+            slug={(
+              settings.instances.find((i) => i.id === settings.activeInstance)?.name ??
+              'server-instance'
+            ).replace(/[^A-Za-z0-9._-]+/g, '-')}
             onClose={() => setLogPaneOpen(false)}
           />
         )}

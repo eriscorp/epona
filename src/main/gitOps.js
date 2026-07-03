@@ -1,54 +1,8 @@
-import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
-import { dirname } from 'path'
+import { runGit, ensureDir } from './gitExec.js'
 
-// Resolve a path to a directory git can `-C` into. If `p` points at a file
-// (e.g. a .csproj inside a repo), return its parent dir; if it's already a
-// directory or doesn't exist, return as-is. Lets callers pass either kind of
-// path without juggling dirname() at every call site.
-async function ensureDir(p) {
-  try {
-    const stat = await fs.stat(p)
-    return stat.isDirectory() ? p : dirname(p)
-  } catch {
-    return p
-  }
-}
-
-// Run a git command in the given working directory and return its stdout
-// trimmed. On non-zero exit, reject with an Error whose message includes
-// stderr — most git failures (not a repo, branch missing, etc.) print useful
-// errors to stderr and we want them to surface unmangled.
-function runGit(cwd, args, { allowFail = false } = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', ['-C', cwd, ...args], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    })
-    let stdout = ''
-    let stderr = ''
-    child.stdout.on('data', (c) => {
-      stdout += c.toString()
-    })
-    child.stderr.on('data', (c) => {
-      stderr += c.toString()
-    })
-    child.once('error', (err) => reject(err))
-    child.once('exit', (code) => {
-      if (code === 0 || allowFail) {
-        // Only strip trailing whitespace — leading whitespace is meaningful
-        // for some git commands (e.g. `branch -a` puts marker columns there).
-        resolve({ code, stdout: stdout.replace(/\s+$/, ''), stderr: stderr.trim() })
-      } else {
-        reject(
-          new Error(
-            `git ${args.join(' ')} failed (exit ${code}): ${stderr.trim() || '(no stderr)'}`
-          )
-        )
-      }
-    })
-  })
-}
+// runGit + ensureDir live in gitExec.js so worktreeManager.js can share the
+// exact same git-spawn scaffold.
 
 // Resolve the toplevel of the git working tree containing `path`, or null if
 // `path` isn't inside one. Used to convert a csproj path the user picked into
@@ -116,9 +70,11 @@ export async function isGitRepo(repoPath) {
 // (origin/foo when foo also exists locally) and the bare HEAD pointer
 // (origin/HEAD -> origin/main).
 export async function listBranches(repoPath) {
-  if (!(await isGitRepo(repoPath))) {
-    throw new Error(`Not a git repository: ${repoPath}`)
-  }
+  // Resolve the working dir once and let the single `git branch -a` double as
+  // the repo check — it already fails on a non-repo, so a separate isGitRepo()
+  // preflight (an extra rev-parse subprocess + stat) is redundant. Map any
+  // failure back to the same friendly "Not a git repository" error callers rely
+  // on rather than surfacing the raw git message.
   const dir = await ensureDir(repoPath)
   // Standard `git branch -a` output: the first column is either '*' (current)
   // or whitespace, then the ref name. Match with a regex rather than
@@ -128,7 +84,12 @@ export async function listBranches(repoPath) {
   //   "  develop"                             → other local
   //   "  remotes/origin/feature__bar"         → remote-tracking
   //   "  remotes/origin/HEAD -> origin/main"  → alias (filter out via -> match)
-  const { stdout } = await runGit(dir, ['branch', '-a'])
+  let stdout
+  try {
+    ;({ stdout } = await runGit(dir, ['branch', '-a']))
+  } catch {
+    throw new Error(`Not a git repository: ${repoPath}`)
+  }
   const locals = []
   const remotes = []
   const localNames = new Set()

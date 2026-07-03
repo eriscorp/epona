@@ -28,6 +28,8 @@ import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
+import { PANEL_BORDER } from '../uiConstants.js'
+import { basenameOfPath } from '../../../shared/pathBasename.js'
 
 const THEMES = [
   { key: 'hybrasyl', label: 'Hybrasyl' },
@@ -132,7 +134,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
         flex: `0 0 ${PANE_W}px`,
         height: '100%',
         bgcolor: 'background.paper',
-        borderLeft: '1px solid rgba(255,255,255,0.15)',
+        borderLeft: PANEL_BORDER,
         display: 'flex',
         flexDirection: 'column'
       }}
@@ -144,7 +146,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
           justifyContent: 'space-between',
           px: 1.5,
           py: 0.75,
-          borderBottom: '1px solid rgba(255,255,255,0.15)'
+          borderBottom: PANEL_BORDER
         }}
       >
         <Typography variant="subtitle2" sx={{ pl: 0.5 }}>
@@ -473,12 +475,7 @@ function WorldDirDialog({ mode, worldDir: initial, onSave, onCancel }) {
       }
       setPickError(null)
       // Auto-fill the name on first browse if the user hasn't typed one.
-      const segs = p
-        .replace(/[\\/]+$/, '')
-        .replace(/\\/g, '/')
-        .split('/')
-        .filter(Boolean)
-      const derivedName = segs[segs.length - 1] || ''
+      const derivedName = basenameOfPath(p)
       setWorldDir((prev) => ({
         ...prev,
         path: p,

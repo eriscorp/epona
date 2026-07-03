@@ -1,4 +1,4 @@
-import { createConnection } from 'net'
+import { withProbeSocket } from './probeSocket.js'
 
 // Pure TCP "is anything listening on this port?" check. Used for pre-launch
 // port preflight where we don't know what protocol the existing listener
@@ -9,22 +9,12 @@ import { createConnection } from 'net'
 //   timeout                         → treat as free (best-effort preflight,
 //                                     not a security gate)
 export function isPortInUse(host, port, timeoutMs = 500) {
-  return new Promise((resolve) => {
-    let settled = false
-    const finish = (inUse) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      try {
-        socket.destroy()
-      } catch {
-        /* already gone */
-      }
-      resolve(inUse)
+  return withProbeSocket(
+    { host, port, timeoutMs },
+    {
+      onConnect: (_socket, finish) => finish(true),
+      onError: () => false,
+      onTimeout: () => false
     }
-    const socket = createConnection({ host, port })
-    const timer = setTimeout(() => finish(false), timeoutMs)
-    socket.once('connect', () => finish(true))
-    socket.once('error', () => finish(false))
-  })
+  )
 }

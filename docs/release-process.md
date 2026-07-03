@@ -1,18 +1,19 @@
 # Release Process
 
-How to cut an Epona release end-to-end. The portable Windows build is
-produced by the [`release.yml`](../.github/workflows/release.yml)
-GitHub Action; everything else is a few manual steps in the right
-order.
+How to cut an Epona release end-to-end. Pushing a `v*` tag is the single
+action that fires the [`release.yml`](../.github/workflows/release.yml)
+GitHub Action, which builds **all three platforms** — signed Windows
+portable exe, signed + notarized macOS dmg, and Linux deb + AppImage —
+creates the GitHub Release with auto-generated notes, attaches every
+artifact, and posts to Discord.
 
 The flow at a glance:
 
 1. Pre-release sanity (local)
-2. Bump the version, commit, push
-3. Push a `v*` tag — **this does not trigger the build**
-4. Draft the release in the GitHub UI from that tag, write notes
-5. Publish the release — this fires `release.yml`, which builds the
-   portable exe, attaches it, and pings Discord
+2. Bump the version, commit, push to `main`
+3. Push a `v*` tag — **this fires the build and publishes the release**
+4. (Optional) Polish the auto-generated release notes in the GitHub UI
+5. Watch the Actions run go green, then verify artifacts + Discord
 
 ---
 
@@ -28,8 +29,8 @@ npm run test
 ```
 
 Both must be clean. Epona is plain JS — no `typecheck` step. Lint is
-expected to exit 0 (was hardened in the run-up to this release; if it
-regresses, fix before tagging rather than after).
+expected to exit 0; if it regresses, fix before tagging rather than
+after.
 
 Also smoke-test anything user-visible that landed since the last
 release. The dev server is the user's job to launch
@@ -39,7 +40,7 @@ hasn't worked reliably.
 ## 2. Bump the version
 
 [`package.json`](../package.json)'s `version` field drives the release
-tag and the artifact name. Pick the bump:
+tag and the artifact names. Pick the bump:
 
 - **Patch** (e.g. `1.0.0 → 1.0.1`): bug fixes only, no new
   user-visible features.
@@ -60,115 +61,103 @@ git push origin main
 
 The commit message body can summarize the major themes of the release
 (features, fixes, hardening) — it's what a reader sees in `git log`
-even if they never see the GitHub release notes.
+even if they never read the GitHub release notes.
 
-## 3. Tag the release
-
-Push the tag from CLI before opening the UI:
+## 3. Tag the release — this fires the build
 
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-This does **not** trigger the build — `release.yml` listens for the
-`release.published` event, not tag pushes. The tag just exists so the
-GH UI can build a release against it in step 5.
+Pushing the tag **triggers `release.yml`** (`on: push: tags: ['v*']`).
+There is no separate "publish in the UI" step — the workflow creates
+the GitHub Release itself once the platform builds finish. The `v`
+prefix is required (the trigger matches `v*`) and is what shows in the
+Discord post and on the release page.
 
-The `v` prefix is conventional for tag-name display in the Discord
-post and the release page artifacts.
+## 4. (Optional) Polish the release notes
 
-## 4. Draft the release notes
-
-Get the full commit list since the previous release tag:
+The `release` job uses `generate_release_notes: true`, so GitHub
+auto-writes notes from the merged PRs / commits since the previous tag.
+That's usually enough. If you want a hand-curated summary, edit the
+release in the GitHub UI after it's published and group by user impact:
 
 ```bash
 git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --oneline
 ```
 
 (`HEAD^` skips the version-bump commit so `describe` finds the prior
-tag, not the one you just pushed.)
+tag, not the one you just pushed.) Group by user impact, not commit
+order — **Highlights** (new features), **Fixes**, **Security &
+hardening**, **Developer / docs**.
 
-**Read the whole list, don't skim.** Easy to undercount when many
-commits are docs/chore that you'll skip but a few are quietly
-user-visible. Group by user impact, not by commit order:
+## 5. What the workflow does
 
-- **Highlights**: new features users will notice. One bullet per
-  feature, lead with the user-facing thing, not the implementation.
-- **Fixes**: bugs closed since the last release.
-- **Security & hardening**: anything that changes the trust boundary
-  (IPC validation, spawn-path whitelisting, settings save resilience).
-- **Developer / docs**: test infra, plan archives, doc additions.
-  One short bullet per topic, not per commit.
+Pushing the tag fires [`release.yml`](../.github/workflows/release.yml),
+which runs four jobs:
 
-Keep the markdown raw (in a fenced block when sharing in chat) so it
-copies clean into the GH UI without rendering artifacts.
+- **`build-windows`** (pinned `windows-2022`, Node 24): `npm ci` →
+  `npm run rebuild` (rebuilds the `da-win32` native addon against the
+  Electron ABI) → `npm run build` → `electron-builder --win
+  --publish never` → **code-signs** the portable exe via SSL.com
+  eSigner → uploads `dist/*-portable.exe`.
+- **`build-linux`** (ubuntu-latest): builds and packages `deb` +
+  `AppImage` (the `beforeBuild` hook is overridden with
+  `scripts/noop-before-build.cjs` to skip the Windows-only addon
+  rebuild).
+- **`build-mac`** (macos-latest): imports the Developer ID cert into a
+  temp keychain, **signs + notarizes + staples** the `.app` via
+  electron-builder, then separately signs/notarizes/staples the `.dmg`.
+- **`release`** (needs all three, only on a tag ref): downloads the
+  artifacts and creates the GitHub Release via
+  `softprops/action-gh-release@v2` with `generate_release_notes: true`,
+  attaching the portable exe, deb, AppImage, and dmg — then posts a
+  Discord announcement.
 
-## 5. Create the release in the GitHub UI
-
-1. Go to <https://github.com/hybrasyl/epona/releases> → **Draft a new
-   release**.
-2. **Choose a tag** → pick the `vX.Y.Z` you pushed in step 3.
-3. **Release title** → `vX.Y.Z` (or a short headline).
-4. Paste the markdown notes from step 4 into the description.
-5. Leave **Set as the latest release** checked.
-6. **Publish release**.
-
-Publishing fires `release.yml` (via the `release.published` event):
-
-- Installs deps (`npm ci`).
-- Rebuilds the native addon (`npm run rebuild` → `da-win32`).
-  Required because the addon is built against the Electron ABI.
-- Builds renderer + main bundles (`npm run build`).
-- Packages the portable exe (`electron-builder --win --publish never`).
-- Attaches `dist/*-portable.exe` to the just-published release via
-  `softprops/action-gh-release@v2` (notes you wrote in step 4 stay
-  intact — the action only adds files).
-- Posts a Discord announcement to the channel configured in the
-  `DISCORD_WEBHOOK_URL` repo secret.
-
-Watch the Actions tab to confirm the build went green. Typical
-runtime is a few minutes (the native rebuild and electron-builder
-packaging are the slow steps).
+Watch the Actions tab to confirm all four jobs go green. Typical
+runtime is several minutes (native rebuild, electron-builder packaging,
+and macOS notarization are the slow steps).
 
 ## 6. After the build
 
-- Confirm the portable exe is attached to the release page.
+- Confirm all four artifacts are attached to the release page:
+  `epona-X.Y.Z-portable.exe`, `*.deb`, `*.AppImage`, `epona-X.Y.Z.dmg`.
 - Confirm the Discord post landed.
-- Smoke-test the artifact: download it, run on a clean profile to
-  make sure the native addon loaded and the app actually launches.
-- If anything's wrong with the artifact, you can delete the release,
-  delete the tag (`git push --delete origin vX.Y.Z`), fix forward,
-  re-tag, and re-publish. Tags are cheap; don't be precious about them.
+- Smoke-test the artifact: download the portable exe, run on a clean
+  profile to make sure the native addon loaded and the app launches.
+- If anything's wrong, delete the release, delete the tag
+  (`git push --delete origin vX.Y.Z`), fix forward, re-tag, re-push.
+  Tags are cheap; don't be precious about them.
 
 ---
 
 ## Pinned facts
 
 - Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-- Trigger: `release.published` event — i.e. clicking **Publish** on a
-  draft release in the GitHub UI. Tag pushes by themselves do nothing.
-- Builds on: `windows-latest`, Node 24
-- Currently produces: Windows portable exe only. The portable target
-  is configured in [`electron-builder.yml`](../electron-builder.yml)
-  (`win.target: portable`), so plain `electron-builder --win` is all
-  the workflow needs — no CLI flag required.
-- Local equivalent: `npm run build:portable` (or `build:win` — they're
-  identical right now). Both run `npm run build && electron-builder
-  --win`, which is what CI does in two steps.
-- macOS / Linux are local-manual builds (not CI-published). On a mac:
-  `npm run build:mac` → `dist/Epona-x.y.z-{arm64,x64}.{dmg,zip}`. On a
-  Linux host or inside WSL2 (where `mksquashfs` exists):
-  `npm run build:linux` → `dist/epona-x.y.z-x86_64.AppImage`. Both
-  scripts override the `beforeBuild` hook via
-  `--config.beforeBuild=scripts/noop-before-build.cjs` so the
-  Windows-only `da-win32` rebuild is skipped. After local builds,
-  attach the artifacts to the release page by hand (release-edit →
-  "Attach binaries").
+- Trigger: **`push` of a `v*` tag** (`on: push: tags: ['v*']`), plus
+  manual `workflow_dispatch`. Pushing the tag builds and publishes;
+  there is no `release.published` UI step.
+- Builds on: `windows-2022` (pinned), `ubuntu-latest`, `macos-latest` —
+  all Node 24.
+- Produces: **Windows portable exe (signed), macOS dmg (signed +
+  notarized), Linux deb + AppImage** — all attached to the GitHub
+  Release automatically. Targets are configured in
+  [`electron-builder.yml`](../electron-builder.yml).
+- Local equivalents: `npm run build:portable` / `build:win` (Windows),
+  `npm run build:mac` (→ `dist/Epona-x.y.z-*.dmg`), `npm run build:linux`
+  (→ `dist/epona-x.y.z-x86_64.AppImage`, needs a Linux host or WSL2 with
+  `mksquashfs`). The mac/linux scripts override the `beforeBuild` hook
+  via `--config.beforeBuild=scripts/noop-before-build.cjs` to skip the
+  Windows-only `da-win32` rebuild. Only needed if you want to build
+  locally — CI produces all three.
 - Native addon: `packages/da-win32/` is rebuilt against the Electron
-  ABI in CI via `npm run rebuild`. Local builds also need this — the
-  `beforeBuild` hook in `electron-builder.yml` invokes the same
-  `@electron/rebuild` command, so a fresh `electron-builder` invocation
-  picks it up.
-- Discord webhook URL lives in repo secret `DISCORD_WEBHOOK_URL`.
-- Previous tags: `git tag --sort=-version:refname`.
+  ABI in CI via `npm run rebuild`. Local Windows builds do this through
+  the `beforeBuild` hook in `electron-builder.yml`.
+- Signing secrets — Windows (SSL.com eSigner): `ES_USERNAME`,
+  `ES_PASSWORD`, `ES_CREDENTIAL_ID`, `ES_TOTP_SECRET`. macOS
+  (Developer ID + notarization): `MACOS_CERT_P12_BASE64`,
+  `MACOS_CERT_PASSWORD`, `APPLE_API_KEY_P8_BASE64`, `APPLE_API_KEY_ID`,
+  `APPLE_API_ISSUER`. Discord webhook: `DISCORD_WEBHOOK_URL`.
+- Repo: <https://github.com/eriscorp/epona>. Previous tags:
+  `git tag --sort=-version:refname`.

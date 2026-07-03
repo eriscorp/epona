@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Epona</title>
+    <style>
+      /* Shown in a frameless BrowserWindow before the renderer bundle loads.
+         Self-contained (no JS, no external CSS) so it paints instantly and
+         mirrors the branded splash shipped in the sibling launchers. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        /* Deep-navy Hybrasyl palette — matches Epona's default theme. */
+        background: radial-gradient(circle at 50% 32%, #16294a 0%, #0c1524 100%);
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        color: #cdd8ea;
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: default;
+      }
+      .logo {
+        width: 148px;
+        height: auto;
+        margin-bottom: 16px;
+        filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.45));
+      }
+      .title {
+        font-size: 22px;
+        letter-spacing: 3px;
+        font-weight: 600;
+        color: #f0e6cc;
+      }
+      .sub {
+        margin-top: 6px;
+        font-size: 12px;
+        letter-spacing: 1px;
+        color: #7f8fb0;
+      }
+      .spinner {
+        margin-top: 22px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.14);
+        border-top-color: #4d84d1;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <img class="logo" src="./epona.png" alt="Epona" />
+    <div class="title">EPONA</div>
+    <div class="sub">Loading…</div>
+    <div class="spinner"></div>
+  </body>
+</html>
