@@ -212,6 +212,20 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
   return { success: true, pid: wrapperPid }
 }
 
+// Non-Windows direct spawn: no PowerShell wrapper — spawn the server directly
+// and let the renderer's log panel surface its output via wireInstanceLogs.
+// detached:true puts the child in its own process group so killProcessTree can
+// SIGKILL the whole tree by negated pid. Shared by binary + repo modes.
+function spawnDirect(spec, cwd, cleanup) {
+  const child = spawn(spec.command, spec.args, {
+    cwd,
+    env: { ...process.env, ...spec.env },
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  return { success: true, child, cleanup }
+}
+
 // Orchestration. Returns:
 //   { success: true, pid, cleanup }   — pid is the PS wrapper; cleanup() releases
 //                                       any worktrees and removes Directory.Build.props
@@ -219,17 +233,7 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
 async function launchBinary(instance) {
   const spec = buildBinarySpawn(instance, await resolveDotnetPath())
   if (process.platform !== 'win32') {
-    // No PowerShell wrapper on non-Windows — spawn the server directly and
-    // let the renderer's log panel surface its output via wireInstanceLogs.
-    // detached:true puts the child in its own process group so killProcessTree
-    // can SIGKILL the whole tree by negated pid.
-    const child = spawn(spec.command, spec.args, {
-      cwd: instance.dataDir,
-      env: { ...process.env, ...spec.env },
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    return { success: true, child, cleanup: async () => {} }
+    return spawnDirect(spec, instance.dataDir, async () => {})
   }
   const result = await spawnInPowerShellConsole({
     command: spec.command,
@@ -263,11 +267,25 @@ async function launchRepo(instance) {
   let didWriteBuildProps = false
   // Single teardown for every exit path — undo build-props, then release the
   // XML worktree, then the server worktree. Reads the mutable vars at call time
-  // so it reflects whatever setup completed before it runs.
+  // so it reflects whatever setup completed before it runs. Each step swallows
+  // its own error so one failing step can't strand the others, and so the catch
+  // and spawn-failure paths can both just `await cleanup()`.
   const cleanup = async () => {
-    if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
-    await releaseXml()
-    await releaseServer()
+    try {
+      if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
+    } catch {
+      /* best effort */
+    }
+    try {
+      await releaseXml()
+    } catch {
+      /* best effort */
+    }
+    try {
+      await releaseServer()
+    } catch {
+      /* best effort */
+    }
   }
   try {
     // xmlBranch !== null means "use local XML" (either '' = in-place or a
@@ -298,13 +316,7 @@ async function launchRepo(instance) {
     //    On non-Windows, spawn directly and let wireInstanceLogs surface output.
     const spec = buildRepoSpawn(instance, serverWorktreePath, await resolveDotnetPath())
     if (process.platform !== 'win32') {
-      const child = spawn(spec.command, spec.args, {
-        cwd: serverWorktreePath,
-        env: { ...process.env, ...spec.env },
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      })
-      return { success: true, child, cleanup }
+      return spawnDirect(spec, serverWorktreePath, cleanup)
     }
     const result = await spawnInPowerShellConsole({
       command: spec.command,
@@ -319,24 +331,9 @@ async function launchRepo(instance) {
     }
     return { success: true, pid: result.pid, cleanup }
   } catch (err) {
-    // Any setup step (worktree add, build-props write) blew up — undo and report.
-    // Cleanup failures during error recovery are themselves swallowed: the
-    // caller already has a meaningful error to surface.
-    try {
-      if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
-    } catch {
-      /* swallow during error recovery */
-    }
-    try {
-      await releaseXml()
-    } catch {
-      /* swallow during error recovery */
-    }
-    try {
-      await releaseServer()
-    } catch {
-      /* swallow during error recovery */
-    }
+    // Any setup step (worktree add, build-props write) blew up — undo and
+    // report. cleanup() already swallows each step's errors during recovery.
+    await cleanup()
     return { success: false, error: `Failed to set up repo-mode launch: ${err.message}` }
   }
 }
