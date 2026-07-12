@@ -16,6 +16,25 @@ four near-identical fantasy theme files.
 
 **By severity:** correctness 1 (fixed), high 1, medium 4, low 11.
 
+## Outcome (this pass)
+
+**Applied** — the correctness bug (C1) plus all four medium items (pipeChildLines,
+launchRepo cleanup, deriveBranchOptions, `<SettingsSection>`) and the low items:
+spawnDirect, notifyPidExit, useDotnetRuntime, runBusy, `<PortField>`,
+TAB_STACK_SX, ACTIVE_ROW_BG, derive-active-instance-once, base.css dedup. Two
+new patterns were lifted into **unit-tested** modules while at it — `childLines`
+(pipeChildLines) and `repoRoots` (flush gathering).
+
+**Deliberately skipped** (judgment calls, noted at each finding):
+- **#1 theme factory** — known red herring (see below); declined.
+- **reapPidInstance (full merge)** — stop vs reset have genuinely different
+  kill-failure semantics; a shared helper in 0%-covered lifecycle code risked a
+  regression, so only the identical `childExit` notify was extracted.
+- **useSnack (R4)** — `SnackbarHost` already captured the real duplication.
+- **Tab `value` from TAB_ORDER (A2)** — low urgency; the disabled-legacy-tab case
+  makes a naive map riskier than the hardcoded indices are worth.
+- **M3/M4** — partial overlap / intentional test seam; left as-is.
+
 ---
 
 ## Correctness
