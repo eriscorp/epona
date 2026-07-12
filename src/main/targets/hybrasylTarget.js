@@ -182,7 +182,11 @@ export async function launch(config, profile, daClientPath) {
   } catch {
     // Path is gone — keep dirname() and let the client's own fallback cope.
   }
-  const env = { ...process.env, DA_ASSET_PATH: assetPath }
+  // DA_NO_LAUNCHER: Epona IS the launcher, so the client should never show its own selector —
+  // even for a hostname-less profile (which sets no DA_HOST and would otherwise drop into the
+  // launcher). The client then resolves host from DA_HOST or its saved config, asset from
+  // DA_ASSET_PATH, and connects directly.
+  const env = { ...process.env, DA_ASSET_PATH: assetPath, DA_NO_LAUNCHER: '1' }
   if (profile?.hostname) {
     env.DA_HOST = profile.hostname
     env.DA_HOST_PORT = String(profile.port)
@@ -192,7 +196,14 @@ export async function launch(config, profile, daClientPath) {
     const child = spawn(command, args, {
       cwd,
       stdio: isRepo ? ['ignore', 'pipe', 'pipe'] : 'ignore',
-      windowsHide: true,
+      // Hide the spawned process's console ONLY for `repo`. There `dotnet run` is a console
+      // host whose window-owning client is a separate grandchild, so hiding the host console is
+      // safe and the client window still shows. For `exe` (WinExe — no console) and `dll`
+      // (`dotnet Brigid.dll` runs the client *in-process*, so the console host IS the window
+      // owner), windowsHide would pass SW_HIDE to the very process that creates the game window,
+      // making it appear hidden (the bug this fixes) — so don't. A `dll` launch therefore shows
+      // a stray dotnet console; unavoidable without an apphost exe.
+      windowsHide: isRepo,
       env
     })
     // For repo launches with a worktree, the cleanup releases the worktree

@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
-import { existsSync, mkdirSync, copyFileSync, promises as fs } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { killProcessTree } from './processKill.js'
@@ -28,6 +28,22 @@ import {
 
 let settingsManager
 
+// Pin the app-data directory to Local BEFORE the app is ready. Electron binds
+// Chromium's default session/cache to userData at the 'ready' event; if we
+// override userData later (inside whenReady) Chromium has already resolved and
+// begun writing to its default path — %APPDATA%\Roaming\epona on Windows — and
+// its transients leak there. Computing + setPath at module load runs before
+// ready, so Chromium binds to Local from the start.
+//
+// %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
+// no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
+const localAppData =
+  process.platform === 'win32'
+    ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
+    : app.getPath('appData')
+const dataDir = join(localAppData, 'Erisco', 'Epona')
+app.setPath('userData', dataDir)
+
 // Splash + reveal coordination. The main window is created hidden and only
 // shown once the renderer signals it has hydrated its settings ('app:ready'),
 // so the first visible frame is already populated (no flash of empty UI).
@@ -54,6 +70,21 @@ function migrateSettingsFromRoaming(settingsPath) {
     if (existsSync(oldBackup)) copyFileSync(oldBackup, join(settingsPath, 'settings.bak.json'))
   } catch {
     /* best effort — settings manager falls back to defaults */
+  }
+}
+
+// Pre-fix builds leaked Chromium transients to the default app-name folder
+// (%APPDATA%\Roaming\epona) because userData was overridden too late. userData
+// is now pinned before ready, so that folder is never written again — sweep any
+// leftover from an earlier version. Scoped to that exact default path only.
+function removeStrayRoamingData() {
+  if (process.platform !== 'win32') return
+  try {
+    const stray = join(app.getPath('appData'), app.getName()) // Roaming\epona
+    if (stray === app.getPath('userData')) return // safety: never delete the live dir
+    rmSync(stray, { recursive: true, force: true })
+  } catch {
+    /* best effort */
   }
 }
 
@@ -112,19 +143,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
-  // no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
-  const localAppData =
-    process.platform === 'win32'
-      ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
-      : app.getPath('appData')
-
-  const settingsPath = join(localAppData, 'Erisco', 'Epona')
-  const cachePath = join(localAppData, 'Erisco', 'Epona')
-  app.setPath('userData', cachePath)
-
-  migrateSettingsFromRoaming(settingsPath)
-  settingsManager = createSettingsManager(settingsPath)
+  // userData is already pinned to Local at module load (see dataDir above).
+  removeStrayRoamingData()
+  migrateSettingsFromRoaming(dataDir)
+  settingsManager = createSettingsManager(dataDir)
 
   if (process.platform === 'win32') {
     app.setAppUserModelId(app.isPackaged ? 'com.darkages.epona' : process.execPath)

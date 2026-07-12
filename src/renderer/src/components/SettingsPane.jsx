@@ -20,7 +20,8 @@ import {
   DialogActions,
   Checkbox,
   FormControlLabel,
-  Tooltip
+  Tooltip,
+  Alert
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -30,6 +31,7 @@ import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
 import { PANEL_BORDER } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
+import { detectProtectedLocation } from '../../../shared/protectedPaths.js'
 
 const THEMES = [
   { key: 'hybrasyl', label: 'Hybrasyl' },
@@ -47,6 +49,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
   const [worldDirDialog, setWorldDirDialog] = useState(null) // null | { mode, worldDir }
   const isWindows = window.sparkAPI.platform === 'win32'
+  const protectedLocation = isWindows ? detectProtectedLocation(settings.clientPath) : null
 
   async function browseClient() {
     try {
@@ -208,6 +211,12 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
           >
             Browse
           </Button>
+          {protectedLocation && (
+            <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>
+              This client is inside {protectedLocation}. Windows may block it from launching (error
+              740). Move it to a normal folder like C:\DarkAges.
+            </Alert>
+          )}
         </Box>
 
         {/* Client Version — legacy-client memory-patch target; irrelevant on

@@ -184,9 +184,9 @@ Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
 
 <table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_options.gif" width="350" alt="Settings pane — themes, world directories, and preferences" /></td></tr></table>
 
-Settings persist to `%APPDATA%\Erisco\Epona\settings.json` (roaming).
-Chromium's cache and other Electron transients live separately under
-`%LOCALAPPDATA%\Erisco\Epona\`.
+Settings persist to `%LOCALAPPDATA%\Erisco\Epona\settings.json`. Chromium's
+cache and other Electron transients live in the same directory — `userData` is
+pinned to Local (not the roaming profile) before the app is ready.
 
 - **Atomic writes** — every save writes `settings.tmp.json` and
   renames over `settings.json` so a crash mid-save can't leave the
