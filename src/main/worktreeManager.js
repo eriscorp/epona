@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs'
-import { join, resolve as resolvePath } from 'path'
+import { join, resolve as resolvePath, sep } from 'path'
 import { runGit } from './gitExec.js'
 
 // Refcounted git-worktree lifecycle. Two server instances on the same branch
@@ -95,6 +95,14 @@ export function ensureWorktree(repoPath, branch) {
     const findAdopted = (list) =>
       list.find((e) => e.branch === branch || resolvePath(e.path) === target)
 
+    // Prune up front — drop any stale admin entries whose working dirs were
+    // deleted out from under git (manual `rm`, a crashed run, an interrupted
+    // release). Without this, such a dead registration makes the `worktree add`
+    // below fail with "already exists" even though nothing is on disk, wedging
+    // the launch. Prune only removes entries whose dir is already gone, so it
+    // never touches a live worktree or the user's files.
+    await runGit(repo, ['worktree', 'prune']).catch(() => {})
+
     // Adoption check — is there already a worktree on disk for this branch?
     // Two cases land here: (a) Epona was restarted and our in-memory state is
     // empty; (b) a developer made the worktree manually outside Epona.
@@ -188,6 +196,54 @@ export function releaseWorktree(repoPath, branch) {
       // worktree GC UI.
       return { removed: false, retained: true, error: err.message }
     }
+  })
+}
+
+// Force-remove every Epona-managed worktree for a repo, then prune git's admin
+// entries and drop in-memory refcounts — the manual "unstick me" path behind
+// Settings → Flush Worktrees. Unlike releaseWorktree this uses `--force`, so it
+// discards uncommitted work in those worktrees; callers must confirm with the
+// user first. Only touches worktrees under <repo>/.worktrees — never the main
+// working tree or a hand-made worktree elsewhere. Returns { repo, removed[],
+// errors[] } so the caller can report what happened.
+export function flushWorktrees(repoPath) {
+  const repo = resolvePath(repoPath)
+  return withMutex(repo, async () => {
+    const removed = []
+    const errors = []
+    const wtRoot = resolvePath(repo, '.worktrees')
+    const managed = (p) => p === wtRoot || p.startsWith(wtRoot + sep)
+
+    await runGit(repo, ['worktree', 'prune']).catch(() => {})
+    const onDisk = await listWorktreesOnDisk(repo)
+    for (const e of onDisk) {
+      if (!managed(e.path)) continue
+      try {
+        await runGit(repo, ['worktree', 'remove', '--force', e.path])
+        removed.push(e.path)
+      } catch (err) {
+        errors.push({ path: e.path, error: err.message })
+      }
+    }
+
+    // Sweep leftover dirs under .worktrees that git no longer tracks (e.g. a
+    // prior failed remove). Skip anything git still reported above — a remove
+    // that errored was already surfaced; don't rm it out from under a lock.
+    const tracked = new Set(onDisk.map((e) => e.path))
+    for (const name of await fs.readdir(wtRoot).catch(() => [])) {
+      const p = resolvePath(wtRoot, name)
+      if (tracked.has(p)) continue
+      try {
+        await fs.rm(p, { recursive: true, force: true })
+        removed.push(p)
+      } catch (err) {
+        errors.push({ path: p, error: err.message })
+      }
+    }
+
+    await runGit(repo, ['worktree', 'prune']).catch(() => {})
+    refcounts.delete(repo)
+    return { repo, removed, errors }
   })
 }
 

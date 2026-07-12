@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { killProcessTree } from './processKill.js'
 import { settingsSchema } from './schemas/settings.js'
@@ -15,8 +15,8 @@ import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
-import { listBranches, isGitRepo, diagnoseGitRepo } from './gitOps.js'
-import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
+import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
+import { releaseAll as releaseAllWorktrees, flushWorktrees } from './worktreeManager.js'
 import { createSplashWindow } from './splash.js'
 import { formatLogLines } from '../shared/logFormat.js'
 import {
@@ -506,6 +506,35 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
   ipcMain.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
+
+  // Force-clear managed worktrees for every configured repo — the Settings
+  // "Flush Worktrees" escape hatch for the occasional "already exists" wedge.
+  // Gathers repo paths from the hybrasyl client target and every server
+  // instance, resolves each to its git top level (dedup), and flushes it. The
+  // renderer confirms first (this discards uncommitted work in those worktrees).
+  ipcMain.handle('worktrees:flush', async () => {
+    const settings = settingsManager.load()
+    const candidates = []
+    const clientRepo = settings?.targets?.hybrasyl?.clientRepoPath
+    if (clientRepo) candidates.push(dirname(clientRepo)) // .csproj → its directory
+    for (const inst of settings?.instances ?? []) {
+      if (inst.serverRepoPath) candidates.push(inst.serverRepoPath)
+      if (inst.xmlRepoPath) candidates.push(inst.xmlRepoPath)
+    }
+    const roots = new Set()
+    for (const c of candidates) {
+      const root = await gitToplevel(c).catch(() => null)
+      if (root) roots.add(root)
+    }
+    const errors = []
+    let removed = 0
+    for (const root of roots) {
+      const r = await flushWorktrees(root)
+      removed += r.removed.length
+      errors.push(...r.errors)
+    }
+    return { ok: errors.length === 0, repos: roots.size, removed, errors }
+  })
 
   // Instance lifecycle helpers live in instanceManager.js (unit-tested there);
   // bind the stateful deps once. toSafeResult / isTrackedAlive / raceChildExit

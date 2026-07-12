@@ -48,8 +48,30 @@ const emptyWorldDir = { name: '', path: '' }
 export default function SettingsPane({ settings, versions, onClose, onChange }) {
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
   const [worldDirDialog, setWorldDirDialog] = useState(null) // null | { mode, worldDir }
+  const [flushConfirm, setFlushConfirm] = useState(false)
+  const [flushing, setFlushing] = useState(false)
+  const [flushResult, setFlushResult] = useState(null) // null | { ok, repos, removed, errors }
   const isWindows = window.sparkAPI.platform === 'win32'
   const protectedLocation = isWindows ? detectProtectedLocation(settings.clientPath) : null
+
+  // Worktrees only exist for repo-mode targets, so the Flush Worktrees
+  // maintenance action is only shown when a client/server repo is configured.
+  const hasRepos =
+    !!settings.targets?.hybrasyl?.clientRepoPath ||
+    (settings.instances ?? []).some((i) => i.serverRepoPath || i.xmlRepoPath)
+
+  async function flushWorktrees() {
+    setFlushConfirm(false)
+    setFlushing(true)
+    setFlushResult(null)
+    try {
+      setFlushResult(await window.sparkAPI.flushWorktrees())
+    } catch (err) {
+      setFlushResult({ ok: false, repos: 0, removed: 0, errors: [{ error: err.message }] })
+    } finally {
+      setFlushing(false)
+    }
+  }
 
   async function browseClient() {
     try {
@@ -374,7 +396,71 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
             </List>
           )}
         </Box>
+
+        {hasRepos && (
+          <>
+            <Divider />
+            <Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mb: 0.5, display: 'block' }}
+              >
+                Maintenance
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                color="warning"
+                onClick={() => setFlushConfirm(true)}
+                disabled={flushing}
+                sx={{ width: '100%' }}
+              >
+                {flushing ? 'Flushing…' : 'Flush Worktrees'}
+              </Button>
+              <Typography
+                variant="caption"
+                sx={{ mt: 0.5, display: 'block', opacity: 0.6, fontSize: 11 }}
+              >
+                Clears Epona-managed git worktrees for configured repos. Use this if a launch fails
+                with a &quot;worktree already exists&quot; error.
+              </Typography>
+              {flushResult && (
+                <Alert
+                  severity={flushResult.ok ? 'success' : 'warning'}
+                  sx={{ mt: 1, fontSize: 12 }}
+                  onClose={() => setFlushResult(null)}
+                >
+                  {flushResult.ok
+                    ? `Flushed ${flushResult.removed} worktree${flushResult.removed === 1 ? '' : 's'} across ${flushResult.repos} repo${flushResult.repos === 1 ? '' : 's'}.`
+                    : `Flushed ${flushResult.removed}, but ${flushResult.errors.length} could not be removed (they may be in use — stop running servers/clients and retry).`}
+                </Alert>
+              )}
+            </Box>
+          </>
+        )}
       </Box>
+
+      {flushConfirm && (
+        <Dialog open onClose={() => setFlushConfirm(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontSize: '1rem' }}>Flush worktrees?</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">
+              This force-removes all Epona-managed git worktrees for your configured repos,
+              discarding any uncommitted changes inside them. Stop any running servers or clients
+              first. Your main checkouts are not touched.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button size="small" onClick={() => setFlushConfirm(false)}>
+              Cancel
+            </Button>
+            <Button size="small" variant="contained" color="warning" onClick={flushWorktrees}>
+              Flush
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
 
       {profileDialog && (
         <ProfileDialog

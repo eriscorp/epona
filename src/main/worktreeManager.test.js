@@ -8,6 +8,7 @@ import {
   ensureWorktree,
   releaseWorktree,
   releaseAll,
+  flushWorktrees,
   _resetForTests
 } from './worktreeManager.js'
 
@@ -176,6 +177,48 @@ describe('worktreeManager', () => {
       expect(r.retained).toBe(true)
       // Path should still exist on disk
       expect((await fs.stat(path)).isDirectory()).toBe(true)
+    })
+  })
+
+  describe('flushWorktrees', () => {
+    it('force-removes managed worktrees even when dirty, and clears refcounts', async () => {
+      const a = await ensureWorktree(repoPath, 'develop')
+      const b = await ensureWorktree(repoPath, 'feature/foo')
+      // Make one dirty so a plain `worktree remove` would refuse — flush --forces.
+      await fs.writeFile(join(a, 'dirty.txt'), 'discard me')
+      await gitSync(a, ['add', 'dirty.txt'])
+
+      const r = await flushWorktrees(repoPath)
+      expect(r.errors).toEqual([])
+      expect(r.removed).toContain(a)
+      expect(r.removed).toContain(b)
+      await expect(fs.stat(a)).rejects.toThrow()
+      await expect(fs.stat(b)).rejects.toThrow()
+      // Refcounts cleared: a fresh ensure creates anew rather than adopting.
+      const again = await ensureWorktree(repoPath, 'develop')
+      expect((await fs.stat(again)).isDirectory()).toBe(true)
+    })
+
+    it('sweeps a leftover .worktrees dir that git no longer tracks', async () => {
+      const stray = resolvePath(repoPath, '.worktrees', 'orphan')
+      await fs.mkdir(stray, { recursive: true })
+      await fs.writeFile(join(stray, 'junk.txt'), 'leftover')
+      const r = await flushWorktrees(repoPath)
+      expect(r.removed).toContain(stray)
+      await expect(fs.stat(stray)).rejects.toThrow()
+    })
+
+    it('is a no-op that reports success when there are no worktrees', async () => {
+      const r = await flushWorktrees(repoPath)
+      expect(r.removed).toEqual([])
+      expect(r.errors).toEqual([])
+    })
+
+    it('never touches the main working tree', async () => {
+      await ensureWorktree(repoPath, 'develop')
+      await flushWorktrees(repoPath)
+      // The repo's own checkout and its committed file survive.
+      expect((await fs.stat(join(repoPath, '.git'))).isDirectory()).toBe(true)
     })
   })
 
