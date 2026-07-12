@@ -155,6 +155,9 @@ export default function App() {
   }
 
   const currentTheme = themes[settings.theme] || hybrasylTheme
+  // Resolve the active server instance once — reused for the client tab's
+  // auto-save target and the server LogPane's title/slug.
+  const activeInstance = settings.instances.find((i) => i.id === settings.activeInstance)
 
   return (
     <ThemeProvider theme={currentTheme}>
@@ -258,9 +261,7 @@ export default function App() {
                 onChange={update}
                 logPaneOpen={logPaneOpen}
                 onToggleLogPane={() => setLogPaneOpen((o) => !o)}
-                activeInstanceLogDir={
-                  settings.instances.find((i) => i.id === settings.activeInstance)?.logDir || ''
-                }
+                activeInstanceLogDir={activeInstance?.logDir || ''}
               />
               <ProfileSelector
                 profiles={settings.profiles}
@@ -339,14 +340,8 @@ export default function App() {
         {logPaneOpen && activeTab === 2 && (
           <LogPane
             source={settings.activeInstance}
-            title={
-              settings.instances.find((i) => i.id === settings.activeInstance)?.name ??
-              'Server Instance'
-            }
-            slug={(
-              settings.instances.find((i) => i.id === settings.activeInstance)?.name ??
-              'server-instance'
-            ).replace(/[^A-Za-z0-9._-]+/g, '-')}
+            title={activeInstance?.name ?? 'Server Instance'}
+            slug={(activeInstance?.name ?? 'server-instance').replace(/[^A-Za-z0-9._-]+/g, '-')}
             onClose={() => setLogPaneOpen(false)}
           />
         )}

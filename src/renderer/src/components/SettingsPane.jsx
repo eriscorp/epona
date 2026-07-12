@@ -57,6 +57,47 @@ const ACCORDION_SX = {
   '&:before': { display: 'none' }
 }
 const SUMMARY_SX = { '& .MuiAccordionSummary-content': { my: 1, alignItems: 'center' } }
+// Subtle highlight for the active row in the profiles / world-directory lists.
+const ACTIVE_ROW_BG = 'rgba(255,255,255,0.06)'
+
+// One collapsible settings section. Owns the repeated Accordion/Summary
+// boilerplate (flat styling, single-open wiring, expand icon); the parent
+// passes the shared `expanded` state + `onToggle` (handleAccordion). `action`
+// renders a right-aligned control in the header (e.g. an Add button, which
+// must stopPropagation so it doesn't toggle the accordion); `detailsSx` styles
+// the body container.
+function SettingsSection({ panel, title, expanded, onToggle, action, detailsSx, children }) {
+  return (
+    <Accordion
+      disableGutters
+      elevation={0}
+      square
+      expanded={expanded === panel}
+      onChange={onToggle(panel)}
+      sx={ACCORDION_SX}
+    >
+      <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={SUMMARY_SX}>
+        {action ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexGrow: 1,
+              mr: 1
+            }}
+          >
+            <Typography variant="subtitle2">{title}</Typography>
+            {action}
+          </Box>
+        ) : (
+          <Typography variant="subtitle2">{title}</Typography>
+        )}
+      </AccordionSummary>
+      <AccordionDetails sx={detailsSx}>{children}</AccordionDetails>
+    </Accordion>
+  )
+}
 
 export default function SettingsPane({ settings, versions, onClose, onChange }) {
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
@@ -210,322 +251,262 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
         }}
       >
         {/* Theme */}
-        <Accordion
-          disableGutters
-          elevation={0}
-          square
-          expanded={expanded === 'theme'}
-          onChange={handleAccordion('theme')}
-          sx={ACCORDION_SX}
+        <SettingsSection panel="theme" title="Theme" expanded={expanded} onToggle={handleAccordion}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Theme</InputLabel>
+            <Select
+              value={settings.theme || 'hybrasyl'}
+              label="Theme"
+              onChange={(e) => onChange({ theme: e.target.value })}
+            >
+              {THEMES.map((t) => (
+                <MenuItem key={t.key} value={t.key}>
+                  {t.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </SettingsSection>
+
+        {/* Legacy Client — path + memory-patch version target */}
+        <SettingsSection
+          panel="client"
+          title="Legacy Client"
+          expanded={expanded}
+          onToggle={handleAccordion}
+          detailsSx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
-          <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={SUMMARY_SX}>
-            <Typography variant="subtitle2">Theme</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              {isWindows ? 'Client Executable' : 'Client Path'}
+            </Typography>
+            <TextField
+              fullWidth
+              size="small"
+              value={settings.clientPath}
+              onChange={(e) => onChange({ clientPath: e.target.value })}
+              placeholder={isWindows ? 'Path to Darkages.exe' : 'Path to Dark Ages assets folder'}
+              inputProps={{ style: { fontSize: 12 } }}
+            />
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={browseClient}
+              sx={{ mt: 1, width: '100%' }}
+            >
+              Browse
+            </Button>
+            {protectedLocation && (
+              <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>
+                This client is inside {protectedLocation}. Windows may block it from launching
+                (error 740). Move it to a normal folder like C:\DarkAges.
+              </Alert>
+            )}
+          </Box>
+
+          {/* Client Version — legacy-client memory-patch target; irrelevant on
+                non-Windows, where the path points at an asset folder with no version. */}
+          {isWindows && (
             <FormControl fullWidth size="small">
-              <InputLabel>Theme</InputLabel>
+              <InputLabel>Client Version</InputLabel>
               <Select
-                value={settings.theme || 'hybrasyl'}
-                label="Theme"
-                onChange={(e) => onChange({ theme: e.target.value })}
+                value={settings.version}
+                label="Client Version"
+                onChange={(e) => onChange({ version: e.target.value })}
               >
-                {THEMES.map((t) => (
-                  <MenuItem key={t.key} value={t.key}>
-                    {t.label}
+                <MenuItem value="auto">Auto-detect</MenuItem>
+                {versions.map((v) => (
+                  <MenuItem key={v.versionCode} value={v.versionCode}>
+                    {v.name}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
-          </AccordionDetails>
-        </Accordion>
-
-        {/* Legacy Client — path + memory-patch version target */}
-        <Accordion
-          disableGutters
-          elevation={0}
-          square
-          expanded={expanded === 'client'}
-          onChange={handleAccordion('client')}
-          sx={ACCORDION_SX}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={SUMMARY_SX}>
-            <Typography variant="subtitle2">Legacy Client</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ mb: 0.5, display: 'block' }}
-              >
-                {isWindows ? 'Client Executable' : 'Client Path'}
-              </Typography>
-              <TextField
-                fullWidth
-                size="small"
-                value={settings.clientPath}
-                onChange={(e) => onChange({ clientPath: e.target.value })}
-                placeholder={isWindows ? 'Path to Darkages.exe' : 'Path to Dark Ages assets folder'}
-                inputProps={{ style: { fontSize: 12 } }}
-              />
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={browseClient}
-                sx={{ mt: 1, width: '100%' }}
-              >
-                Browse
-              </Button>
-              {protectedLocation && (
-                <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>
-                  This client is inside {protectedLocation}. Windows may block it from launching
-                  (error 740). Move it to a normal folder like C:\DarkAges.
-                </Alert>
-              )}
-            </Box>
-
-            {/* Client Version — legacy-client memory-patch target; irrelevant on
-                non-Windows, where the path points at an asset folder with no version. */}
-            {isWindows && (
-              <FormControl fullWidth size="small">
-                <InputLabel>Client Version</InputLabel>
-                <Select
-                  value={settings.version}
-                  label="Client Version"
-                  onChange={(e) => onChange({ version: e.target.value })}
-                >
-                  <MenuItem value="auto">Auto-detect</MenuItem>
-                  {versions.map((v) => (
-                    <MenuItem key={v.versionCode} value={v.versionCode}>
-                      {v.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-          </AccordionDetails>
-        </Accordion>
+          )}
+        </SettingsSection>
 
         {/* Server Profiles */}
-        <Accordion
-          disableGutters
-          elevation={0}
-          square
-          expanded={expanded === 'profiles'}
-          onChange={handleAccordion('profiles')}
-          sx={ACCORDION_SX}
+        <SettingsSection
+          panel="profiles"
+          title="Server Profiles"
+          expanded={expanded}
+          onToggle={handleAccordion}
+          action={
+            <Tooltip title="Add profile">
+              <IconButton
+                size="small"
+                component="div"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openAddProfile()
+                }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          }
         >
-          <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={SUMMARY_SX}>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexGrow: 1,
-                mr: 1
-              }}
-            >
-              <Typography variant="subtitle2">Server Profiles</Typography>
-              <Tooltip title="Add profile">
-                <IconButton
-                  size="small"
-                  component="div"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openAddProfile()
-                  }}
-                >
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails>
-            <List dense disablePadding>
-              {settings.profiles.map((p) => (
-                <ListItem
-                  key={p.id}
-                  sx={{
-                    px: 1,
-                    py: 0.5,
-                    borderRadius: 1,
-                    bgcolor:
-                      p.id === settings.activeProfile ? 'rgba(255,255,255,0.06)' : 'transparent'
-                  }}
-                >
-                  <ListItemText
-                    primary={p.name}
-                    secondary={p.redirect ? `${p.hostname}:${p.port}` : 'No redirect'}
-                    primaryTypographyProps={{ variant: 'body2' }}
-                    secondaryTypographyProps={{ variant: 'caption' }}
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton size="small" onClick={() => openEditProfile(p)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => deleteProfile(p.id)}
-                      disabled={settings.profiles.length <= 1}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
-          </AccordionDetails>
-        </Accordion>
+          <List dense disablePadding>
+            {settings.profiles.map((p) => (
+              <ListItem
+                key={p.id}
+                sx={{
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                  bgcolor: p.id === settings.activeProfile ? ACTIVE_ROW_BG : 'transparent'
+                }}
+              >
+                <ListItemText
+                  primary={p.name}
+                  secondary={p.redirect ? `${p.hostname}:${p.port}` : 'No redirect'}
+                  primaryTypographyProps={{ variant: 'body2' }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
+                <ListItemSecondaryAction>
+                  <IconButton size="small" onClick={() => openEditProfile(p)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => deleteProfile(p.id)}
+                    disabled={settings.profiles.length <= 1}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </SettingsSection>
 
         {/* World Directories */}
-        <Accordion
-          disableGutters
-          elevation={0}
-          square
-          expanded={expanded === 'worlds'}
-          onChange={handleAccordion('worlds')}
-          sx={ACCORDION_SX}
+        <SettingsSection
+          panel="worlds"
+          title="World Directories"
+          expanded={expanded}
+          onToggle={handleAccordion}
+          action={
+            <Tooltip title="Add world directory">
+              <IconButton
+                size="small"
+                component="div"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openAddWorldDir()
+                }}
+              >
+                <AddIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          }
         >
-          <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={SUMMARY_SX}>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexGrow: 1,
-                mr: 1
-              }}
-            >
-              <Typography variant="subtitle2">World Directories</Typography>
-              <Tooltip title="Add world directory">
-                <IconButton
-                  size="small"
-                  component="div"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openAddWorldDir()
-                  }}
-                >
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails>
-            {settings.worldDirectories.length === 0 ? (
-              <Typography variant="caption" sx={{ opacity: 0.6, fontStyle: 'italic' }}>
-                No world directories yet. Add one to use in a server instance.
-              </Typography>
-            ) : (
-              <List dense disablePadding>
-                {settings.worldDirectories.map((wd) => {
-                  const isActive = wd.id === settings.activeWorldDirectory
-                  const inUseCount = worldDirInUseBy(wd.id).length
-                  return (
-                    <ListItem
-                      key={wd.id}
-                      sx={{
-                        px: 1,
-                        py: 0.5,
-                        borderRadius: 1,
-                        bgcolor: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
-                        // Reserve space for the secondary actions so long paths get
-                        // ellipsis instead of overlapping the icons.
-                        pr: 14
+          {settings.worldDirectories.length === 0 ? (
+            <Typography variant="caption" sx={{ opacity: 0.6, fontStyle: 'italic' }}>
+              No world directories yet. Add one to use in a server instance.
+            </Typography>
+          ) : (
+            <List dense disablePadding>
+              {settings.worldDirectories.map((wd) => {
+                const isActive = wd.id === settings.activeWorldDirectory
+                const inUseCount = worldDirInUseBy(wd.id).length
+                return (
+                  <ListItem
+                    key={wd.id}
+                    sx={{
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      bgcolor: isActive ? ACTIVE_ROW_BG : 'transparent',
+                      // Reserve space for the secondary actions so long paths get
+                      // ellipsis instead of overlapping the icons.
+                      pr: 14
+                    }}
+                  >
+                    <ListItemText
+                      primary={wd.name}
+                      secondary={wd.path}
+                      primaryTypographyProps={{ variant: 'body2' }}
+                      secondaryTypographyProps={{
+                        variant: 'caption',
+                        sx: {
+                          fontFamily: 'monospace',
+                          fontSize: 10,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }
                       }}
-                    >
-                      <ListItemText
-                        primary={wd.name}
-                        secondary={wd.path}
-                        primaryTypographyProps={{ variant: 'body2' }}
-                        secondaryTypographyProps={{
-                          variant: 'caption',
-                          sx: {
-                            fontFamily: 'monospace',
-                            fontSize: 10,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }
-                        }}
-                      />
-                      <ListItemSecondaryAction>
-                        <Tooltip title={isActive ? 'Default for new instances' : 'Set as default'}>
-                          <IconButton size="small" onClick={() => setActiveWorldDir(wd.id)}>
-                            {isActive ? (
-                              <StarIcon fontSize="small" sx={{ color: 'text.button' }} />
-                            ) : (
-                              <StarBorderIcon fontSize="small" />
-                            )}
-                          </IconButton>
-                        </Tooltip>
-                        <IconButton size="small" onClick={() => openEditWorldDir(wd)}>
-                          <EditIcon fontSize="small" />
+                    />
+                    <ListItemSecondaryAction>
+                      <Tooltip title={isActive ? 'Default for new instances' : 'Set as default'}>
+                        <IconButton size="small" onClick={() => setActiveWorldDir(wd.id)}>
+                          {isActive ? (
+                            <StarIcon fontSize="small" sx={{ color: 'text.button' }} />
+                          ) : (
+                            <StarBorderIcon fontSize="small" />
+                          )}
                         </IconButton>
-                        <Tooltip
-                          title={
-                            inUseCount > 0
-                              ? `Delete — ${inUseCount} instance${inUseCount === 1 ? '' : 's'} will need a new world directory picked`
-                              : 'Delete'
-                          }
-                        >
-                          <IconButton size="small" onClick={() => deleteWorldDir(wd.id)}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  )
-                })}
-              </List>
-            )}
-          </AccordionDetails>
-        </Accordion>
+                      </Tooltip>
+                      <IconButton size="small" onClick={() => openEditWorldDir(wd)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <Tooltip
+                        title={
+                          inUseCount > 0
+                            ? `Delete — ${inUseCount} instance${inUseCount === 1 ? '' : 's'} will need a new world directory picked`
+                            : 'Delete'
+                        }
+                      >
+                        <IconButton size="small" onClick={() => deleteWorldDir(wd.id)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                )
+              })}
+            </List>
+          )}
+        </SettingsSection>
 
         {/* Maintenance — only relevant when a repo-mode target can spawn worktrees */}
         {hasRepos && (
-          <Accordion
-            disableGutters
-            elevation={0}
-            square
-            expanded={expanded === 'maintenance'}
-            onChange={handleAccordion('maintenance')}
-            sx={ACCORDION_SX}
+          <SettingsSection
+            panel="maintenance"
+            title="Maintenance"
+            expanded={expanded}
+            onToggle={handleAccordion}
           >
-            <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={SUMMARY_SX}>
-              <Typography variant="subtitle2">Maintenance</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Button
-                variant="outlined"
-                size="small"
-                color="warning"
-                onClick={() => setFlushConfirm(true)}
-                disabled={flushing}
-                sx={{ width: '100%' }}
+            <Button
+              variant="outlined"
+              size="small"
+              color="warning"
+              onClick={() => setFlushConfirm(true)}
+              disabled={flushing}
+              sx={{ width: '100%' }}
+            >
+              {flushing ? 'Flushing…' : 'Flush Worktrees'}
+            </Button>
+            <Typography
+              variant="caption"
+              sx={{ mt: 0.5, display: 'block', opacity: 0.6, fontSize: 11 }}
+            >
+              Clears Epona-managed git worktrees for configured repos. Use this if a launch fails
+              with a &quot;worktree already exists&quot; error.
+            </Typography>
+            {flushResult && (
+              <Alert
+                severity={flushResult.ok ? 'success' : 'warning'}
+                sx={{ mt: 1, fontSize: 12 }}
+                onClose={() => setFlushResult(null)}
               >
-                {flushing ? 'Flushing…' : 'Flush Worktrees'}
-              </Button>
-              <Typography
-                variant="caption"
-                sx={{ mt: 0.5, display: 'block', opacity: 0.6, fontSize: 11 }}
-              >
-                Clears Epona-managed git worktrees for configured repos. Use this if a launch fails
-                with a &quot;worktree already exists&quot; error.
-              </Typography>
-              {flushResult && (
-                <Alert
-                  severity={flushResult.ok ? 'success' : 'warning'}
-                  sx={{ mt: 1, fontSize: 12 }}
-                  onClose={() => setFlushResult(null)}
-                >
-                  {flushResult.ok
-                    ? `Flushed ${flushResult.removed} worktree${flushResult.removed === 1 ? '' : 's'} across ${flushResult.repos} repo${flushResult.repos === 1 ? '' : 's'}.`
-                    : `Flushed ${flushResult.removed}, but ${flushResult.errors.length} could not be removed (they may be in use — stop running servers/clients and retry).`}
-                </Alert>
-              )}
-            </AccordionDetails>
-          </Accordion>
+                {flushResult.ok
+                  ? `Flushed ${flushResult.removed} worktree${flushResult.removed === 1 ? '' : 's'} across ${flushResult.repos} repo${flushResult.repos === 1 ? '' : 's'}.`
+                  : `Flushed ${flushResult.removed}, but ${flushResult.errors.length} could not be removed (they may be in use — stop running servers/clients and retry).`}
+              </Alert>
+            )}
+          </SettingsSection>
         )}
       </Box>
 

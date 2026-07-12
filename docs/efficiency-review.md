@@ -1,171 +1,189 @@
 # Epona Efficiency Review
 
-_Repo-wide efficiency swarm over the main process, the target/IPC layer, and the
-renderer (panels, themes, shared UI) — report-only, no changes made. The
-`packages/da-win32` native addon, the `out/`, `dist/`, and `node_modules` trees,
-and all test files were excluded. The swarm ran across several overlapping
-dimensions; the near-identical reports each pass produced (branch-cache helpers,
-`diagnoseAndExplain`, the branch selector, `runGit`, the snackbar/picker widgets)
-have been merged into one canonical finding apiece. 27 findings after merge._
+_Fresh repo-wide review of current `main` (July 2026), replacing the prior review
+whose entire first wave has since been implemented (archived at
+`docs/completed/efficiency-review.md`). Report-only swarm over three domains —
+main process + IPC, renderer components + stores, and app shell + themes + shared
+utils. Excludes `*.test.js`, the `da-win32` native addon, and `out/`/`dist/`/
+`node_modules`._
 
-**By category:** duplication 21, efficiency 2, simplification 2, styling 1, dead-code 1.
-**By severity:** high 5, medium 12, low 10.
+**Headline:** code health is good. The earlier extraction (`gitExec`,
+`probeSocket`, `instanceManager`, `worktreeManager` helpers, `BranchSelector`,
+`PathPicker`, `SnackbarHost`, `useGitBranches`, `gitDiagnose`, `themes/shared`)
+clearly took — remaining duplication is modest and localized. One **real
+correctness bug** surfaced (now fixed); the one large remaining opportunity is the
+four near-identical fantasy theme files.
 
----
+**By severity:** correctness 1 (fixed), high 1, medium 4, low 11.
 
-## Cross-cutting (patterns spanning files/domains)
+## Outcome (this pass)
 
-Ranked by value-to-effort.
+**Applied** — the correctness bug (C1) plus all four medium items (pipeChildLines,
+launchRepo cleanup, deriveBranchOptions, `<SettingsSection>`) and the low items:
+spawnDirect, notifyPidExit, useDotnetRuntime, runBusy, `<PortField>`,
+TAB_STACK_SX, ACTIVE_ROW_BG, derive-active-instance-once, base.css dedup. Two
+new patterns were lifted into **unit-tested** modules while at it — `childLines`
+(pipeChildLines) and `repoRoots` (flush gathering).
 
-### 1. Branch-cache helpers `refreshBranches()` + `withSavedBranchPinned()` duplicated between panels ⚠ high
-- `renderer/components/ServerInstancePanel.jsx:191` / `HybrasylClientPanel.jsx:119` (`refreshBranches`), and `ServerInstancePanel.jsx:396` / `HybrasylClientPanel.jsx:68` (`withSavedBranchPinned`).
-- Byte-identical, comments included. `refreshBranches` sets a loading entry then calls `window.sparkAPI.listGitBranches(p)` and writes ok/error entries in the same shape; `withSavedBranchPinned` pins the saved branch as `{ missing: true, loading }`. Both panels also keep an identical `branchCache` `useState`, and the ServerInstancePanel copy of `withSavedBranchPinned` is re-declared inside the render body every render.
-- **Proposal:** Extract a `useGitBranches()` hook returning `{ branchCache, refreshBranches }` plus a standalone `withSavedBranchPinned()` into a shared renderer module (e.g. `renderer/src/useGitBranches.js`). Consume in both panels; this also lifts the SIP copy out of the render body.
-
-### 2. `diagnoseAndExplain()` git-diagnosis helper duplicated near-verbatim across both repo-picker panels ⚠ high
-- `renderer/components/ServerInstancePanel.jsx:295` / `HybrasylClientPanel.jsx:180`.
-- Two ~40-line async functions mapping `window.sparkAPI.diagnoseGitRepo` results (`ok` / `no_git` / `not_repo` / `no_path` / git-error) to identical `{ accept, noGit, snack }` shapes. The only difference is one word in the `not_repo` message tail ("running directly from the picked folder." vs "…picked .csproj."). HybrasylClientPanel's own comment says it "mirrors the server panel's helper so the two pickers stay in lockstep."
-- **Proposal:** Extract one `diagnoseAndExplain(path, { notRepoNoun })` into a shared module (e.g. `renderer/src/gitDiagnose.js`), pass the differing noun as a parameter, import in both panels, delete both copies. Removes the manual-sync burden the comment already flags.
-
-### 3. Branch `<Select>` + refresh `IconButton` block repeated three times ⚠ high
-- `renderer/components/ServerInstancePanel.jsx:489` (server branch), `ServerInstancePanel.jsx:597` (xml branch), `HybrasylClientPanel.jsx:329` (client branch).
-- ~70 lines copied three times: the `FormControl`+notched `Select` with the `b.name` / `(current)` / `(remote)` / `(loading…)` / `(missing)` MenuItem suffix logic, the `noGit`-italic-or-`branchError` caption, and the loading-aware refresh `IconButton` in a `Tooltip`/span. They differ only in the field names (`serverBranch`/`xmlBranch`/`clientBranch`) and current-checkout sentinel handling.
-- **Proposal:** Extract a `<BranchSelector>` component (props: `label, value, branches, disabled, loading, noGit, error, onChange, onOpen, onRefresh, allowCurrentCheckout, noGitText`) into `renderer/components/BranchSelector.jsx` and render it at all three sites. Collapses ~70 lines × 3 into one component plus three usages.
-
-### 4. `PICKER_SX` and `CURRENT_CHECKOUT_VALUE` constants duplicated between panels
-- `renderer/components/ServerInstancePanel.jsx:31` / `HybrasylClientPanel.jsx:25` (`PICKER_SX` monospace/ellipsis sx), and `ServerInstancePanel.jsx:40` / `HybrasylClientPanel.jsx:23` (`CURRENT_CHECKOUT_VALUE = '__current_checkout__'`).
-- Both identical. `CURRENT_CHECKOUT_VALUE` is also a launcher sentinel, so a single canonical definition prevents drift.
-- **Proposal:** Hoist both into a shared constants module (alongside the extracted branch helpers and PathPicker).
-
-### 5. `PathPicker` sub-component defined separately in both panels
-- `renderer/components/ServerInstancePanel.jsx:86` / `HybrasylClientPanel.jsx:34`.
-- Both define a local `PathPicker` rendering a caption label row + `<Typography sx={{ ...PICKER_SX, opacity: value ? 1 : 0.5 }}>{value || placeholder}</Typography>` + Browse `Button`. They differ only in server's `extraAction` slot vs client's `placeholder`/`chip` props.
-- **Proposal:** Promote a single `PathPicker` (superset of props: `label, value, onPick, disabled, placeholder, chip, extraAction`) to `renderer/components/PathPicker.jsx`, imported by both.
-
-### 6. Near-identical `runGit()` duplicated across `gitOps.js` and `worktreeManager.js`
-- `main/gitOps.js:22` / `main/worktreeManager.js:28`.
-- Both spawn `git -C cwd …args` with stdio ignore/pipe/pipe + `windowsHide`, accumulate stdout/stderr via `.toString()` data handlers, reject on `error`, and on `exit` resolve/reject with the same `git <args> failed (exit N): <stderr>` message. The gitOps variant is the superset (adds `{ allowFail }`, returns `code`, trims trailing whitespace).
-- **Proposal:** Keep the richer gitOps `runGit`, export it (or lift into a small `main/gitExec.js`), and have worktreeManager import it. Its porcelain parsing trims per line, so the trailing-whitespace strip is harmless. Removes ~25 lines.
-
-### 7. Log-line formatter duplicated between main and renderer
-- `main/index.js:324` (`formatLogLines`) / `renderer/src/App.jsx:234` (`saveLogToFile`'s inline `.map`).
-- Identical `{ stream, text }` → `'[stderr]'` / `'[exit]'` / `text` `join('\n')` transform — one for main-side auto-save, one for the renderer's manual save-dialog path.
-- **Proposal:** Move the pure formatter to a dependency-free shared module (e.g. `src/shared/logFormat.js`) and import from both processes (electron-vite bundles each separately, so a plain ESM util works). Delete both copies.
-
-### 8. Identical `Snackbar` + `Alert` toast block repeated in three components
-- `renderer/components/ActionButtons.jsx:72`, `HybrasylClientPanel.jsx:456`, `ServerInstancePanel.jsx:1012`.
-- All three render `<Snackbar open={!!snack} onClose anchorOrigin={{bottom,center}}><Alert severity={snack?.severity} onClose sx={{ width:'100%' }}>{snack?.message}</Alert></Snackbar>`, differing only in the `autoHideDuration` expression (`snack?.duration ?? 4000` in the two panels).
-- **Proposal:** Extract a `<SnackbarHost snack onClose />` component honoring an optional `snack.duration`; reuse in all three and anywhere a snack is added later.
-
-### 9. Identical status-color sub-palette repeated in all five themes
-- `renderer/themes/hybrasyl.js:31`, `chadul.js:31`, `danaan.js:31`, `grinneal.js:31`, `spark.js:31`.
-- `error #ff0000`, `warning #FFFF00`, `success #38ff4f` are identical across all five; `info #6de7f7` is identical in four (spark differs at `#3080D0`).
-- **Proposal:** Extract `STATUS_COLORS = { error:{main:'#ff0000'}, warning:{main:'#FFFF00'}, info:{main:'#6de7f7'}, success:{main:'#38ff4f'} }` into `themes/shared.js` and spread it into each palette (spark overrides `info`).
-
-### 10. Fantasy typography block copied across four themes
-- `renderer/themes/hybrasyl.js:37`, `chadul.js:37`, `grinneal.js:37`, `danaan.js:37`.
-- Lines 37–51 of hybrasyl/chadul/grinneal are byte-identical (Crimson Pro body, Cinzel Decorative h1, Cinzel h2–h6/button/caption with exact `letterSpacing`/`fontWeight`); danaan is the same block with only a `color:'#2a1e08'` layered onto each heading. `shape:{ borderRadius:2 }` is likewise repeated on line 53 of all four.
-- **Proposal:** Extract a shared `fantasyTypography` (and `shape`) into `themes/shared.js`. hybrasyl/chadul/grinneal use as-is; danaan spreads it and adds the heading color.
-
-### 11. `iconSx` / toolbar-button `sx` duplicated between `TitleBar` and `NavToolbar`
-- `renderer/components/TitleBar.jsx:4` / `NavToolbar.jsx:5`.
-- `iconSx` (svg fontSize/stroke/strokeWidth) is byte-identical in both; `winBtnSx` (TitleBar:12-20) and `btnSx` (NavToolbar:13-22) differ only by NavToolbar's `mx: -0.5`.
-- **Proposal:** Move `iconSx` and a base button sx into a small shared style module (e.g. `renderer/components/toolbarStyles.js`); NavToolbar spreads the base and adds `mx: -0.5`.
-
-### 12. `.NET runtimeChip` status logic duplicated across both panels
-- `renderer/components/ServerInstancePanel.jsx:426` / `HybrasylClientPanel.jsx:262`.
-- Both build a `runtimeChip` IIFE from the same runtime state (`dotnetFound`/`netCoreApp10`/`sdk10`) producing the same `{ label, color }` strings ('.NET not installed', '.NET 10 runtime + SDK', '.NET 10 SDK missing', etc.); the only real difference is Hybrasyl's `needsSdk` flag (server always requires SDK in repo mode).
-- **Proposal:** Extract `runtimeChip(runtime, { needsSdk })` into a shared helper (server passes `needsSdk: true`). Both panels also independently call `checkDotnetRuntime()` on mount — a shared `useDotnetRuntime()` hook could return both runtime and the derived chip.
-
-### 13. Path-basename ("last segment") derivation reimplemented three times
-- `main/settingsManager.js:201` (`deriveWorldDirName`), `renderer/components/SettingsPane.jsx:476` (`WorldDirDialog.browse`'s `derivedName`), `renderer/components/NavToolbar.jsx:35` (`assetsName`).
-- Each strips trailing slashes, splits on `[\\/]`, and takes the last segment.
-- **Proposal:** Add a dependency-free `basenameOfPath(p)` util and reuse in all three; the renderer callers can import from a shared module even though one caller is in main.
-
-### 14. Duplicate socket connect/timeout/settled/destroy scaffolding in `portProbe` and `redisProbe`
-- `main/portProbe.js:12` / `main/redisProbe.js:20`.
-- Both wrap `createConnection` in a Promise with a `let settled`, a finalizer guarded on `settled`, `clearTimeout(timer)`, `try { socket.destroy() } catch {}`, and resolve — identical control scaffold differing only in the reply-parsing body (`serverTester.js` uses the same pattern via `cleanup()`).
-- **Proposal (low value):** Optionally extract `withProbeSocket({ host, port, timeoutMs }, onConnect, onData)` owning the settled/timer/destroy lifecycle so each probe supplies only protocol logic. Parsing bodies diverge, so payoff is small; listed for completeness.
-
-### 15. Panel-border literal `'1px solid rgba(255,255,255,0.15)'` hard-coded in several places
-- `renderer/components/SettingsPane.jsx:135`, `LogPane.jsx:42`, `App.jsx:293` — plus `SettingsPane.jsx:147`, `LogPane.jsx:55` (borderBottom) and `App.jsx:301,320`.
-- The exact literal / `borderColor:'rgba(255,255,255,0.15)'` appears 7 times rather than using `theme.palette.divider`.
-- **Proposal:** Route these borders/dividers through the theme divider token (or a shared constant).
-
-### 16. Exported `resolveConfigFile()` and `listOrphanWorktrees()` are unused in production
-- `main/targets/serverTarget.js:14` / `main/worktreeManager.js:228`.
-- `resolveConfigFile` is referenced only by `serverTarget.test.js` (its doc-comment "Useful for UI file-exists checks" is unimplemented); `listOrphanWorktrees` is referenced only by `worktreeManager.test.js` and its comment marks it "for the (future) Settings cleanup UI" — no IPC handler or caller exists.
-- **Proposal:** Either wire these into the features they were written for, or delete them (and their tests) to remove unwired surface. Lower priority since both are test-covered and intentionally forward-looking.
+**Deliberately skipped** (judgment calls, noted at each finding):
+- **#1 theme factory** — known red herring (see below); declined.
+- **reapPidInstance (full merge)** — stop vs reset have genuinely different
+  kill-failure semantics; a shared helper in 0%-covered lifecycle code risked a
+  regression, so only the identical `childExit` notify was extracted.
+- **useSnack (R4)** — `SnackbarHost` already captured the real duplication.
+- **Tab `value` from TAB_ORDER (A2)** — low urgency; the disabled-legacy-tab case
+  makes a naive map riskier than the hardcoded indices are worth.
+- **M3/M4** — partial overlap / intentional test seam; left as-is.
 
 ---
 
-## Localized (single-file)
+## Correctness
 
-Ranked by value-to-effort.
+### C1. `worktrees:flush` dropped its `await` — Flush Worktrees silently no-oped ✅ FIXED
+- `main/index.js:516`. `settingsManager.load()` is `async`, but the handler read
+  it without `await`, so `settings` was a Promise: `settings?.instances ?? []`
+  became `[]` and `clientRepoPath` `undefined`. The handler gathered zero repos
+  and returned `{ ok: true, removed: 0 }` — the button reported success while
+  doing nothing. Every other `load()` call site awaits.
+- **Fix (applied):** `const settings = await settingsManager.load()`.
 
-### L1. `instance:start` and `instance:reset` duplicate the spawn/track/strip tail verbatim ⚠ high
-- `main/index.js:531` / `main/index.js:648` — lines 531-540 and 648-657 are byte-identical (`launchServer` call, `cleanup = result.cleanup ?? (async () => {})`, child/pid branch with `wireInstanceLogs`, safe-strip, return).
-- **Proposal:** Extract `spawnAndTrackInstance(instance)` that runs `launchServer`, computes the cleanup default, sets the `instanceChildren` map entry, and returns the `{ child, cleanup, ...safe }`-stripped response. Call from both handlers; lives next to `wireInstanceLogs`.
+---
 
-### L2. `instance:start` and `instance:reset` duplicate the payload-validate + disk-resolve preamble ⚠ high
-- `main/index.js:502` / `main/index.js:600` — lines 502-519 and 600-615 are identical (invalid-payload guard, `settingsManager.load()`, persisted `find(i => i.id === supplied.id)`, `resolveInstanceForLaunch` + world-dir error).
-- **Proposal:** Extract `resolveSuppliedInstance(supplied)` returning either `{ error }` or the resolved `instance`; both handlers call it and early-return on error.
+## Won't do (recurring red herring)
 
-### L3. Kill-tracked-process logic duplicated across stop/reset/before-quit
-- `main/index.js:555` (instance:stop), `:619` (instance:reset), `:730` (before-quit).
-- The `once('exit')` → `kill()` → `Promise.race([…, setTimeout])` pattern and the PID `killProcessTree` + `instanceChildren.delete` + `safeSend('instance:childExit', …SIGKILL)` block recur at 564-571 / 621-628 / 734-736 and 579-590 / 631-639. instance:reset and instance:stop share almost the whole body; before-quit shares the shape (only timeout differs, 5000 vs 2000).
-- **Proposal:** Extract `killTracked(instanceId, tracked, timeoutMs)` covering both the 'child' (exit-race) and 'pid' (taskkill + childExit) branches, with the timeout as a param.
+### 1. "Collapse the four fantasy themes into a `createFantasyTheme(tokens)` factory" — DECLINED
+This surfaces in every review and is a known red herring. The themes only *look*
+uniform: alphas vary per theme at the same spots (MuiPaper border
+0.32/0.35/0.45/0.32; paper bg 0.82/0.90/0.94/0.88), and there are real structural
+deviations — **danaan** especially (`mode:'light'`, heading colors, solid contained
+button bg), plus chadul's hover glows and grinneal's asymmetric paper shadow. A
+factory needs so many tokens + overrides that the real reduction is modest, for
+static low-churn config. `themes/shared.js` (STATUS_COLORS, FANTASY_SHAPE,
+fantasyTypography) is the right amount of sharing. **Do not re-propose this.**
 
-### L4. IPC response-stripping `{ child, cleanup, ...safe }` repeated in three handlers
-- `main/index.js:413` (client:launch), `:539` (instance:start), `:656` (instance:reset).
-- The exact `const { child: _child, cleanup: _cleanup, ...safe } = result` destructure appears at all three sites.
-- **Proposal:** Add a one-line `toSafeResult(result)` helper that returns `result` minus the non-serialisable `child`/`cleanup` fields; use it at all three sites.
+<details><summary>Original finding (kept for context)</summary>
 
-### L5. `launchRepo` builds the same three-step cleanup closure three times and unwinds it manually on error
-- `main/targets/serverTarget.js:309` (non-Windows success), `:332` (Windows success), `:342` (catch); plus the spawn-failure unwind at 324-327.
-- The `removeBuildProps` → `releaseXml` → `releaseServer` sequence is written out identically in both success returns and both failure paths.
-- **Proposal:** Define one `const cleanup = async () => { if (didWriteBuildProps) await removeBuildProps(serverWorktreePath); await releaseXml(); await releaseServer() }` after the vars are known, return it from both success paths, and reuse it (guarded) in the failure unwinds.
+### Four fantasy themes are ~99% duplicated — extract a `createFantasyTheme(tokens)` factory
+- `themes/hybrasyl.js` (187), `chadul.js` (198), `danaan.js` (201),
+  `grinneal.js` (190). All share an identical `components` block (MuiPaper/
+  Button/AppBar/Drawer/ListItemButton/Card/Divider/Chip/PaginationItem/Tab/Tabs/
+  InputLabel/Checkbox/OutlinedInput) plus identical `shape`/`typography`,
+  differing only in ~10 color tokens. `themes/shared.js` already factored out
+  `STATUS_COLORS`/`FANTASY_SHAPE`/`fantasyTypography`, but the far larger
+  structural body is still copied four times (~600 lines).
+- **Proposal:** `themes/createFantasyTheme.js` taking a token object + override
+  hooks. **Preserve these intentional per-theme deviations** (model as override
+  params, don't flatten them away): chadul's extra hover `boxShadow` glows and
+  `contained.color`; danaan's `mode:'light'`, heading color on h1–h6, and solid
+  (non-rgba) contained button bg; grinneal's asymmetric paper shadow colors;
+  hybrasyl/spark omitting a base `MuiListItemButton.color`. `spark.js` is **not**
+  a fantasy theme (own sans typography, `borderRadius:0`) — leave it standalone.
+- Folds finding L1 (`'"Cinzel", serif'` literal repeated ~16×) in for free.
 
-### L6. `listBranches` re-runs an extra git subprocess and recomputes `ensureDir`
-- `main/gitOps.js:118`.
-- `listBranches` calls `isGitRepo(repoPath)` (119) which internally runs a full `git rev-parse --is-inside-work-tree` subprocess **and** an `ensureDir` (`fs.stat`), then line 123 calls `ensureDir(repoPath)` a second time before running `git branch -a` — two git spawns and two stat calls where one of each would do.
-- **Proposal:** Compute `const dir = await ensureDir(repoPath)` once and reuse it; let the single `git branch -a` cover the repo check (it already fails on a non-repo). At minimum dedupe the double `ensureDir`.
+---
 
-### L7. Backup-recovery path computes `withDefaults(data)` twice
-- `main/settingsManager.js:346`.
-- In `load()`'s backup branch, `await save(withDefaults(data))` (346) then `return withDefaults(data)` (347) run the full migration/coercion pipeline twice on the same object.
-- **Proposal:** `const recovered = withDefaults(data); await save(recovered); return recovered`. Behavior-preserving; `withDefaults` is a pure transform.
+## Medium value
 
-### L8. Repeated adoption-find predicate and refcount bookkeeping in `ensureWorktree`
-- `main/worktreeManager.js:119`, `:137`, `:153`, `:121`.
-- The predicate `onDisk.find((e) => e.branch === branch || resolvePath(e.path) === target)` appears 3× (119/137/153), and the `branchMap.set(branch, { path, refcount: 1 }); refcounts.set(repo, branchMap); return path` block appears ~4× (121-123 / 139-141 / 154-156 / 180-182).
-- **Proposal:** Extract a local `findAdopted(onDisk)` closure over branch/target and a `track(path, refcount)` helper doing the two `Map.set` calls; collapses the three adoption branches and the fresh-add tail to one-liners.
+### 2. Child-stream log wiring duplicated — `pipeChildLines()`
+- `main/index.js:283-332` (`wireHybrasylChildLogs`) vs `455-479`
+  (`wireInstanceLogs`). Both build two `createLineBuffer`s, wire
+  stdout/stderr `data`/`end`, flush on `exit`, drop the tracking entry, emit a
+  `*:childExit`, and format spawn errors identically. Only channel names, the
+  hybrasyl auto-save `captured[]`, and cleanup differ.
+- **Proposal:** `pipeChildLines(child, { onStdoutLine, onStderrLine, onExit, onErrorLine })`
+  owning the buffer/data/end/exit/error scaffold; callers supply callbacks.
 
-### L9. "Tracked child alive?" expression recomputed inline in several places
-- `main/index.js:522` (instance:start already-running check), `:664` (instance:listRunning), `:687` (collectRepoRunning).
-- The `tracked.kind === 'child' ? tracked.value.exitCode === null : true` liveness test is duplicated at all three.
-- **Proposal:** Add a tiny `isTrackedAlive(tracked)` predicate and use it at all three sites.
+### 3. `launchRepo` catch re-implements its own `cleanup()`
+- `main/targets/serverTarget.js:267-271` (the `cleanup` closure) vs the catch at
+  `321-341`, which manually repeats `removeBuildProps → releaseXml →
+  releaseServer` with per-step swallowing. The `!result.success` branch (316)
+  already calls `cleanup()`.
+- **Proposal:** move the per-step `try/catch` swallowing into `cleanup()` itself;
+  both the failure branch and the catch collapse to `await cleanup()`.
 
-### L10. Repeated "clone Set, delete id" running-instance update in `App.jsx`
-- `renderer/src/App.jsx:168` (instance-exit listener), `:403` (onStop), `:416` (onReset).
-- `setRunningInstances((prev) => { const next = new Set(prev); next.delete(instanceId); return next })` appears verbatim at all three.
-- **Proposal:** Add a local `removeRunning(id)` helper and call it from all three sites.
+### 4. Branch-options derivation duplicated 3× — `useBranchOptions()`
+- `ServerInstancePanel.jsx:301-316` (server + xml) and
+  `HybrasylClientPanel.jsx:158-165`. The same 4-line `cacheEntry`/`error`/
+  `loading`/`withSavedBranchPinned(...)` derivation, three times — the largest
+  survivor after the `BranchSelector` extraction.
+- **Proposal:** `useBranchOptions(branchCache, path, savedBranch)` beside
+  `useGitBranches.js`; returns `{ branches, error, loading }`.
 
-### L11. `App` re-derives `window.sparkAPI.platform` instead of reusing `isWindows`
-- `renderer/src/App.jsx:101` (`isWindows` computed), `:109` (recomputes `platform === 'win32'` for `startupTabIndex`), `:324` (`platform !== 'win32'` for the Alert guard).
-- **Proposal:** Reuse the local `isWindows` at 109 and use `!isWindows` at 324. Purely a readability/consistency tidy.
+### 5. Settings accordion boilerplate repeated 5× — `<SettingsSection>`
+- `SettingsPane.jsx` — every section repeats the same
+  `disableGutters elevation={0} square expanded={…} onChange={…} sx={ACCORDION_SX}`
+  + `AccordionSummary`/`ExpandMoreIcon` props, and the Profiles / World
+  Directories summaries duplicate a "title + stopPropagation Add button" header.
+  (Introduced by this session's accordion refactor.)
+- **Proposal:** a local `<SettingsSection panel title action={…}>` wrapper taking
+  `expanded`/`onChange` from the parent.
+
+---
+
+## Low value (localized; batch or defer)
+
+### Main process
+- **M1. PID-kill/delete/childExit block duplicated** — `index.js:593-606`
+  (`instance:stop`) and `624-634` (`instance:reset`), with `before-quit` (710-722)
+  a third variant. Extract `reapPidInstance(instanceId, pid)`.
+- **M2. Non-Windows detached-spawn block duplicated** — `serverTarget.js:225-232`
+  (`launchBinary`) and `300-307` (`launchRepo`). Small `spawnDirect(spec, cwd, cleanup)`.
+- **M3. Worktree-resolve preamble partial overlap** — `hybrasylTarget.js:139-163`
+  and `serverTarget.js:249-256`. Real differences (hybrasyl's `gitToplevel`
+  guard); optional `resolveWorktree(repoRoot, branch, noGit)` keeping the guard
+  at the call site.
+- **M4. `resolveInstanceForLaunch` exported only for tests** —
+  `instanceManager.js:36`. Acceptable test seam; drop the `export` if testing
+  through `resolveSuppliedInstance` is preferred.
+
+### Renderer
+- **R1. `.NET runtime` state + mount effect duplicated** — `ServerInstancePanel`
+  and `HybrasylClientPanel`. Extract `useDotnetRuntime()` (tiny, high
+  value-to-effort).
+- **R2. `handleStart`/`handleStop`/`handleReset` triplicated** —
+  `ServerInstancePanel.jsx:213-235`. A `runBusy(label, op)` helper.
+- **R3. Port fields repeated 4×** — `ServerInstancePanel.jsx:577-655`. A
+  `<PortField label value onChange>` (or config-driven `.map`).
+- **R4. `snack` state + `<SnackbarHost>` wiring repeated in 3 components** — a
+  `useSnack()` returning `{ snack, showSnack, snackHost }`.
+- **R5. Tab-content container `sx` literal repeated 4×** —
+  `ServerInstancePanel.jsx:328/394/452/564`. Hoist `TAB_STACK_SX`.
+- **R6. Hardcoded active-row highlight** — `bgcolor:'rgba(255,255,255,0.06)'` in
+  both Settings lists (`353`, `431`), non-theme-aware. Lift to a token.
+
+### App shell / themes
+- **A1. `App.jsx` recomputes the active-instance lookup up to 4× per render** —
+  `App.jsx:261-263, 341-349`. Derive `const activeInstance = …` once.
+- **A2. Tab `value` props hardcoded vs `TAB_ORDER`** — `App.jsx:222-227`. Low
+  urgency (order stable; disabled-legacy case complicates a naive `.map`).
+- **A3. Duplicate `body { overflow: hidden }`** — `assets/base.css:11` and `24`.
+  Trivial cosmetic; delete one.
+
+---
+
+## Verified correct — do not "fix"
+- `uiConstants.js` `PANEL_BORDER` / `PANEL_BORDER_COLOR` are both live and the
+  white `rgba(255,255,255,0.15)` hairline intentionally overrides each theme's
+  tinted `MuiDivider` (documented in-file).
+- The `0.2` / `0.1` border literals at `LogPane.jsx:162` and `HelpDialog.jsx:61`
+  are intentionally different opacities from the `0.15` token.
+- `spark.js`'s `info:{main:'#3080D0'}` override after `...STATUS_COLORS` is a
+  deliberate blue-vs-cyan choice.
+- The mount-only `useEffect`s in `App.jsx` (`95-104`, `106-132`) with
+  `exhaustive-deps` disabled are legitimately mount-only.
+- No `memo`/`useMemo`/`useCallback` anywhere in the renderer, so inline
+  object/handler literals passed to (non-memoized) children cost nothing today —
+  only worth revisiting if a panel is later memoized.
+- All `shared/*.js` utils are lean, single-purpose, dependency-free — nothing to do.
 
 ---
 
 ## Suggested first wave
-
-Highest value-per-effort, mostly mechanical and behavior-preserving:
-
-1. **L1 + L2 — `instance:start`/`instance:reset` dedup** (`index.js:531/648` and `:502/600`) — the two `high`-severity localized wins; both blocks are byte-identical and collapse to `spawnAndTrackInstance` + `resolveSuppliedInstance`.
-2. **#1 — `useGitBranches()` hook** (branch-cache helpers, `high`) — byte-identical across both panels and also lifts a helper out of a render body.
-3. **#2 — Shared `diagnoseAndExplain`** (`high`) — ~40 near-identical lines whose comment already begs for de-duplication; one parameter differs.
-4. **#4 — Hoist `PICKER_SX` + `CURRENT_CHECKOUT_VALUE`** — trivial shared-constants move that also protects the launcher sentinel from drift.
-5. **#6 — Canonical `runGit`** (`gitOps.js:22` / `worktreeManager.js:28`) — clean cross-module extract; keep the superset, delete ~25 lines.
-6. **#7 — Shared log formatter** (`index.js:324` / `App.jsx:234`) — a dependency-free `src/shared/logFormat.js` used by both processes.
-7. **#9 + #10 — `themes/shared.js`** (status colors + fantasy typography) — safe object spreads across 4–5 themes; danaan/spark layer their overrides.
-8. **#3 — `<BranchSelector>` component** — highest payoff of the JSX extractions (~70 lines × 3), moderate effort.
+1. **C1 — flush `await`** ✅ already fixed (real bug).
+2. **#1 — `createFantasyTheme` factory** — the one high-value win (~600 lines),
+   done carefully to preserve the per-theme deviations listed above.
+3. **#2 — `pipeChildLines`** — cleanest main-process dedup.
+4. **#4 + R1 — `useBranchOptions` + `useDotnetRuntime` hooks** — small, safe,
+   high value-to-effort renderer extractions.
+5. **#3 — `launchRepo` cleanup consolidation** — removes an error-path
+   inconsistency, not just lines.
