@@ -513,7 +513,7 @@ app.whenReady().then(() => {
   // instance, resolves each to its git top level (dedup), and flushes it. The
   // renderer confirms first (this discards uncommitted work in those worktrees).
   ipcMain.handle('worktrees:flush', async () => {
-    const settings = settingsManager.load()
+    const settings = await settingsManager.load()
     const candidates = []
     const clientRepo = settings?.targets?.hybrasyl?.clientRepoPath
     if (clientRepo) candidates.push(dirname(clientRepo)) // .csproj → its directory
