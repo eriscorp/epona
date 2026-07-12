@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
-import { existsSync, mkdirSync, copyFileSync, promises as fs } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
+import { join, dirname } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { killProcessTree } from './processKill.js'
 import { settingsSchema } from './schemas/settings.js'
@@ -15,8 +15,8 @@ import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { createLineBuffer } from './lineBuffer.js'
-import { listBranches, isGitRepo, diagnoseGitRepo } from './gitOps.js'
-import { releaseAll as releaseAllWorktrees } from './worktreeManager.js'
+import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
+import { releaseAll as releaseAllWorktrees, flushWorktrees } from './worktreeManager.js'
 import { createSplashWindow } from './splash.js'
 import { formatLogLines } from '../shared/logFormat.js'
 import {
@@ -27,6 +27,22 @@ import {
 } from './instanceManager.js'
 
 let settingsManager
+
+// Pin the app-data directory to Local BEFORE the app is ready. Electron binds
+// Chromium's default session/cache to userData at the 'ready' event; if we
+// override userData later (inside whenReady) Chromium has already resolved and
+// begun writing to its default path — %APPDATA%\Roaming\epona on Windows — and
+// its transients leak there. Computing + setPath at module load runs before
+// ready, so Chromium binds to Local from the start.
+//
+// %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
+// no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
+const localAppData =
+  process.platform === 'win32'
+    ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
+    : app.getPath('appData')
+const dataDir = join(localAppData, 'Erisco', 'Epona')
+app.setPath('userData', dataDir)
 
 // Splash + reveal coordination. The main window is created hidden and only
 // shown once the renderer signals it has hydrated its settings ('app:ready'),
@@ -54,6 +70,21 @@ function migrateSettingsFromRoaming(settingsPath) {
     if (existsSync(oldBackup)) copyFileSync(oldBackup, join(settingsPath, 'settings.bak.json'))
   } catch {
     /* best effort — settings manager falls back to defaults */
+  }
+}
+
+// Pre-fix builds leaked Chromium transients to the default app-name folder
+// (%APPDATA%\Roaming\epona) because userData was overridden too late. userData
+// is now pinned before ready, so that folder is never written again — sweep any
+// leftover from an earlier version. Scoped to that exact default path only.
+function removeStrayRoamingData() {
+  if (process.platform !== 'win32') return
+  try {
+    const stray = join(app.getPath('appData'), app.getName()) // Roaming\epona
+    if (stray === app.getPath('userData')) return // safety: never delete the live dir
+    rmSync(stray, { recursive: true, force: true })
+  } catch {
+    /* best effort */
   }
 }
 
@@ -112,19 +143,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
-  // no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
-  const localAppData =
-    process.platform === 'win32'
-      ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
-      : app.getPath('appData')
-
-  const settingsPath = join(localAppData, 'Erisco', 'Epona')
-  const cachePath = join(localAppData, 'Erisco', 'Epona')
-  app.setPath('userData', cachePath)
-
-  migrateSettingsFromRoaming(settingsPath)
-  settingsManager = createSettingsManager(settingsPath)
+  // userData is already pinned to Local at module load (see dataDir above).
+  removeStrayRoamingData()
+  migrateSettingsFromRoaming(dataDir)
+  settingsManager = createSettingsManager(dataDir)
 
   if (process.platform === 'win32') {
     app.setAppUserModelId(app.isPackaged ? 'com.darkages.epona' : process.execPath)
@@ -484,6 +506,35 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
   ipcMain.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
+
+  // Force-clear managed worktrees for every configured repo — the Settings
+  // "Flush Worktrees" escape hatch for the occasional "already exists" wedge.
+  // Gathers repo paths from the hybrasyl client target and every server
+  // instance, resolves each to its git top level (dedup), and flushes it. The
+  // renderer confirms first (this discards uncommitted work in those worktrees).
+  ipcMain.handle('worktrees:flush', async () => {
+    const settings = settingsManager.load()
+    const candidates = []
+    const clientRepo = settings?.targets?.hybrasyl?.clientRepoPath
+    if (clientRepo) candidates.push(dirname(clientRepo)) // .csproj → its directory
+    for (const inst of settings?.instances ?? []) {
+      if (inst.serverRepoPath) candidates.push(inst.serverRepoPath)
+      if (inst.xmlRepoPath) candidates.push(inst.xmlRepoPath)
+    }
+    const roots = new Set()
+    for (const c of candidates) {
+      const root = await gitToplevel(c).catch(() => null)
+      if (root) roots.add(root)
+    }
+    const errors = []
+    let removed = 0
+    for (const root of roots) {
+      const r = await flushWorktrees(root)
+      removed += r.removed.length
+      errors.push(...r.errors)
+    }
+    return { ok: errors.length === 0, repos: roots.size, removed, errors }
+  })
 
   // Instance lifecycle helpers live in instanceManager.js (unit-tested there);
   // bind the stateful deps once. toSafeResult / isTrackedAlive / raceChildExit

@@ -1,6 +1,7 @@
 import { lookup } from 'dns/promises'
 import { createRequire } from 'module'
 import { getVersion, detectVersion } from '../clientVersions.js'
+import { describeLaunchError } from './launchError.js'
 
 // Native addon must be loaded via require (CJS) — not bundled by Vite
 const win32 = process.platform === 'win32' ? createRequire(import.meta.url)('da-win32') : null
@@ -79,7 +80,7 @@ export async function launch(settings, profile) {
 
     return { success: true }
   } catch (err) {
-    return { success: false, error: err.message }
+    return { success: false, error: describeLaunchError(err, clientPath) }
   } finally {
     if (memHandle) win32.closeHandle(memHandle)
     if (threadHandle) {

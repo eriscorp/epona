@@ -120,7 +120,13 @@ export default function LogPane({ title = 'Console', source, slug, onClose }) {
           lineHeight: 1.4,
           p: 1,
           whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word'
+          wordBreak: 'break-word',
+          // Re-enable text selection here — base.css sets `user-select: none`
+          // globally for a native-app feel, but console output must be
+          // copy/paste-able. Scoped to the log body so the chrome stays inert.
+          userSelect: 'text',
+          WebkitUserSelect: 'text',
+          cursor: 'text'
         }}
       >
         {lines.length === 0 && (
