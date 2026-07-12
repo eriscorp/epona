@@ -20,21 +20,45 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Added
 
-- Light "Mundanes" theme (a flat corporate look alongside the fantasy themes).
-- About section in Settings.
-- Flush Worktrees maintenance action (Settings → Maintenance) to clear
-  Epona-managed git worktrees when a launch wedges on "worktree already exists".
+- **Mundanes light theme** — a flat, "corporate" light theme sitting alongside the
+  four dark fantasy themes (Hybrasyl, Chadul, Danaan, Grinneal). On the plain
+  themes the window chrome switches to flat standard controls instead of the
+  stylized fantasy glyphs.
+- **About section in Settings** — shows the app version and readable links to
+  hybrasyl.com and the GitHub repo (legible on every theme, including the dark
+  ones where they used to nearly vanish).
+- **Flush Worktrees** maintenance action (Settings → Maintenance) — force-clears
+  Epona-managed git worktrees for your configured repos. Use it when a repo-mode
+  launch wedges with a "worktree already exists" error. It confirms first, since
+  it discards uncommitted work inside those managed worktrees.
 
 ### Changed
 
-- Restyled title bar: left-aligned logo + title, with flat chrome on the plain
-  themes.
-- Console / log output is now selectable for copy-paste.
+- **Restyled title bar** — the logo and app title are now left-aligned, and the
+  plain themes get flat window controls to match their look.
+- **Settings reorganized into single-open collapsible sections** — one section is
+  expanded at a time, so the pane stays compact instead of scrolling a long form.
+- **Console / log output is now selectable** for copy-paste.
 
 ### Fixed
 
-- The Settings pane no longer nudges the UI when it opens — both the title/content
-  indent and the title font-size jump are gone.
+- **The Settings pane no longer nudges the UI when it opens.** Two separate
+  breakpoint glitches are gone: the content/title indent (MUI toolbar gutters
+  flipping as the window widened past 600px) and the Epona title changing font
+  size on open. The window also no longer leaves a left-side gap when a side pane
+  opens — the frameless resize was reworked to stop shifting the client area.
+- **Repo-mode launches recover instead of wedging.** Flush Worktrees now actually
+  flushes (it was silently doing nothing), and the launcher prunes stale worktree
+  registrations and adopts/repairs a pre-existing worktree rather than failing
+  with "already exists".
+- **The distributed Hybrasyl client `.exe` now launches correctly.**
 - About links are readable on every theme.
-- The distributed Hybrasyl client `.exe` now launches correctly.
-- Flush Worktrees now actually flushes (it was silently doing nothing).
+
+### Under the hood
+
+- Added an end-to-end test harness (Playwright + Electron) that drives the built
+  app, so window/layout regressions like the ones above are caught by measurement
+  rather than by eye.
+- A round of code-health refactors across the main and renderer processes
+  (extracted the settings sections, shared the dotnet-runtime/branch logic, made
+  the child-process log piping unit-testable) — see the full commit list below.
