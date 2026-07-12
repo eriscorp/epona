@@ -16,8 +16,10 @@ export const mainEntry = join(repoRoot, 'out', 'main', 'index.js')
 // load — pointing it at a temp dir keeps each run hermetic and off the real
 // user profile. Pass `seedSettings` (a settings object) to pre-write
 // settings.json so the app hydrates a known config; omit it to get defaults.
-export async function launchEpona({ seedSettings } = {}) {
-  const localAppData = mkdtempSync(join(tmpdir(), 'epona-e2e-'))
+export async function launchEpona({ seedSettings, localAppData: reuseDir } = {}) {
+  // Reuse a caller-supplied dir to test persistence across relaunches; otherwise
+  // mint a fresh throwaway so the run is hermetic.
+  const localAppData = reuseDir ?? mkdtempSync(join(tmpdir(), 'epona-e2e-'))
   if (seedSettings) {
     const dir = join(localAppData, 'Erisco', 'Epona')
     mkdirSync(dir, { recursive: true })

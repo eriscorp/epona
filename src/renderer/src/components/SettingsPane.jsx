@@ -269,6 +269,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
               value={settings.theme || 'hybrasyl'}
               label="Theme"
               onChange={(e) => onChange({ theme: e.target.value })}
+              SelectDisplayProps={{ 'data-testid': 'theme-select' }}
             >
               {THEMES.map((t) => (
                 <MenuItem key={t.key} value={t.key}>

@@ -226,6 +226,7 @@ export default function HybrasylClientPanel({
         <Tooltip title={consoleTooltip}>
           <span>
             <IconButton
+              data-testid="log-toggle"
               size="small"
               onClick={onToggleLogPane}
               disabled={!consoleAvailable}

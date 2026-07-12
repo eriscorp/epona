@@ -26,6 +26,15 @@ Local-only for now. CI would need a virtual display (xvfb/headed) and a rebuilt
   worktree, seeds repo-mode settings, drives Settings → Maintenance → Flush, and
   asserts the worktree is actually gone from disk. Guards the once-shipped
   no-op-flush regression (the missing `await` in the flush handler).
+- **`settings-persistence.spec.js`** — changes the theme, waits for the write to
+  reach disk, relaunches against the same userData dir, and asserts the theme
+  hydrated. Full renderer → IPC → disk → reload round-trip.
+- **`theme-switch.spec.js`** — switches through all six themes in the real app,
+  asserts no `pageerror`, the app stays mounted, and the background changes
+  (catches theme-object regressions jsdom unit tests miss).
+- **`multipane-geometry.spec.js`** — companion to the offset spec: the same
+  content-origin invariant while the Log pane and Settings pane open (window
+  480 → 840 → 1200px).
 
 ## Gotchas (learned the hard way)
 
