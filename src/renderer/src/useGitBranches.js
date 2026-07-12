@@ -39,3 +39,17 @@ export function withSavedBranchPinned(branches, savedName, loading) {
     ...branches
   ]
 }
+
+// Derive a BranchSelector's { branches, error, loading } from the shared cache
+// for one repo path + saved branch — the four-line block both panels repeated
+// (the server panel does it twice, for the server and xml repos). Pure; a
+// falsy path yields an empty, error-free, not-loading result.
+export function deriveBranchOptions(branchCache, path, savedBranch) {
+  const entry = path ? branchCache[path] : null
+  const loading = !!entry?.loading
+  return {
+    branches: withSavedBranchPinned(entry?.branches ?? [], savedBranch, loading),
+    error: entry?.error ?? null,
+    loading
+  }
+}

@@ -12,7 +12,8 @@ import TerminalIcon from '@mui/icons-material/Terminal'
 import PathPicker from './PathPicker'
 import BranchSelector from './BranchSelector'
 import SnackbarHost from './SnackbarHost'
-import { useGitBranches, withSavedBranchPinned } from '../useGitBranches'
+import { useGitBranches, deriveBranchOptions } from '../useGitBranches'
+import { useDotnetRuntime } from '../useDotnetRuntime'
 import { diagnoseAndExplain } from '../gitDiagnose'
 import { runtimeChip } from '../runtimeChip'
 
@@ -32,11 +33,7 @@ export default function HybrasylClientPanel({
   activeInstanceLogDir
 }) {
   const [resolution, setResolution] = useState({ kind: null })
-  const [runtime, setRuntime] = useState({
-    dotnetFound: null,
-    netCoreApp10: null,
-    sdk10: null
-  })
+  const runtime = useDotnetRuntime()
   // Branch lists keyed by repo csproj path so flipping back and forth doesn't
   // refetch every time. { [csprojPath]: { branches, error } | undefined }
   const { branchCache, refreshBranches } = useGitBranches()
@@ -57,13 +54,6 @@ export default function HybrasylClientPanel({
       setResolution({ kind: null })
     }
   }, [activePath])
-
-  useEffect(() => {
-    window.sparkAPI
-      .checkDotnetRuntime()
-      .then(setRuntime)
-      .catch((err) => console.error('[hybrasyl] checkDotnetRuntime failed:', err))
-  }, [])
 
   // Fetch branches whenever a csproj is configured in repo mode. Cached by
   // path so flipping mode or pasting the same path twice doesn't refetch
@@ -155,14 +145,11 @@ export default function HybrasylClientPanel({
   const needsSdk = isRepoMode
   const chip = runtimeChip(runtime, { needsSdk })
 
-  const cacheEntry = hybrasyl.clientRepoPath ? branchCache[hybrasyl.clientRepoPath] : null
-  const branchError = cacheEntry?.error ?? null
-  const branchLoading = !!cacheEntry?.loading
-  const branches = withSavedBranchPinned(
-    cacheEntry?.branches ?? [],
-    hybrasyl.clientBranch,
-    branchLoading
-  )
+  const {
+    branches,
+    error: branchError,
+    loading: branchLoading
+  } = deriveBranchOptions(branchCache, hybrasyl.clientRepoPath, hybrasyl.clientBranch)
   const resolvedChip = activePath ? kindChip(resolution.kind) : null
 
   return (

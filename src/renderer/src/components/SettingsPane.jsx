@@ -57,6 +57,8 @@ const ACCORDION_SX = {
   '&:before': { display: 'none' }
 }
 const SUMMARY_SX = { '& .MuiAccordionSummary-content': { my: 1, alignItems: 'center' } }
+// Subtle highlight for the active row in the profiles / world-directory lists.
+const ACTIVE_ROW_BG = 'rgba(255,255,255,0.06)'
 
 export default function SettingsPane({ settings, versions, onClose, onChange }) {
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
@@ -349,8 +351,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
                     px: 1,
                     py: 0.5,
                     borderRadius: 1,
-                    bgcolor:
-                      p.id === settings.activeProfile ? 'rgba(255,255,255,0.06)' : 'transparent'
+                    bgcolor: p.id === settings.activeProfile ? ACTIVE_ROW_BG : 'transparent'
                   }}
                 >
                   <ListItemText
@@ -428,7 +429,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
                         px: 1,
                         py: 0.5,
                         borderRadius: 1,
-                        bgcolor: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        bgcolor: isActive ? ACTIVE_ROW_BG : 'transparent',
                         // Reserve space for the secondary actions so long paths get
                         // ellipsis instead of overlapping the icons.
                         pr: 14

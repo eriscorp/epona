@@ -26,7 +26,8 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import PathPicker from './PathPicker'
 import BranchSelector from './BranchSelector'
 import SnackbarHost from './SnackbarHost'
-import { useGitBranches, withSavedBranchPinned } from '../useGitBranches'
+import { useGitBranches, deriveBranchOptions } from '../useGitBranches'
+import { useDotnetRuntime } from '../useDotnetRuntime'
 import { diagnoseAndExplain } from '../gitDiagnose'
 import { runtimeChip } from '../runtimeChip'
 import { redisInstallCommand } from '../installHints'
@@ -76,6 +77,27 @@ function deriveLogDir(dataDir) {
   return `${dataDir.replace(/[\\/]+$/, '')}${sep}logs`
 }
 
+// Shared column layout for the four tab bodies.
+const TAB_STACK_SX = { display: 'flex', flexDirection: 'column', gap: 1.2 }
+
+// A port-number field (1-65535), used four times in the Network tab. onCommit
+// receives the clamped integer; `value` doubles as the clamp fallback so a
+// transient empty string mid-edit doesn't wipe the field.
+function PortField({ label, value, onCommit, disabled }) {
+  return (
+    <TextField
+      size="small"
+      label={label}
+      type="number"
+      value={value}
+      onChange={(e) => onCommit(clampPort(e.target.value, value))}
+      disabled={disabled}
+      inputProps={{ min: 1, max: 65535 }}
+      sx={{ flex: 1 }}
+    />
+  )
+}
+
 export default function ServerInstancePanel({
   instances,
   selectedId,
@@ -99,16 +121,10 @@ export default function ServerInstancePanel({
   // Branch lists keyed by repo path so switching instances doesn't refetch
   // every time. { [repoPath]: { branches, error } | undefined }
   const { branchCache, refreshBranches } = useGitBranches()
-  // .NET state for the runtime/SDK chip shown in repo mode. The server's
-  // repo-mode launches go through `dotnet run` which needs the SDK; binary
-  // mode just needs the runtime (.dll requires it; self-contained .exe
-  // doesn't, but the chip is unconditional below — small footprint, harmless
-  // when ignored).
-  const [runtime, setRuntime] = useState({
-    dotnetFound: null,
-    netCoreApp10: null,
-    sdk10: null
-  })
+  // .NET runtime/SDK state for the chip shown in repo mode. Server repo-mode
+  // launches go through `dotnet run` which needs the SDK; binary mode just
+  // needs the runtime — the chip is unconditional below, harmless when ignored.
+  const runtime = useDotnetRuntime()
 
   const selected = instances.find((i) => i.id === selectedId) ?? null
   const isRunning = selected && runningIds.has(selected.id)
@@ -139,16 +155,6 @@ export default function ServerInstancePanel({
   useEffect(() => {
     refreshServerConfigs(selectedDataDir)
   }, [selectedDataDir])
-
-  // Probe .NET runtime + SDK once on mount. Cheap call (two execFile shells)
-  // and the answer doesn't change without a restart, so no need to re-probe
-  // per repo-mode switch.
-  useEffect(() => {
-    window.sparkAPI
-      .checkDotnetRuntime()
-      .then(setRuntime)
-      .catch((err) => console.error('[server] checkDotnetRuntime failed:', err))
-  }, [])
 
   useEffect(() => {
     if (!selectedDataDir || !selected?.configFileName) {
@@ -210,29 +216,18 @@ export default function ServerInstancePanel({
     onSelect(remaining[0]?.id ?? null)
   }
 
-  async function handleStart() {
+  // Run a start/stop/reset op behind the shared busy-label + error-snack
+  // guard. `op` is the bound IPC call; `failMsg` the fallback error text.
+  async function runBusy(label, op, failMsg) {
     if (!selected) return
-    setBusyLabel('Starting…')
-    const result = await onStart(selected)
+    setBusyLabel(label)
+    const result = await op()
     setBusyLabel(null)
-    if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Failed to start' })
+    if (!result.success) setSnack({ severity: 'error', message: result.error ?? failMsg })
   }
-
-  async function handleStop() {
-    if (!selected) return
-    setBusyLabel('Stopping…')
-    const result = await onStop(selected.id)
-    setBusyLabel(null)
-    if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Failed to stop' })
-  }
-
-  async function handleReset() {
-    if (!selected) return
-    setBusyLabel('Resetting…')
-    const result = await onReset(selected)
-    setBusyLabel(null)
-    if (!result.success) setSnack({ severity: 'error', message: result.error ?? 'Failed to reset' })
-  }
+  const handleStart = () => runBusy('Starting…', () => onStart(selected), 'Failed to start')
+  const handleStop = () => runBusy('Stopping…', () => onStop(selected.id), 'Failed to stop')
+  const handleReset = () => runBusy('Resetting…', () => onReset(selected), 'Failed to reset')
 
   async function pickBinary() {
     const p = await window.sparkAPI.pickFile(
@@ -298,22 +293,16 @@ export default function ServerInstancePanel({
     }
   }
 
-  const serverCacheEntry = selected?.serverRepoPath ? branchCache[selected.serverRepoPath] : null
-  const xmlCacheEntry = selected?.xmlRepoPath ? branchCache[selected.xmlRepoPath] : null
-  const serverBranchError = serverCacheEntry?.error ?? null
-  const xmlBranchError = xmlCacheEntry?.error ?? null
-  const serverBranchLoading = !!serverCacheEntry?.loading
-  const xmlBranchLoading = !!xmlCacheEntry?.loading
-  const serverBranches = withSavedBranchPinned(
-    serverCacheEntry?.branches ?? [],
-    selected?.serverBranch,
-    serverBranchLoading
-  )
-  const xmlBranches = withSavedBranchPinned(
-    xmlCacheEntry?.branches ?? [],
-    selected?.xmlBranch,
-    xmlBranchLoading
-  )
+  const {
+    branches: serverBranches,
+    error: serverBranchError,
+    loading: serverBranchLoading
+  } = deriveBranchOptions(branchCache, selected?.serverRepoPath, selected?.serverBranch)
+  const {
+    branches: xmlBranches,
+    error: xmlBranchError,
+    loading: xmlBranchLoading
+  } = deriveBranchOptions(branchCache, selected?.xmlRepoPath, selected?.xmlBranch)
 
   // Repo-mode launches go through `dotnet run` which compiles via the SDK.
   // Binary-mode .dll wrapping uses `dotnet <dll>` (runtime only); self-
@@ -325,7 +314,7 @@ export default function ServerInstancePanel({
   // ──────────── Tab content sections ────────────
 
   const serverTab = selected && (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+    <Box sx={TAB_STACK_SX}>
       <ToggleButtonGroup
         size="small"
         exclusive
@@ -391,7 +380,7 @@ export default function ServerInstancePanel({
   )
 
   const xmlTab = selected && (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+    <Box sx={TAB_STACK_SX}>
       {!isRepoMode ? (
         <Typography variant="body2" color="text.secondary" sx={{ p: 1, fontStyle: 'italic' }}>
           Local Hybrasyl.Xml branches are only available in repo mode. Switch to Repo on the Server
@@ -449,7 +438,7 @@ export default function ServerInstancePanel({
   )
 
   const configTab = selected && (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+    <Box sx={TAB_STACK_SX}>
       <Box>
         <Box
           sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}
@@ -561,7 +550,7 @@ export default function ServerInstancePanel({
   )
 
   const networkTab = selected && (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+    <Box sx={TAB_STACK_SX}>
       <Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
@@ -574,17 +563,11 @@ export default function ServerInstancePanel({
             disabled={isRunning}
             sx={{ flex: 2 }}
           />
-          <TextField
-            size="small"
+          <PortField
             label="Redis Port"
-            type="number"
             value={selected.redisPort}
-            onChange={(e) =>
-              updateSelected({ redisPort: clampPort(e.target.value, selected.redisPort) })
-            }
+            onCommit={(v) => updateSelected({ redisPort: v })}
             disabled={isRunning}
-            inputProps={{ min: 1, max: 65535 }}
-            sx={{ flex: 1 }}
           />
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
@@ -617,41 +600,23 @@ export default function ServerInstancePanel({
         </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <TextField
-          size="small"
+        <PortField
           label="Lobby"
-          type="number"
           value={selected.lobbyPort}
-          onChange={(e) =>
-            updateSelected({ lobbyPort: clampPort(e.target.value, selected.lobbyPort) })
-          }
+          onCommit={(v) => updateSelected({ lobbyPort: v })}
           disabled={isRunning}
-          inputProps={{ min: 1, max: 65535 }}
-          sx={{ flex: 1 }}
         />
-        <TextField
-          size="small"
+        <PortField
           label="Login"
-          type="number"
           value={selected.loginPort}
-          onChange={(e) =>
-            updateSelected({ loginPort: clampPort(e.target.value, selected.loginPort) })
-          }
+          onCommit={(v) => updateSelected({ loginPort: v })}
           disabled={isRunning}
-          inputProps={{ min: 1, max: 65535 }}
-          sx={{ flex: 1 }}
         />
-        <TextField
-          size="small"
+        <PortField
           label="World"
-          type="number"
           value={selected.worldPort}
-          onChange={(e) =>
-            updateSelected({ worldPort: clampPort(e.target.value, selected.worldPort) })
-          }
+          onCommit={(v) => updateSelected({ worldPort: v })}
           disabled={isRunning}
-          inputProps={{ min: 1, max: 65535 }}
-          sx={{ flex: 1 }}
         />
       </Box>
     </Box>
