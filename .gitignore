@@ -87,6 +87,13 @@ temp/
 node_modules/.vite
 
 # =========================
+# Playwright (e2e)
+# =========================
+test-results/
+playwright-report/
+playwright/.cache/
+
+# =========================
 # Future (monorepo)
 # =========================
 .turbo/
