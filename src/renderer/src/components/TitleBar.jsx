@@ -58,7 +58,12 @@ export default function TitleBar() {
         variant="h6"
         sx={{
           fontWeight: 'bold',
-          fontSize: '1.15rem',
+          // responsiveFontSizes() attaches sm/md/lg font-size media queries to
+          // the h6 variant, so the title would grow when the window crosses a
+          // breakpoint — e.g. 480→840px when a side pane opens (18.4→20px). The
+          // doubled-class `&&` outranks those media-query rules, pinning the
+          // size at every width. (Kept variant="h6" for its Cinzel font.)
+          '&&': { fontSize: '1.15rem' },
           color: 'secondary.contrastText',
           pointerEvents: 'none'
         }}

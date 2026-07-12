@@ -79,12 +79,16 @@ export async function readGeometry(electronApp, page) {
       const el = document.querySelector(sel)
       return el ? Math.round(window.screenX + el.getBoundingClientRect().left) : null
     }
+    const title = document.querySelector('[data-testid="app-title"]')
     return {
       screenX: window.screenX,
       innerWidth: window.innerWidth,
       panelScreenLeft: screenLeftOf('[data-testid="main-panel"]'),
       titleScreenLeft: screenLeftOf('[data-testid="app-title"]'),
-      statusScreenLeft: screenLeftOf('[data-testid="client-status"]')
+      statusScreenLeft: screenLeftOf('[data-testid="client-status"]'),
+      // Guards against responsiveFontSizes rescaling the title when the window
+      // crosses a breakpoint (a side pane opening widens 480→840px).
+      titleFontSize: title ? getComputedStyle(title).fontSize : null
     }
   })
   return {

@@ -105,6 +105,19 @@ test.describe('Settings pane does not shift window content', () => {
       expect(Math.abs(reclosed.dom[key] - closed.dom[key])).toBeLessThanOrEqual(TOLERANCE)
     }
 
+    // The title must not change *size* either — responsiveFontSizes rescales the
+    // h6 variant at the 600px breakpoint, so opening a pane (480→840) grew it
+    // until it was pinned with a doubled-class rule. Same class of bug as the
+    // gutter reflow, different axis.
+    console.log(
+      '[offset] title fontSize closed=%s open=%s reclosed=%s',
+      closed.dom.titleFontSize,
+      open.dom.titleFontSize,
+      reclosed.dom.titleFontSize
+    )
+    expect(open.dom.titleFontSize).toBe(closed.dom.titleFontSize)
+    expect(reclosed.dom.titleFontSize).toBe(closed.dom.titleFontSize)
+
     // The outer window's left edge itself shouldn't wander either — the resize
     // grows width to the right, it doesn't reposition the window.
     expect(open.native.bounds.x).toBe(closed.native.bounds.x)
