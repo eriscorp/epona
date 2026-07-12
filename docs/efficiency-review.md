@@ -30,9 +30,21 @@ four near-identical fantasy theme files.
 
 ---
 
-## High value
+## Won't do (recurring red herring)
 
-### 1. Four fantasy themes are ~99% duplicated — extract a `createFantasyTheme(tokens)` factory ⚠ high
+### 1. "Collapse the four fantasy themes into a `createFantasyTheme(tokens)` factory" — DECLINED
+This surfaces in every review and is a known red herring. The themes only *look*
+uniform: alphas vary per theme at the same spots (MuiPaper border
+0.32/0.35/0.45/0.32; paper bg 0.82/0.90/0.94/0.88), and there are real structural
+deviations — **danaan** especially (`mode:'light'`, heading colors, solid contained
+button bg), plus chadul's hover glows and grinneal's asymmetric paper shadow. A
+factory needs so many tokens + overrides that the real reduction is modest, for
+static low-churn config. `themes/shared.js` (STATUS_COLORS, FANTASY_SHAPE,
+fantasyTypography) is the right amount of sharing. **Do not re-propose this.**
+
+<details><summary>Original finding (kept for context)</summary>
+
+### Four fantasy themes are ~99% duplicated — extract a `createFantasyTheme(tokens)` factory
 - `themes/hybrasyl.js` (187), `chadul.js` (198), `danaan.js` (201),
   `grinneal.js` (190). All share an identical `components` block (MuiPaper/
   Button/AppBar/Drawer/ListItemButton/Card/Divider/Chip/PaginationItem/Tab/Tabs/
