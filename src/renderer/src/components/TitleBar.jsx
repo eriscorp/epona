@@ -1,39 +1,63 @@
 import { Toolbar, IconButton, Tooltip, Box, Typography } from '@mui/material'
 import { GiContract, GiDeathSkull } from 'react-icons/gi'
+import RemoveIcon from '@mui/icons-material/Remove'
+import CloseIcon from '@mui/icons-material/Close'
 import { toolbarBtnSx } from './toolbarStyles'
+import { useSettings } from '../store/settingsStore.js'
+import eponaLogo from '../assets/epona.png'
 
-const winBtnSx = toolbarBtnSx
+// The plain/corporate themes swap the gamified window glyphs (stroked skull /
+// contract) for flat standard icons, matching the house apps. The four fantasy
+// themes keep the stylized chrome.
+const PLAIN_CHROME_THEMES = ['spark', 'mundanes']
+
+// Flat window-button styling for plain themes — no stroke/hover-swap, just a
+// translucent wash. secondary.contrastText reads on the colored title bar.
+const plainBtnSx = {
+  WebkitAppRegion: 'no-drag',
+  color: 'secondary.contrastText',
+  '& svg': { fontSize: '1.15em' },
+  '&:hover': { backgroundColor: 'action.hover' }
+}
 
 export default function TitleBar() {
-  // macOS draws the native traffic-light controls over the top-left of this bar
-  // (titleBarStyle: 'hiddenInset'), so we drop the in-app minimize/close buttons
-  // there and pad the left so the logo/title clear the lights. Windows/Linux are
-  // frameless and keep the custom controls.
   const isMac = window.sparkAPI.platform === 'darwin'
+  const theme = useSettings((s) => s.settings?.theme)
+  const plain = PLAIN_CHROME_THEMES.includes(theme)
+
+  const winBtnSx = plain ? plainBtnSx : toolbarBtnSx
+  const closeBtnSx = plain
+    ? { ...plainBtnSx, '&:hover': { backgroundColor: 'error.main', color: 'error.contrastText' } }
+    : { ...toolbarBtnSx, '&:hover': { backgroundColor: 'info.main', color: 'warning.main' } }
+
   return (
     <Toolbar
       variant="dense"
       sx={{
-        position: 'relative',
         bgcolor: 'secondary.main',
         minHeight: 36,
-        px: 1.5,
+        // macOS draws its native traffic lights over the top-left (titleBarStyle
+        // 'hiddenInset'), so pad the left so the logo/title clear them. Windows/
+        // Linux are frameless and keep the in-app controls on the right.
+        pl: isMac ? '76px' : 1.5,
+        pr: 1.5,
+        gap: 1,
         WebkitAppRegion: 'drag',
         flexShrink: 0
       }}
     >
-      {/* Absolutely centered over the full bar so the macOS traffic lights (left)
-          and the Windows controls (right) don't pull the title off-center.
-          pointerEvents: none keeps the whole bar draggable through the title. */}
+      <Box
+        component="img"
+        src={eponaLogo}
+        alt=""
+        sx={{ width: 20, height: 20, borderRadius: 0.5, pointerEvents: 'none' }}
+      />
       <Typography
         variant="h6"
         sx={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          textAlign: 'center',
           fontWeight: 'bold',
-          fontSize: '1.5rem',
+          fontSize: '1.15rem',
+          color: 'secondary.contrastText',
           pointerEvents: 'none'
         }}
       >
@@ -46,19 +70,12 @@ export default function TitleBar() {
         <>
           <Tooltip title="Minimize">
             <IconButton size="small" sx={winBtnSx} onClick={() => window.sparkAPI.minimizeWindow()}>
-              <GiContract />
+              {plain ? <RemoveIcon /> : <GiContract />}
             </IconButton>
           </Tooltip>
           <Tooltip title="Close">
-            <IconButton
-              size="small"
-              sx={{
-                ...winBtnSx,
-                '&:hover': { backgroundColor: 'info.main', color: 'warning.main' }
-              }}
-              onClick={() => window.sparkAPI.closeWindow()}
-            >
-              <GiDeathSkull />
+            <IconButton size="small" sx={closeBtnSx} onClick={() => window.sparkAPI.closeWindow()}>
+              {plain ? <CloseIcon /> : <GiDeathSkull />}
             </IconButton>
           </Tooltip>
         </>
