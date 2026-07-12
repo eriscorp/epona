@@ -14,7 +14,7 @@ import {
 import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
-import { createLineBuffer } from './lineBuffer.js'
+import { pipeChildLines } from './childLines.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { releaseAll as releaseAllWorktrees, flushWorktrees } from './worktreeManager.js'
 import { collectConfiguredRepoPaths } from './repoRoots.js'
@@ -290,45 +290,40 @@ app.whenReady().then(() => {
       captured.push({ stream, text: line })
       safeSend('hybrasyl:log', { stream, line })
     }
-    const stdout = createLineBuffer(record('stdout'))
-    const stderr = createLineBuffer(record('stderr'))
-    child.stdout?.on('data', stdout.push)
-    child.stderr?.on('data', stderr.push)
-    child.stdout?.on('end', stdout.flush)
-    child.stderr?.on('end', stderr.flush)
-    child.on('exit', async (code, signal) => {
-      stdout.flush()
-      stderr.flush()
-      if (activeHybrasylChild === child) {
-        activeHybrasylChild = null
-        activeHybrasylCleanup = async () => {}
-      }
-      try {
-        await cleanup()
-      } catch (err) {
-        console.warn('hybrasyl client cleanup failed:', err.message)
-      }
-      // Auto-save: only fires for repo-mode launches (this is the only path
-      // that reaches wireHybrasylChildLogs) when the user has opted in AND the
-      // active server instance has a logDir. Failures are non-fatal — the
-      // pane still has the lines for a manual save.
-      try {
-        const settings = await settingsManager.load()
-        if (settings.targets.hybrasyl.autoSaveLogs) {
-          const dest = activeInstanceLogDir(settings)
-          if (dest) {
-            await writeAutoSaveLog(dest, captured, child.pid)
-          }
+    pipeChildLines(child, {
+      onStdoutLine: record('stdout'),
+      onStderrLine: record('stderr'),
+      onExit: async (code, signal) => {
+        if (activeHybrasylChild === child) {
+          activeHybrasylChild = null
+          activeHybrasylCleanup = async () => {}
         }
-      } catch (err) {
-        console.warn('hybrasyl client auto-save failed:', err.message)
+        try {
+          await cleanup()
+        } catch (err) {
+          console.warn('hybrasyl client cleanup failed:', err.message)
+        }
+        // Auto-save: only fires for repo-mode launches (this is the only path
+        // that reaches wireHybrasylChildLogs) when the user has opted in AND the
+        // active server instance has a logDir. Failures are non-fatal — the
+        // pane still has the lines for a manual save.
+        try {
+          const settings = await settingsManager.load()
+          if (settings.targets.hybrasyl.autoSaveLogs) {
+            const dest = activeInstanceLogDir(settings)
+            if (dest) {
+              await writeAutoSaveLog(dest, captured, child.pid)
+            }
+          }
+        } catch (err) {
+          console.warn('hybrasyl client auto-save failed:', err.message)
+        }
+        safeSend('hybrasyl:childExit', { pid: child.pid, code, signal })
+      },
+      onErrorLine: (errLine) => {
+        captured.push({ stream: 'stderr', text: errLine })
+        safeSend('hybrasyl:log', { stream: 'stderr', line: errLine })
       }
-      safeSend('hybrasyl:childExit', { pid: child.pid, code, signal })
-    })
-    child.on('error', (err) => {
-      const errLine = `[spawn error] ${err.message}`
-      captured.push({ stream: 'stderr', text: errLine })
-      safeSend('hybrasyl:log', { stream: 'stderr', line: errLine })
     })
   }
 
@@ -454,28 +449,26 @@ app.whenReady().then(() => {
   }
 
   function wireInstanceLogs(instanceId, child) {
-    const stdout = createLineBuffer((line) =>
-      safeSend('instance:log', { instanceId, stream: 'stdout', line })
-    )
-    const stderr = createLineBuffer((line) =>
-      safeSend('instance:log', { instanceId, stream: 'stderr', line })
-    )
-    child.stdout?.on('data', stdout.push)
-    child.stderr?.on('data', stderr.push)
-    child.stdout?.on('end', stdout.flush)
-    child.stderr?.on('end', stderr.flush)
-    child.on('exit', (code, signal) => {
-      stdout.flush()
-      stderr.flush()
-      if (instanceChildren.get(instanceId) === child) instanceChildren.delete(instanceId)
-      safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal })
+    pipeChildLines(child, {
+      onStdoutLine: (line) => safeSend('instance:log', { instanceId, stream: 'stdout', line }),
+      onStderrLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line }),
+      onExit: (code, signal) => {
+        if (instanceChildren.get(instanceId) === child) instanceChildren.delete(instanceId)
+        safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal })
+      },
+      onErrorLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line })
     })
-    child.on('error', (err) => {
-      safeSend('instance:log', {
-        instanceId,
-        stream: 'stderr',
-        line: `[spawn error] ${err.message}`
-      })
+  }
+
+  // PID-tracked instances (the PowerShell console wrapper) have no child stream
+  // to emit a natural 'exit', so stop/reset synthesize the renderer's childExit
+  // after a forced kill. Same SIGKILL payload from both call sites.
+  function notifyPidExit(instanceId, pid) {
+    mainWindow.webContents.send('instance:childExit', {
+      instanceId,
+      pid,
+      code: null,
+      signal: 'SIGKILL'
     })
   }
 
@@ -590,12 +583,7 @@ app.whenReady().then(() => {
       return { success: false, error: `kill failed: ${result.error.message}` }
     }
     instanceChildren.delete(instanceId)
-    mainWindow.webContents.send('instance:childExit', {
-      instanceId,
-      pid,
-      code: null,
-      signal: 'SIGKILL'
-    })
+    notifyPidExit(instanceId, pid)
     await runCleanup()
     return { success: true, wasRunning: true }
   })
@@ -619,12 +607,7 @@ app.whenReady().then(() => {
       const pid = tracked.value
       await killProcessTree(pid)
       instanceChildren.delete(instance.id)
-      mainWindow.webContents.send('instance:childExit', {
-        instanceId: instance.id,
-        pid,
-        code: null,
-        signal: 'SIGKILL'
-      })
+      notifyPidExit(instance.id, pid)
     }
 
     try {
