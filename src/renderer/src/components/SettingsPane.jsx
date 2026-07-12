@@ -524,11 +524,16 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
             Epona{version ? ` v${version}` : ''}
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, mb: 1.5 }}>
+            {/* color="inherit" + always-underline keeps links readable on every
+                theme — the fantasy themes use a dark primary.main (MUI Link's
+                default), which is nearly invisible on their dark paper. */}
             <Link
               href="https://www.hybrasyl.com"
               target="_blank"
               rel="noopener noreferrer"
               variant="body2"
+              color="inherit"
+              underline="always"
             >
               hybrasyl.com
             </Link>
@@ -537,6 +542,8 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
               target="_blank"
               rel="noopener noreferrer"
               variant="body2"
+              color="inherit"
+              underline="always"
             >
               GitHub
             </Link>
