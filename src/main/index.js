@@ -227,6 +227,7 @@ app.whenReady().then(() => {
 
   // Client versions
   ipcMain.handle('versions:list', () => listVersions())
+  ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
   // File dialogs. Each accepts an optional defaultPath so callers can pre-fill

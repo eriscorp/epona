@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   listVersions: () => ipcRenderer.invoke('versions:list'),
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: (defaultPath) => ipcRenderer.invoke('dialog:openExe', defaultPath),
   pickFile: (title, filters, defaultPath) =>
