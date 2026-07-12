@@ -41,7 +41,8 @@ const THEMES = [
   { key: 'chadul', label: 'Chadul' },
   { key: 'danaan', label: 'Danaan' },
   { key: 'grinneal', label: 'Grinneal' },
-  { key: 'spark', label: 'Spark' }
+  { key: 'spark', label: 'Spark' },
+  { key: 'mundanes', label: 'Mundanes' }
 ]
 
 const PANE_W = 360

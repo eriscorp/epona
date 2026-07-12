@@ -10,6 +10,7 @@ import chadulTheme from './themes/chadul'
 import danaanTheme from './themes/danaan'
 import grinnealTheme from './themes/grinneal'
 import sparkTheme from './themes/spark'
+import mundanesTheme from './themes/mundanes'
 import TitleBar from './components/TitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
@@ -64,7 +65,8 @@ const themes = {
   chadul: chadulTheme,
   danaan: danaanTheme,
   grinneal: grinnealTheme,
-  spark: sparkTheme
+  spark: sparkTheme,
+  mundanes: mundanesTheme
 }
 
 export default function App() {
