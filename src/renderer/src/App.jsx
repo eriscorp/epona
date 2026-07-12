@@ -10,6 +10,7 @@ import chadulTheme from './themes/chadul'
 import danaanTheme from './themes/danaan'
 import grinnealTheme from './themes/grinneal'
 import sparkTheme from './themes/spark'
+import mundanesTheme from './themes/mundanes'
 import TitleBar from './components/TitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
@@ -64,7 +65,8 @@ const themes = {
   chadul: chadulTheme,
   danaan: danaanTheme,
   grinneal: grinnealTheme,
-  spark: sparkTheme
+  spark: sparkTheme,
+  mundanes: mundanesTheme
 }
 
 export default function App() {
@@ -187,14 +189,19 @@ export default function App() {
           display: 'flex',
           flexDirection: 'row',
           width: '100%',
-          height: WINDOW_H,
+          // Fill the actual window client area rather than a fixed WINDOW_H —
+          // the programmatic resize can leave the client a hair off, and a fixed
+          // pixel height would then reveal a background.default letterbox band
+          // (obvious on the light themes).
+          height: '100%',
           bgcolor: 'background.default'
         }}
       >
         <Box
+          data-testid="main-panel"
           sx={{
             flex: `0 0 ${MAIN_W}px`,
-            height: WINDOW_H,
+            height: '100%',
             display: 'flex',
             flexDirection: 'column',
             bgcolor: 'background.default',

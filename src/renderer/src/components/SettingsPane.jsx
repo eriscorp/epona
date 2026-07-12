@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Box,
   Typography,
+  Link,
   FormControl,
   InputLabel,
   Select,
@@ -41,7 +42,8 @@ const THEMES = [
   { key: 'chadul', label: 'Chadul' },
   { key: 'danaan', label: 'Danaan' },
   { key: 'grinneal', label: 'Grinneal' },
-  { key: 'spark', label: 'Spark' }
+  { key: 'spark', label: 'Spark' },
+  { key: 'mundanes', label: 'Mundanes' }
 ]
 
 const PANE_W = 360
@@ -109,6 +111,14 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
   // collapses all (clicking the open section closes it). Defaults to Theme.
   const [expanded, setExpanded] = useState('theme')
   const handleAccordion = (panel) => (_, isExpanded) => setExpanded(isExpanded ? panel : false)
+  // App version for the About section — resolved from the main process on mount.
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    window.sparkAPI
+      .getAppVersion()
+      .then(setVersion)
+      .catch(() => {})
+  }, [])
   const isWindows = window.sparkAPI.platform === 'win32'
   const protectedLocation = isWindows ? detectProtectedLocation(settings.clientPath) : null
 
@@ -213,6 +223,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
 
   return (
     <Box
+      data-testid="settings-pane"
       sx={{
         flex: `0 0 ${PANE_W}px`,
         height: '100%',
@@ -508,6 +519,69 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
             )}
           </SettingsSection>
         )}
+
+        <SettingsSection panel="about" title="About" expanded={expanded} onToggle={handleAccordion}>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Epona{version ? ` v${version}` : ''}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, mb: 1.5 }}>
+            {/* color="inherit" + always-underline keeps links readable on every
+                theme — the fantasy themes use a dark primary.main (MUI Link's
+                default), which is nearly invisible on their dark paper. */}
+            <Link
+              href="https://www.hybrasyl.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="body2"
+              color="inherit"
+              underline="always"
+            >
+              hybrasyl.com
+            </Link>
+            <Link
+              href="https://github.com/eriscorp/epona"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="body2"
+              color="inherit"
+              underline="always"
+            >
+              GitHub
+            </Link>
+          </Box>
+          <Box
+            sx={{
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              fontSize: '0.72rem',
+              lineHeight: 1.7,
+              opacity: 0.85
+            }}
+          >
+            {`NEW FROM ERISCO™
+
+EPONA
+THE ONE THAT GOES BEFORE THE GAME
+A LAUNCHER OF UNREASONABLE AMBITION
+
+FEATURES:
+- Launches things
+- Occasionally the right things
+- A button labeled "Flush Worktrees"
+
+INCLUDES:
+- Five and a half themes
+- Strong opinions about %LOCALAPPDATA%
+- The confidence of a native Win32 memory patch
+
+SIDE EFFECTS:
+- Sudden urge to run a server
+- Diminished patience for double-clicking .exe files
+
+WARNING:
+Not affiliated with any horse.`}
+          </Box>
+        </SettingsSection>
       </Box>
 
       {flushConfirm && (

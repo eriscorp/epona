@@ -105,7 +105,14 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 480,
     height: 800,
-    resizable: false,
+    // Created resizable so setContentSize takes effect cleanly when panels open
+    // (a resizable:false window makes it a silent no-op). We keep it from being
+    // user-resized/maximized by locking min == max on every programmatic resize
+    // (see the window:resize handler) rather than toggling resizable — the
+    // toggle adds/removes WS_THICKFRAME on Windows and leaves the web contents
+    // offset to the right (a left-side letterbox that springs back on close).
+    resizable: true,
+    maximizable: false,
     show: false,
     autoHideMenuBar: true,
     // macOS keeps the frameless look but shows the native traffic-light controls
@@ -227,6 +234,7 @@ app.whenReady().then(() => {
 
   // Client versions
   ipcMain.handle('versions:list', () => listVersions())
+  ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
   // File dialogs. Each accepts an optional defaultPath so callers can pre-fill
@@ -655,14 +663,17 @@ app.whenReady().then(() => {
   ipcMain.on('window:close', () => mainWindow.close())
   ipcMain.on('window:resize', (_, { width, height }) => {
     if (typeof width !== 'number' || typeof height !== 'number') return
-    // On Windows, `resizable: false` strips the thick frame style and makes
-    // programmatic resizing a silent no-op — flip it around the call so the
-    // panel toggle actually takes. setContentSize so the target matches what
-    // the renderer sees (we're frame:false today, but belt-and-braces).
-    const wasResizable = mainWindow.isResizable()
-    mainWindow.setResizable(true)
-    mainWindow.setContentSize(width, height, false)
-    mainWindow.setResizable(wasResizable)
+    // Resize by relocking min == max instead of toggling setResizable. The old
+    // toggle added/removed WS_THICKFRAME around setContentSize on Windows, which
+    // left the web contents offset to the right (a left-side letterbox that
+    // sprang back when the pane closed). Unlock the floor first so we never pass
+    // through a min > max state, size to the target, then relock so the
+    // frameless window still can't be edge-dragged. frame:false ⇒ window size ==
+    // content size, so the same width/height serve both.
+    mainWindow.setMinimumSize(0, 0)
+    mainWindow.setMaximumSize(width, height)
+    mainWindow.setContentSize(width, height)
+    mainWindow.setMinimumSize(width, height)
   })
 
   app.on('activate', () => {
