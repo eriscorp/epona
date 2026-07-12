@@ -198,6 +198,7 @@ export default function App() {
         }}
       >
         <Box
+          data-testid="main-panel"
           sx={{
             flex: `0 0 ${MAIN_W}px`,
             height: '100%',

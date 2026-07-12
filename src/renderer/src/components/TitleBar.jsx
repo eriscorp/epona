@@ -33,6 +33,7 @@ export default function TitleBar() {
   return (
     <Toolbar
       variant="dense"
+      disableGutters
       sx={{
         bgcolor: 'secondary.main',
         minHeight: 36,
@@ -53,6 +54,7 @@ export default function TitleBar() {
         sx={{ width: 20, height: 20, borderRadius: 0.5, pointerEvents: 'none' }}
       />
       <Typography
+        data-testid="app-title"
         variant="h6"
         sx={{
           fontWeight: 'bold',

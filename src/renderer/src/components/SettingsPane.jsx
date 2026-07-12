@@ -223,6 +223,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
 
   return (
     <Box
+      data-testid="settings-pane"
       sx={{
         flex: `0 0 ${PANE_W}px`,
         height: '100%',

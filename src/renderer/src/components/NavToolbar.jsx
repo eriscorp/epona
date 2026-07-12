@@ -26,16 +26,25 @@ export default function NavToolbar({
       ? { found: true, label: `Assets: ${assetsName}` }
       : { found: false, label: 'Assets Not Found' }
   return (
-    <Toolbar variant="dense" sx={{ bgcolor: 'secondary.main', minHeight: 40, opacity: 0.85 }}>
+    <Toolbar
+      variant="dense"
+      disableGutters
+      sx={{ bgcolor: 'secondary.main', minHeight: 40, opacity: 0.85, px: 2 }}
+    >
       {status.found ? (
         <Typography
+          data-testid="client-status"
           variant="caption"
           sx={{ color: 'text.button', opacity: 0.9, letterSpacing: '0.1em' }}
         >
           <strong>{status.label}</strong>
         </Typography>
       ) : (
-        <Typography variant="caption" sx={{ color: 'text.disabled', opacity: 0.9 }}>
+        <Typography
+          data-testid="client-status"
+          variant="caption"
+          sx={{ color: 'text.disabled', opacity: 0.9 }}
+        >
           {status.label}
         </Typography>
       )}
@@ -55,7 +64,7 @@ export default function NavToolbar({
       />
 
       <Tooltip title="Settings">
-        <IconButton sx={btnSx} onClick={onToggleSettings}>
+        <IconButton data-testid="settings-toggle" sx={btnSx} onClick={onToggleSettings}>
           <GiSettingsKnobs />
         </IconButton>
       </Tooltip>
