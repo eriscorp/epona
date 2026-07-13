@@ -18,6 +18,8 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-07-12
+
 ### Added
 
 - **Mundanes light theme** — a flat, "corporate" light theme sitting alongside the
