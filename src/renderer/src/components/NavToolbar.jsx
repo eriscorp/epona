@@ -1,19 +1,23 @@
 import { Toolbar, IconButton, Tooltip, Divider, Box, Typography } from '@mui/material'
-import { GiSettingsKnobs, GiMagnifyingGlass } from 'react-icons/gi'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined'
-import { toolbarBtnSx } from './toolbarStyles'
+import { GiSettingsKnobs, GiMagnifyingGlass, GiHelp, GiBugNet } from 'react-icons/gi'
+import { toolbarBtnSx, gamifiedBtnSx } from './toolbarStyles'
+import { chromeTier } from './titleChrome'
+import { useSettings } from '../store/settingsStore.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
-
-const btnSx = { ...toolbarBtnSx, mx: -0.5 }
 
 export default function NavToolbar({
   detectedVersion,
   clientPath,
   onLocateClient,
   onToggleSettings,
-  onOpenHelp
+  onOpenHelp,
+  onReportIssue
 }) {
   const isWindows = window.sparkAPI.platform === 'win32'
+  const theme = useSettings((s) => s.settings?.theme)
+  // Match the title bar: the dark fantasy themes get the stroked/lifted house
+  // glyphs; the light and plain themes keep the soft base stroke.
+  const btnSx = { ...(chromeTier(theme) === 'gamified' ? gamifiedBtnSx : toolbarBtnSx), mx: -0.5 }
   // Windows shows the detected legacy-client version (memory-patch target).
   // Non-Windows points at a Dark Ages asset folder, which carries no version —
   // so report whether assets have been located, and which folder.
@@ -73,7 +77,13 @@ export default function NavToolbar({
         title={isWindows ? 'Recommended installs (winget commands)' : 'Recommended installs'}
       >
         <IconButton sx={btnSx} onClick={onOpenHelp}>
-          <HelpOutlineIcon />
+          <GiHelp />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Report an issue">
+        <IconButton sx={btnSx} onClick={onReportIssue}>
+          <GiBugNet />
         </IconButton>
       </Tooltip>
     </Toolbar>

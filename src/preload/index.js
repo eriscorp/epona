@@ -12,6 +12,14 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   listVersions: () => ipcRenderer.invoke('versions:list'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  // About card + Report Issue / diagnostics module. revealSettings/revealLogs open
+  // the app-owned settings + logs folders; the diagnostics:* calls back the report flow.
+  revealSettings: () => ipcRenderer.invoke('app:revealSettings'),
+  revealLogs: () => ipcRenderer.invoke('diagnostics:revealLogs'),
+  reportRendererError: (payload) => ipcRenderer.invoke('diagnostics:reportRendererError', payload),
+  buildDiagnostics: () => ipcRenderer.invoke('diagnostics:build'),
+  openIssue: (payload) => ipcRenderer.invoke('diagnostics:openIssue', payload),
+  copyReport: (payload) => ipcRenderer.invoke('diagnostics:copyReport', payload),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: (defaultPath) => ipcRenderer.invoke('dialog:openExe', defaultPath),
   pickFile: (title, filters, defaultPath) =>

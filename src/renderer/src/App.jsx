@@ -21,6 +21,7 @@ import ActionButtons from './components/ActionButtons'
 import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
+import ReportIssueDialog from './components/ReportIssueDialog'
 import { PANEL_BORDER_COLOR } from './uiConstants.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
@@ -81,6 +82,7 @@ export default function App() {
   const hydrate = useSettings((s) => s.hydrate)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(() =>
     startupTabIndex(defaultSettings.targetKind, isWindows)
   )
@@ -216,6 +218,7 @@ export default function App() {
             onLocateClient={handleLocateClient}
             onToggleSettings={() => setSettingsOpen((o) => !o)}
             onOpenHelp={() => setHelpOpen(true)}
+            onReportIssue={() => setReportOpen(true)}
           />
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
@@ -359,10 +362,12 @@ export default function App() {
             versions={versions}
             onClose={() => setSettingsOpen(false)}
             onChange={update}
+            onReportIssue={() => setReportOpen(true)}
           />
         )}
 
         <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <ReportIssueDialog open={reportOpen} onClose={() => setReportOpen(false)} />
       </Box>
     </ThemeProvider>
   )
