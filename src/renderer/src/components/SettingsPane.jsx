@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Box,
+  Stack,
   Typography,
   Link,
   FormControl,
@@ -33,6 +34,12 @@ import AddIcon from '@mui/icons-material/Add'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined'
+import FolderOpenIcon from '@mui/icons-material/FolderOpen'
+import AboutDialog from './AboutDialog'
+import { DEPTH } from './titleChrome'
+import eponaLogo from '../assets/epona.png'
 import { PANEL_BORDER } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 import { detectProtectedLocation } from '../../../shared/protectedPaths.js'
@@ -101,7 +108,8 @@ function SettingsSection({ panel, title, expanded, onToggle, action, detailsSx, 
   )
 }
 
-export default function SettingsPane({ settings, versions, onClose, onChange }) {
+export default function SettingsPane({ settings, versions, onClose, onChange, onReportIssue }) {
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
   const [worldDirDialog, setWorldDirDialog] = useState(null) // null | { mode, worldDir }
   const [flushConfirm, setFlushConfirm] = useState(false)
@@ -522,65 +530,78 @@ export default function SettingsPane({ settings, versions, onClose, onChange }) 
         )}
 
         <SettingsSection panel="about" title="About" expanded={expanded} onToggle={handleAccordion}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Epona{version ? ` v${version}` : ''}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, mb: 1.5 }}>
-            {/* color="inherit" + always-underline keeps links readable on every
-                theme — the fantasy themes use a dark primary.main (MUI Link's
-                default), which is nearly invisible on their dark paper. */}
-            <Link
-              href="https://www.hybrasyl.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="body2"
-              color="inherit"
-              underline="always"
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 2 }}>
+            <Box
+              component="img"
+              src={eponaLogo}
+              alt=""
+              aria-hidden
+              sx={{ width: 40, height: 40, borderRadius: 0.5, filter: `drop-shadow(${DEPTH})` }}
+            />
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                Epona{version ? ` v${version}` : ''}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, mt: 0.25 }}>
+                {/* color="inherit" + always-underline keeps links readable on every
+                    theme — the fantasy themes use a dark primary.main (MUI Link's
+                    default), which is nearly invisible on their dark paper. */}
+                <Link
+                  href="https://www.hybrasyl.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="body2"
+                  color="inherit"
+                  underline="always"
+                >
+                  hybrasyl.com
+                </Link>
+                <Link
+                  href="https://github.com/eriscorp/epona"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="body2"
+                  color="inherit"
+                  underline="always"
+                >
+                  GitHub
+                </Link>
+              </Box>
+            </Box>
+          </Stack>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<InfoOutlinedIcon />}
+              onClick={() => setAboutOpen(true)}
             >
-              hybrasyl.com
-            </Link>
-            <Link
-              href="https://github.com/eriscorp/epona"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="body2"
-              color="inherit"
-              underline="always"
+              About Epona…
+            </Button>
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<BugReportOutlinedIcon />}
+              onClick={onReportIssue}
             >
-              GitHub
-            </Link>
-          </Box>
-          <Box
-            sx={{
-              fontFamily: 'monospace',
-              whiteSpace: 'pre-wrap',
-              fontSize: '0.72rem',
-              lineHeight: 1.7,
-              opacity: 0.85
-            }}
-          >
-            {`NEW FROM ERISCO™
-
-EPONA
-THE ONE THAT GOES BEFORE THE GAME
-A LAUNCHER OF UNREASONABLE AMBITION
-
-FEATURES:
-- Launches things
-- Occasionally the right things
-- A button labeled "Flush Worktrees"
-
-INCLUDES:
-- Five and a half themes
-- Strong opinions about %LOCALAPPDATA%
-- The confidence of a native Win32 memory patch
-
-SIDE EFFECTS:
-- Sudden urge to run a server
-- Diminished patience for double-clicking .exe files
-
-WARNING:
-Not affiliated with any horse.`}
+              Report an issue
+            </Button>
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<FolderOpenIcon />}
+              onClick={() => window.sparkAPI.revealSettings()}
+            >
+              Reveal settings folder
+            </Button>
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<FolderOpenIcon />}
+              onClick={() => window.sparkAPI.revealLogs()}
+            >
+              Reveal logs folder
+            </Button>
           </Box>
         </SettingsSection>
       </Box>
@@ -623,6 +644,8 @@ Not affiliated with any horse.`}
           onCancel={() => setWorldDirDialog(null)}
         />
       )}
+
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </Box>
   )
 }

@@ -26,6 +26,9 @@ import {
   isTrackedAlive,
   raceChildExit
 } from './instanceManager.js'
+import { initSessionLog, captureError } from './sessionLog.js'
+import { installGlobalErrorHandlers } from './errorHandlers.js'
+import { registerDiagnosticsHandlers } from './diagnostics.js'
 
 let settingsManager
 
@@ -44,6 +47,14 @@ const localAppData =
     : app.getPath('appData')
 const dataDir = join(localAppData, 'Erisco', 'Epona')
 app.setPath('userData', dataDir)
+
+// Report Issue / diagnostics: session logs live in a `logs/` subfolder of the local
+// app-data dir (a clean "Reveal logs folder" target, separate from settings.json).
+// Install the global error nets + open this run's session file at module load, before
+// `whenReady`, so a startup-time main-process error is still captured.
+const logsDir = join(dataDir, 'logs')
+installGlobalErrorHandlers(captureError)
+void initSessionLog(logsDir)
 
 // Splash + reveal coordination. The main window is created hidden and only
 // shown once the renderer signals it has hydrated its settings ('app:ready'),
@@ -236,6 +247,11 @@ app.whenReady().then(() => {
   ipcMain.handle('versions:list', () => listVersions())
   ipcMain.handle('app:getVersion', () => app.getVersion())
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
+
+  // App / diagnostics (About card). Reveal opens the app-owned settings folder;
+  // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs.
+  ipcMain.handle('app:revealSettings', () => shell.openPath(dataDir))
+  registerDiagnosticsHandlers(ipcMain, () => app.getVersion())
 
   // File dialogs. Each accepts an optional defaultPath so callers can pre-fill
   // the picker with the current setting value — without it Electron's dialog

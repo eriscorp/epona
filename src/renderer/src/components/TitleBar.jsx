@@ -2,14 +2,10 @@ import { Toolbar, IconButton, Tooltip, Box, Typography } from '@mui/material'
 import { GiContract, GiDeathSkull } from 'react-icons/gi'
 import RemoveIcon from '@mui/icons-material/Remove'
 import CloseIcon from '@mui/icons-material/Close'
-import { toolbarBtnSx } from './toolbarStyles'
+import { toolbarBtnSx, gamifiedBtnSx } from './toolbarStyles'
+import { DEPTH, TITLE_TEXT_SHADOW, chromeTier } from './titleChrome'
 import { useSettings } from '../store/settingsStore.js'
 import eponaLogo from '../assets/epona.png'
-
-// The plain/corporate themes swap the gamified window glyphs (stroked skull /
-// contract) for flat standard icons, matching the house apps. The four fantasy
-// themes keep the stylized chrome.
-const PLAIN_CHROME_THEMES = ['spark', 'mundanes']
 
 // Flat window-button styling for plain themes — no stroke/hover-swap, just a
 // translucent wash. secondary.contrastText reads on the colored title bar.
@@ -23,12 +19,24 @@ const plainBtnSx = {
 export default function TitleBar() {
   const isMac = window.sparkAPI.platform === 'darwin'
   const theme = useSettings((s) => s.settings?.theme)
-  const plain = PLAIN_CHROME_THEMES.includes(theme)
+  const tier = chromeTier(theme)
+  const plain = tier === 'plain'
 
-  const winBtnSx = plain ? plainBtnSx : toolbarBtnSx
+  // Wordmark/logo lift, by tier:
+  //  - plain (spark/mundanes): no shadow at all.
+  //  - light (danaan): leave the wordmark shadow unset so it keeps inheriting the
+  //    theme's soft gold body glow; no black drop-shadow on the logo.
+  //  - gamified (dark fantasy): the house keyline + depth.
+  const wordmarkShadow = plain ? 'none' : tier === 'light' ? undefined : TITLE_TEXT_SHADOW
+  const logoFilter = tier === 'gamified' ? `drop-shadow(${DEPTH})` : 'none'
+
+  // Window glyphs: plain gets the flat wash; gamified gets the stroked/lifted
+  // house treatment; light keeps the soft base stroke.
+  const baseBtnSx = tier === 'gamified' ? gamifiedBtnSx : toolbarBtnSx
+  const winBtnSx = plain ? plainBtnSx : baseBtnSx
   const closeBtnSx = plain
     ? { ...plainBtnSx, '&:hover': { backgroundColor: 'error.main', color: 'error.contrastText' } }
-    : { ...toolbarBtnSx, '&:hover': { backgroundColor: 'info.main', color: 'warning.main' } }
+    : { ...baseBtnSx, '&:hover': { backgroundColor: 'info.main', color: 'warning.main' } }
 
   return (
     <Toolbar
@@ -51,7 +59,7 @@ export default function TitleBar() {
         component="img"
         src={eponaLogo}
         alt=""
-        sx={{ width: 20, height: 20, borderRadius: 0.5, pointerEvents: 'none' }}
+        sx={{ width: 20, height: 20, borderRadius: 0.5, filter: logoFilter, pointerEvents: 'none' }}
       />
       <Typography
         data-testid="app-title"
@@ -65,6 +73,7 @@ export default function TitleBar() {
           // size at every width. (Kept variant="h6" for its Cinzel font.)
           '&&': { fontSize: '1.15rem' },
           color: 'secondary.contrastText',
+          textShadow: wordmarkShadow,
           pointerEvents: 'none'
         }}
       >
