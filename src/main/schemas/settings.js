@@ -63,10 +63,18 @@ const hybrasylTargetSchema = z.object({
 export const settingsSchema = z.object({
   targetKind: z.string(),
   clientPath: z.string(),
-  version: z.string(),
+  // 'auto', or a version code. The Settings <Select> supplies the code as a
+  // NUMBER (its MenuItem values are numeric), while settings.json written by
+  // older builds carries strings like '7.41' — a string-only schema rejected the
+  // numeric form, which made `settings:save` throw and silently stopped
+  // persisting anything at all once a version was pinned. Accept both; getVersion
+  // coerces on the read side.
+  version: z.union([z.string(), z.number()]),
   skipIntro: z.boolean(),
   multipleInstances: z.boolean(),
   hideWalls: z.boolean(),
+  // Optional so a settings.json written before this option existed still parses.
+  groundItemHints: z.boolean().optional().default(false),
   theme: z.string(),
   activeProfile: z.string(),
   profiles: z.array(profileSchema),

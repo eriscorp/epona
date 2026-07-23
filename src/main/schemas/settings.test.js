@@ -39,6 +39,19 @@ describe('settingsSchema', () => {
     expect(() => settingsSchema.parse(VALID)).not.toThrow()
   })
 
+  it('accepts a pinned client version in either form', () => {
+    // The Settings <Select> stores the code as a number; older settings.json
+    // files hold a string. A string-only schema made settings:save throw for
+    // anyone who pinned a version, which silently stopped every later save too.
+    expect(() => settingsSchema.parse({ ...VALID, version: 741 })).not.toThrow()
+    expect(() => settingsSchema.parse({ ...VALID, version: '7.41' })).not.toThrow()
+  })
+
+  it('defaults groundItemHints for settings written before the option existed', () => {
+    const parsed = settingsSchema.parse(VALID)
+    expect(parsed.groundItemHints).toBe(false)
+  })
+
   it('accepts a populated shape with one instance and world directory', () => {
     const populated = {
       ...VALID,

@@ -10,6 +10,9 @@ export const defaultSettings = {
   skipIntro: true,
   multipleInstances: true,
   hideWalls: false,
+  // Hook-based, 7.41 only — the UI hides it on other versions. Off by default:
+  // it installs code into the client rather than poking a few bytes.
+  groundItemHints: false,
   theme: 'hybrasyl',
   activeProfile: 'official',
   profiles: [

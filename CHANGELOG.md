@@ -20,6 +20,14 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Added
 
+- **Ground Item Hints** (Legacy client, Dark Ages 7.41 only). Hold either Alt key
+  to draw every visible ground item again as a translucent hint on top of the
+  scene, so items behind a wall or a tree are easy to spot. Release Alt and the
+  hints go away immediately. The option only appears when Epona has identified
+  your client as 7.41 — it installs code into the running client, and the
+  addresses it needs were only mapped for that build. Turning it on also fixes
+  keys sticking down when the game loses focus.
+
 - **Epona now tracks running servers properly.** The Server tab asks the launcher
   what is actually running instead of remembering what it started: it watches the
   server process and checks the instance's lobby port. A server you started in an
@@ -37,6 +45,10 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Fixed
 
+- **Picking a specific client version no longer stops your settings from
+  saving.** Choosing a version instead of leaving it on Auto wrote a value the
+  settings validator rejected, so that change — and every change after it — was
+  silently dropped.
 - **Only one Epona runs at a time.** A second launch focuses the window you
   already have. Two copies used to fight over the same settings and cache folder,
   and neither one could see the servers the other had started.

@@ -23,6 +23,7 @@ import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
 import ReportIssueDialog from './components/ReportIssueDialog'
 import { PANEL_BORDER_COLOR } from './uiConstants.js'
+import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
 import { useRuntime } from './store/runtimeStore.js'
@@ -78,6 +79,7 @@ export default function App() {
   const settings = useSettings((s) => s.settings)
   const versions = useSettings((s) => s.versions)
   const detectedVersion = useSettings((s) => s.detectedVersion)
+  const detectedVersionCode = useSettings((s) => s.detectedVersionCode)
   const update = useSettings((s) => s.update)
   const hydrate = useSettings((s) => s.hydrate)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -164,6 +166,13 @@ export default function App() {
         )
     if (path) update({ clientPath: path })
   }
+
+  // Hook-based Legacy options only exist for client builds whose hook sites have
+  // been mapped, so resolve which build will actually launch and ask it.
+  const availablePatches = (() => {
+    const code = resolveVersionCode(settings.version, detectedVersionCode)
+    return supportsPatch(versions, code, 'groundItemHints') ? ['groundItemHints'] : []
+  })()
 
   const currentTheme = themes[settings.theme] || hybrasylTheme
   // Resolve the active server instance once — reused for the client tab's
@@ -262,7 +271,11 @@ export default function App() {
                 activeProfile={settings.activeProfile}
                 onChange={(id) => update({ activeProfile: id })}
               />
-              <OptionsPanel settings={settings} onChange={update} />
+              <OptionsPanel
+                settings={settings}
+                onChange={update}
+                availablePatches={availablePatches}
+              />
               <ActionButtons
                 targetKind="legacy"
                 settings={settings}
