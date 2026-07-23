@@ -30,7 +30,11 @@ function gitSync(cwd, args) {
 }
 
 async function makeRepo() {
-  const repoPath = await fs.mkdtemp(join(tmpdir(), 'epona-wt-'))
+  // realpath, because the GitHub runner's tmpdir is the 8.3 short name
+  // `C:\Users\RUNNER~1\...` and `path.resolve` does not expand it. git always
+  // reports the long form, so an unresolved repoPath makes every path
+  // comparison against `git worktree list` output miss.
+  const repoPath = await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'epona-wt-')))
   await gitSync(repoPath, ['init', '--initial-branch=main', '-q'])
   await gitSync(repoPath, ['config', 'user.email', 'test@example.com'])
   await gitSync(repoPath, ['config', 'user.name', 'Test'])

@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+# Every first-party action here runs on node24 natively. This flag now covers
+# one holdout: sslcom/esigner-codesign, whose newest release (v1.3.2) still
+# declares `using: node20`. Keep the flag until that action ships a node24
+# runtime — without it, GitHub removing node20 breaks the signing steps.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -24,8 +28,8 @@ jobs:
     runs-on: windows-2022
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -83,7 +87,7 @@ jobs:
           override: true
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installers
           path: |
@@ -95,8 +99,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -112,7 +116,7 @@ jobs:
         run: npx electron-builder --linux --config.beforeBuild=scripts/noop-before-build.cjs --publish never
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-packages
           path: |
@@ -124,8 +128,8 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -199,7 +203,7 @@ jobs:
           xcrun stapler validate "$DMG"
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
           path: dist/*.dmg
@@ -213,10 +217,10 @@ jobs:
     steps:
       # Checkout (the release job otherwise only downloads artifacts) so the
       # CHANGELOG + extract script are on disk.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -226,7 +230,7 @@ jobs:
         run: node scripts/changelog-extract.mjs "${{ github.ref_name }}" > RELEASE_NOTES.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             artifacts/**/*-setup.exe

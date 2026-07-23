@@ -45,6 +45,23 @@ function worktreePath(repoPath, branch) {
   return resolvePath(repoPath, '.worktrees', sanitizeBranchName(branch))
 }
 
+// Canonical absolute form of a repo root. `path.resolve` alone is not enough on
+// Windows: it does not expand an 8.3 short name (`C:\Users\RUNNER~1\...`) or
+// follow a junction. git always reports the long, fully-resolved form, so a
+// repo root in any other form makes every comparison against `git worktree
+// list` output miss — the worktree is never adopted, listed or removed.
+// Normalizing here keeps both sides of those comparisons in one form, because
+// every managed path is built from this root. Falls back to `resolvePath` when
+// the path does not exist yet, which is what realpath fails on.
+async function realRepoPath(repoPath) {
+  const resolved = resolvePath(repoPath)
+  try {
+    return await fs.realpath(resolved)
+  } catch {
+    return resolved
+  }
+}
+
 // Parse `git worktree list --porcelain` into { path → { branch } }. Each
 // entry is a paragraph of key/value lines; we only need worktree (path) and
 // branch (refs/heads/foo, optional — bare/detached entries omit it).
@@ -75,8 +92,8 @@ async function listWorktreesOnDisk(repoPath) {
 // via `git worktree add` if neither memory nor disk has it; adopts an
 // existing on-disk worktree (refcount = 1) on first request after launcher
 // restart; bumps refcount on subsequent requests. Always serialized per repo.
-export function ensureWorktree(repoPath, branch) {
-  const repo = resolvePath(repoPath)
+export async function ensureWorktree(repoPath, branch) {
+  const repo = await realRepoPath(repoPath)
   return withMutex(repo, async () => {
     const branchMap = refcounts.get(repo) ?? new Map()
     // Record (or overwrite) this branch's worktree entry and persist the map.
@@ -175,8 +192,8 @@ async function pathExists(p) {
 // failed) and was left on disk — the caller can warn the user without
 // treating it as a hard failure. We never `--force` by default; force-removing
 // a worktree the user has been editing is a bad surprise.
-export function releaseWorktree(repoPath, branch) {
-  const repo = resolvePath(repoPath)
+export async function releaseWorktree(repoPath, branch) {
+  const repo = await realRepoPath(repoPath)
   return withMutex(repo, async () => {
     const branchMap = refcounts.get(repo)
     const entry = branchMap?.get(branch)
@@ -222,8 +239,8 @@ async function isDirty(worktreePath) {
 // decide whether removing it is safe: which branch it holds, whether it has
 // uncommitted work, and whether a running launch is still using it.
 // Returns [{ repo, branch, path, dirty, refcount }].
-export function listManaged(repoPath) {
-  const repo = resolvePath(repoPath)
+export async function listManaged(repoPath) {
+  const repo = await realRepoPath(repoPath)
   return withMutex(repo, async () => {
     await runGit(repo, ['worktree', 'prune']).catch(() => {})
     const branchMap = refcounts.get(repo)
@@ -246,8 +263,8 @@ export function listManaged(repoPath) {
 // would lose something: a launch still holds it, or it has uncommitted work and
 // the caller hasn't explicitly said to discard that. Returns
 // { ok } | { ok: false, reason: 'in-use' | 'dirty' | 'not-found' | 'git', error }.
-export function removeWorktree(repoPath, branch, { force = false } = {}) {
-  const repo = resolvePath(repoPath)
+export async function removeWorktree(repoPath, branch, { force = false } = {}) {
+  const repo = await realRepoPath(repoPath)
   return withMutex(repo, async () => {
     const branchMap = refcounts.get(repo)
     const tracked = branchMap?.get(branch)
@@ -299,7 +316,7 @@ export async function sweepOrphans(repoPath, keepBranches) {
     else if (r.reason === 'git') errors.push({ path: w.path, error: r.error })
   }
   return {
-    repo: resolvePath(repoPath),
+    repo: await realRepoPath(repoPath),
     removed,
     kept: managed.filter((w) => !orphans.includes(w)).map((w) => w.path),
     errors
@@ -313,8 +330,8 @@ export async function sweepOrphans(repoPath, keepBranches) {
 // user first. Only touches worktrees under <repo>/.worktrees — never the main
 // working tree or a hand-made worktree elsewhere. Returns { repo, removed[],
 // errors[] } so the caller can report what happened.
-export function flushWorktrees(repoPath) {
-  const repo = resolvePath(repoPath)
+export async function flushWorktrees(repoPath) {
+  const repo = await realRepoPath(repoPath)
   return withMutex(repo, async () => {
     const removed = []
     const errors = []

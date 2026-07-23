@@ -18,6 +18,14 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Fixed
+
+- **Worktrees now work when the repo path is not its canonical form** — a repo
+  reached through a junction, a mapped drive, or a short (8.3) directory name.
+  Epona compared the path you gave against the path git reports, which are not
+  the same string in those cases, so it could not adopt, list or remove the
+  worktrees it had made.
+
 ## [2.6.0] - 2026-07-23
 
 ### Added
