@@ -18,6 +18,8 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-07-23
+
 ### Added
 
 - **Ground Item Hints** (Legacy client, Dark Ages 7.41 only). Hold either Alt key
