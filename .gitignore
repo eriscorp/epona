@@ -13,6 +13,8 @@ coverage/
 # Native addon build
 packages/da-win32/build/
 packages/da-win32/prebuilds/
+# @electron/rebuild's cached copy of the built .node
+packages/da-win32/bin/
 
 # Electron artifacts
 *.exe

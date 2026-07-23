@@ -141,6 +141,149 @@ Napi::Value CloseHandle_(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// --- Runtime-patch primitives -------------------------------------------------
+//
+// The hostname/port/skip-intro style patches only overwrite existing bytes, so
+// WriteProcessMemory alone was enough. A hook patch also needs somewhere to put
+// its trampoline: memory allocated INSIDE the target, made executable, with the
+// instruction cache flushed before the process is resumed.
+
+// virtualAllocEx(handle: BigInt, size: number, allocType: number, protect: number)
+//   -> BigInt base address
+Napi::Value VirtualAllocEx_(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  HANDLE h = BigIntToHandle(info[0].As<Napi::BigInt>());
+  SIZE_T size = static_cast<SIZE_T>(info[1].As<Napi::Number>().Int64Value());
+  DWORD allocType = info[2].As<Napi::Number>().Uint32Value();
+  DWORD protect = info[3].As<Napi::Number>().Uint32Value();
+
+  LPVOID addr = VirtualAllocEx(h, nullptr, size, allocType, protect);
+  if (!addr) {
+    Napi::Error::New(env, "VirtualAllocEx failed: " + std::to_string(GetLastError()))
+      .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  return Napi::BigInt::New(env, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(addr)));
+}
+
+// virtualFreeEx(handle: BigInt, address: BigInt) -> void
+// Always MEM_RELEASE (size must be 0 for it), which is what the rollback path wants.
+Napi::Value VirtualFreeEx_(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  HANDLE h = BigIntToHandle(info[0].As<Napi::BigInt>());
+  bool lossless;
+  uint64_t addr = info[1].As<Napi::BigInt>().Uint64Value(&lossless);
+  LPVOID target = reinterpret_cast<LPVOID>(static_cast<uintptr_t>(addr));
+
+  if (!VirtualFreeEx(h, target, 0, MEM_RELEASE)) {
+    Napi::Error::New(env, "VirtualFreeEx failed: " + std::to_string(GetLastError()))
+      .ThrowAsJavaScriptException();
+  }
+  return env.Undefined();
+}
+
+// virtualProtectEx(handle: BigInt, address: BigInt, size: number, protect: number)
+//   -> number (the previous protection, for restoring it afterwards)
+Napi::Value VirtualProtectEx_(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  HANDLE h = BigIntToHandle(info[0].As<Napi::BigInt>());
+  bool lossless;
+  uint64_t addr = info[1].As<Napi::BigInt>().Uint64Value(&lossless);
+  LPVOID target = reinterpret_cast<LPVOID>(static_cast<uintptr_t>(addr));
+  SIZE_T size = static_cast<SIZE_T>(info[2].As<Napi::Number>().Int64Value());
+  DWORD protect = info[3].As<Napi::Number>().Uint32Value();
+
+  DWORD previous = 0;
+  if (!VirtualProtectEx(h, target, size, protect, &previous)) {
+    Napi::Error::New(env, "VirtualProtectEx failed: " + std::to_string(GetLastError()))
+      .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  return Napi::Number::New(env, static_cast<double>(previous));
+}
+
+// flushInstructionCache(handle: BigInt, address: BigInt, size: number) -> void
+Napi::Value FlushInstructionCache_(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  HANDLE h = BigIntToHandle(info[0].As<Napi::BigInt>());
+  bool lossless;
+  uint64_t addr = info[1].As<Napi::BigInt>().Uint64Value(&lossless);
+  LPCVOID target = reinterpret_cast<LPCVOID>(static_cast<uintptr_t>(addr));
+  SIZE_T size = static_cast<SIZE_T>(info[2].As<Napi::Number>().Int64Value());
+
+  if (!FlushInstructionCache(h, target, size)) {
+    Napi::Error::New(env, "FlushInstructionCache failed: " + std::to_string(GetLastError()))
+      .ThrowAsJavaScriptException();
+  }
+  return env.Undefined();
+}
+
+// terminateProcess(handle: BigInt, exitCode: number) -> void
+// The fail-closed path: a suspended client that failed verification must never
+// be resumed half-patched.
+Napi::Value TerminateProcess_(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  HANDLE h = BigIntToHandle(info[0].As<Napi::BigInt>());
+  UINT code = info.Length() > 1 && info[1].IsNumber() ? info[1].As<Napi::Number>().Uint32Value() : 1;
+  TerminateProcess(h, code);
+  return env.Undefined();
+}
+
+// getMainModuleBase(handle: BigInt) -> BigInt
+//
+// Where the target's main image actually landed. Dark Ages prefers 0x00400000
+// and in practice gets it (it has no relocation table), but the appendix's
+// launcher rules are explicit that a runtime address is `module base + RVA` —
+// so resolve the base rather than assume it.
+//
+// The route matters: Epona is x64 and Dark Ages.exe is a 32-bit WOW64 child, so
+// the ordinary PEB is the 64-bit one. ProcessWow64Information hands back the
+// address of the child's *32-bit* PEB, whose ImageBaseAddress sits at +0x08 as a
+// 32-bit pointer. This also works on a process suspended at creation, where the
+// loader has not run and the module list is not yet populated (so
+// EnumProcessModules is unreliable there).
+typedef LONG (WINAPI *NtQueryInformationProcessFn)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+static const ULONG kProcessWow64Information = 26;
+
+Napi::Value GetMainModuleBase(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  HANDLE h = BigIntToHandle(info[0].As<Napi::BigInt>());
+
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  NtQueryInformationProcessFn query = ntdll
+    ? reinterpret_cast<NtQueryInformationProcessFn>(
+        reinterpret_cast<void*>(GetProcAddress(ntdll, "NtQueryInformationProcess")))
+    : nullptr;
+  if (!query) {
+    Napi::Error::New(env, "NtQueryInformationProcess unavailable").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  ULONG_PTR peb32 = 0;
+  ULONG returned = 0;
+  LONG status = query(h, kProcessWow64Information, &peb32, sizeof(peb32), &returned);
+  if (status < 0 || peb32 == 0) {
+    Napi::Error::New(env, "target is not a 32-bit (WOW64) process, or the PEB is unreadable")
+      .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  // PEB32.ImageBaseAddress — a 32-bit pointer at offset 0x08.
+  uint32_t imageBase = 0;
+  SIZE_T read = 0;
+  if (!ReadProcessMemory(h, reinterpret_cast<LPCVOID>(peb32 + 0x08), &imageBase,
+                         sizeof(imageBase), &read) || read != sizeof(imageBase)) {
+    Napi::Error::New(env, "could not read PEB32.ImageBaseAddress: " + std::to_string(GetLastError()))
+      .ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  if (imageBase == 0) {
+    Napi::Error::New(env, "PEB32.ImageBaseAddress is null").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  return Napi::BigInt::New(env, static_cast<uint64_t>(imageBase));
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("createSuspendedProcess", Napi::Function::New(env, CreateSuspendedProcess));
   exports.Set("openProcess",            Napi::Function::New(env, OpenProcess_));
@@ -149,6 +292,12 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("resumeThread",           Napi::Function::New(env, ResumeThread_));
   exports.Set("suspendThread",          Napi::Function::New(env, SuspendThread_));
   exports.Set("closeHandle",            Napi::Function::New(env, CloseHandle_));
+  exports.Set("virtualAllocEx",         Napi::Function::New(env, VirtualAllocEx_));
+  exports.Set("virtualFreeEx",          Napi::Function::New(env, VirtualFreeEx_));
+  exports.Set("virtualProtectEx",       Napi::Function::New(env, VirtualProtectEx_));
+  exports.Set("flushInstructionCache",  Napi::Function::New(env, FlushInstructionCache_));
+  exports.Set("terminateProcess",       Napi::Function::New(env, TerminateProcess_));
+  exports.Set("getMainModuleBase",      Napi::Function::New(env, GetMainModuleBase));
   return exports;
 }
 

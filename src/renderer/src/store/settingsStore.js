@@ -19,13 +19,18 @@ function scheduleSave(settings) {
 }
 
 // Detect the client version for a path and store it (null when absent/blank).
+// The code is kept alongside the display name: options that only exist for one
+// client build (the hook-based runtime patches) gate on it.
 function detectInto(set, clientPath) {
   if (!clientPath) {
-    set({ detectedVersion: null })
+    set({ detectedVersion: null, detectedVersionCode: null })
     return
   }
   window.sparkAPI.detectVersion(clientPath).then((result) => {
-    set({ detectedVersion: result.found ? result.name : null })
+    set({
+      detectedVersion: result.found ? result.name : null,
+      detectedVersionCode: result.found ? result.versionCode : null
+    })
   })
 }
 
@@ -35,6 +40,7 @@ export const useSettings = create((set, get) => ({
   settings: { ...defaultSettings },
   versions: [],
   detectedVersion: null,
+  detectedVersionCode: null,
 
   // Load persisted settings over the defaults and kick off the client-version
   // probes. Returns the merged settings so the caller (App) can derive the

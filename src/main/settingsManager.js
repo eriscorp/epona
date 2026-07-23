@@ -76,6 +76,7 @@ const DEFAULTS = {
   skipIntro: true,
   multipleInstances: true,
   hideWalls: false,
+  groundItemHints: false,
   theme: 'hybrasyl',
   activeProfile: 'official',
   profiles: DEFAULT_PROFILES,
@@ -265,6 +266,8 @@ function withDefaults(data) {
         ? data.multipleInstances
         : DEFAULTS.multipleInstances,
     hideWalls: typeof data?.hideWalls === 'boolean' ? data.hideWalls : DEFAULTS.hideWalls,
+    groundItemHints:
+      typeof data?.groundItemHints === 'boolean' ? data.groundItemHints : DEFAULTS.groundItemHints,
     theme: typeof data?.theme === 'string' ? data.theme : DEFAULTS.theme,
     activeProfile:
       typeof data?.activeProfile === 'string' ? data.activeProfile : DEFAULTS.activeProfile,

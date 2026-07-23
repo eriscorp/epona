@@ -1,6 +1,7 @@
 import { lookup } from 'dns/promises'
 import { createRequire } from 'module'
-import { getVersion, detectVersion } from '../clientVersions.js'
+import { getVersion, detectVersion, supportsRuntimePatch } from '../clientVersions.js'
+import { installGroundItemHints } from '../patches/installer.js'
 import { describeLaunchError } from './launchError.js'
 
 // Native addon must be loaded via require (CJS) — not bundled by Vite
@@ -9,7 +10,14 @@ const win32 = process.platform === 'win32' ? createRequire(import.meta.url)('da-
 export async function launch(settings, profile) {
   if (!win32) return { success: false, error: 'Windows only' }
 
-  const { clientPath, version: versionSetting, skipIntro, multipleInstances, hideWalls } = settings
+  const {
+    clientPath,
+    version: versionSetting,
+    skipIntro,
+    multipleInstances,
+    hideWalls,
+    groundItemHints
+  } = settings
 
   // Resolve 'auto' by detecting from the exe, otherwise use the selected version code
   let versionCode = versionSetting
@@ -22,9 +30,18 @@ export async function launch(settings, profile) {
   const version = getVersion(versionCode)
   if (!version) return { success: false, error: `Unknown version: ${versionCode}` }
 
-  const { PROCESS_VM_WRITE, PROCESS_VM_OPERATION } = win32
+  const { PROCESS_VM_READ, PROCESS_VM_WRITE, PROCESS_VM_OPERATION, PROCESS_QUERY_INFORMATION } =
+    win32
+
+  // The hook patch reads back everything it writes and has to resolve the
+  // loaded module base, so it needs more than write access.
+  const wantsHooks =
+    Boolean(groundItemHints) && supportsRuntimePatch(versionCode, 'groundItemHints')
 
   let processHandle, threadHandle, memHandle
+  // Set once the process is suspended: a failure after this point must kill it
+  // rather than resume a half-patched client.
+  let patchFailed = false
 
   try {
     // 1. Create suspended process
@@ -33,7 +50,12 @@ export async function launch(settings, profile) {
     threadHandle = proc.threadHandle
 
     // 2. Open for memory write
-    memHandle = win32.openProcess(proc.processId, PROCESS_VM_WRITE | PROCESS_VM_OPERATION)
+    memHandle = win32.openProcess(
+      proc.processId,
+      PROCESS_VM_WRITE |
+        PROCESS_VM_OPERATION |
+        (wantsHooks ? PROCESS_VM_READ | PROCESS_QUERY_INFORMATION : 0)
+    )
 
     // 3. Apply patches
     if (profile.redirect && profile.hostname) {
@@ -78,13 +100,40 @@ export async function launch(settings, profile) {
       )
     }
 
+    // Ground-item hints. Unlike the pokes above this installs code, so it
+    // verifies every byte it is about to displace first and undoes everything
+    // if any step fails. A failure here is fatal to the launch: we must not
+    // resume a client we may have half-patched.
+    if (wantsHooks) {
+      // Resolve where the image actually landed rather than assuming the
+      // preferred base — the stub relocations are all module-base relative.
+      const moduleBase = win32.getMainModuleBase(memHandle)
+      try {
+        installGroundItemHints({ mem: win32, handle: memHandle, moduleBase })
+      } catch (err) {
+        patchFailed = true
+        throw err
+      }
+    }
+
     return { success: true }
   } catch (err) {
     return { success: false, error: describeLaunchError(err, clientPath) }
   } finally {
     if (memHandle) win32.closeHandle(memHandle)
     if (threadHandle) {
-      win32.resumeThreadFully(threadHandle)
+      // Fail closed: a client whose hook installation blew up gets killed, not
+      // resumed. The installer rolls its own writes back, but the appendix is
+      // explicit that a partially patched process must never run.
+      if (patchFailed && processHandle) {
+        try {
+          win32.terminateProcess(processHandle, 1)
+        } catch {
+          /* the process may already be gone */
+        }
+      } else {
+        win32.resumeThreadFully(threadHandle)
+      }
       win32.closeHandle(threadHandle)
     }
     if (processHandle) win32.closeHandle(processHandle)

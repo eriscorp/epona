@@ -132,6 +132,7 @@ describe('save/load round-trip', () => {
       skipIntro: false,
       multipleInstances: false,
       hideWalls: true,
+      groundItemHints: true,
       theme: 'chadul',
       activeProfile: 'custom',
       profiles: [

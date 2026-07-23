@@ -45,12 +45,30 @@ const VERSIONS = [
     portPatchAddress: 0x4333e4n,
     skipIntroPatchAddress: 0x42e61fn,
     multipleInstancesPatchAddress: 0x57a7cen,
-    hideWallsPatchAddress: 0x5fd874n
+    hideWallsPatchAddress: 0x5fd874n,
+    // Hook-based runtime patches, which need whole stubs rather than a few
+    // overwritten bytes. Their addresses come from the 7.41 reverse-engineering
+    // appendix and were only ever derived for this build, so the option stays
+    // hidden on 7.37/7.39/7.40 (see supportsRuntimePatch below).
+    runtimePatches: ['groundItemHints']
   }
 ]
 
+// Does this version support a hook-based runtime patch? Everything else in
+// VERSIONS is a byte poke at a known address; these need a per-build map of
+// prologues, helper functions and vtables that only exists for 7.41.
+export function supportsRuntimePatch(versionCode, patch) {
+  const version = getVersion(versionCode)
+  return Boolean(version?.runtimePatches?.includes(patch))
+}
+
 export function listVersions() {
-  return VERSIONS.map(({ name, versionCode, hash }) => ({ name, versionCode, hash }))
+  return VERSIONS.map(({ name, versionCode, hash, runtimePatches }) => ({
+    name,
+    versionCode,
+    hash,
+    runtimePatches: runtimePatches ?? []
+  }))
 }
 
 function md5File(filePath) {
@@ -75,6 +93,12 @@ export async function detectVersion(exePath) {
   }
 }
 
+// Accepts the code as a number or a numeric string: the Settings <Select>
+// supplies a number, older settings.json files can hold a string. Anything that
+// isn't a known code — including 'auto', which callers resolve before getting
+// here — yields null.
 export function getVersion(versionCode) {
-  return VERSIONS.find((v) => v.versionCode === versionCode) ?? null
+  const code = Number(versionCode)
+  if (!Number.isFinite(code)) return null
+  return VERSIONS.find((v) => v.versionCode === code) ?? null
 }
