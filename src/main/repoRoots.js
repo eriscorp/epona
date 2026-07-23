@@ -17,3 +17,27 @@ export function collectConfiguredRepoPaths(settings) {
   }
   return paths
 }
+
+// Every branch some saved config still points at. The orphan sweep keeps these
+// and removes the rest, so switching an instance's branch doesn't leave the old
+// branch's worktree on disk forever.
+//
+// Branch fields carry three meanings: a name (pinned branch), `null` ("use the
+// current checkout" / NuGet XML), and `''` (local XML, in place). Only a real
+// name owns a worktree, so the empty cases are skipped.
+//
+// Returns a flat Set of names rather than a per-repo map: two repos never share
+// a `.worktrees` dir, and keeping a branch that a *different* repo references is
+// the safe direction to err in.
+export function collectReferencedBranches(settings) {
+  const branches = new Set()
+  const add = (b) => {
+    if (typeof b === 'string' && b.length > 0) branches.add(b)
+  }
+  add(settings?.targets?.hybrasyl?.clientBranch)
+  for (const inst of settings?.instances ?? []) {
+    add(inst.serverBranch)
+    add(inst.xmlBranch)
+  }
+  return branches
+}

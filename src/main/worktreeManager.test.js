@@ -9,6 +9,10 @@ import {
   releaseWorktree,
   releaseAll,
   flushWorktrees,
+  listManaged,
+  removeWorktree,
+  selectOrphans,
+  sweepOrphans,
   _resetForTests
 } from './worktreeManager.js'
 
@@ -219,6 +223,120 @@ describe('worktreeManager', () => {
       await flushWorktrees(repoPath)
       // The repo's own checkout and its committed file survive.
       expect((await fs.stat(join(repoPath, '.git'))).isDirectory()).toBe(true)
+    })
+  })
+
+  describe('listManaged', () => {
+    it('reports branch, path, dirty and refcount for each managed worktree', async () => {
+      const dev = await ensureWorktree(repoPath, 'develop')
+      await ensureWorktree(repoPath, 'feature/foo')
+      await fs.writeFile(join(dev, 'scratch.txt'), 'uncommitted')
+
+      const managed = await listManaged(repoPath)
+      const byBranch = Object.fromEntries(managed.map((w) => [w.branch, w]))
+      expect(Object.keys(byBranch).sort()).toEqual(['develop', 'feature/foo'])
+      expect(byBranch.develop).toMatchObject({ path: dev, dirty: true, refcount: 1 })
+      expect(byBranch['feature/foo']).toMatchObject({ dirty: false, refcount: 1 })
+    })
+
+    it('never reports the main working tree', async () => {
+      const managed = await listManaged(repoPath)
+      expect(managed.map((w) => w.path)).not.toContain(resolvePath(repoPath))
+      expect(managed).toEqual([])
+    })
+  })
+
+  describe('removeWorktree', () => {
+    it('removes a clean, unreferenced worktree', async () => {
+      const path = await ensureWorktree(repoPath, 'feature/foo')
+      _resetForTests() // as if Epona restarted: on disk, but nothing holds it
+
+      const r = await removeWorktree(repoPath, 'feature/foo')
+      expect(r).toMatchObject({ ok: true, path })
+      await expect(fs.stat(path)).rejects.toThrow()
+    })
+
+    it('refuses while a launch still holds the worktree', async () => {
+      await ensureWorktree(repoPath, 'develop')
+      const r = await removeWorktree(repoPath, 'develop')
+      expect(r).toEqual({ ok: false, reason: 'in-use' })
+      expect((await fs.stat(resolvePath(repoPath, '.worktrees', 'develop'))).isDirectory()).toBe(
+        true
+      )
+    })
+
+    it('refuses a dirty worktree unless forced', async () => {
+      const dev = await ensureWorktree(repoPath, 'develop')
+      await fs.writeFile(join(dev, 'scratch.txt'), 'uncommitted')
+      _resetForTests()
+
+      expect(await removeWorktree(repoPath, 'develop')).toEqual({ ok: false, reason: 'dirty' })
+      expect((await fs.stat(dev)).isDirectory()).toBe(true)
+
+      const forced = await removeWorktree(repoPath, 'develop', { force: true })
+      expect(forced.ok).toBe(true)
+      await expect(fs.stat(dev)).rejects.toThrow()
+    })
+
+    it('reports not-found for a branch with no managed worktree', async () => {
+      expect(await removeWorktree(repoPath, 'develop')).toEqual({ ok: false, reason: 'not-found' })
+    })
+  })
+
+  describe('selectOrphans', () => {
+    const wt = (branch, extra = {}) => ({
+      branch,
+      path: `/repo/.worktrees/${branch}`,
+      dirty: false,
+      refcount: 0,
+      ...extra
+    })
+
+    it('keeps branches a saved config still references', () => {
+      const managed = [wt('main'), wt('develop')]
+      expect(selectOrphans(managed, ['main']).map((w) => w.branch)).toEqual(['develop'])
+    })
+
+    it('keeps a worktree with uncommitted work — sweeps never discard it', () => {
+      expect(selectOrphans([wt('develop', { dirty: true })], [])).toEqual([])
+    })
+
+    it('keeps a worktree a running launch holds', () => {
+      expect(selectOrphans([wt('develop', { refcount: 1 })], [])).toEqual([])
+    })
+
+    it('skips entries with no branch (detached worktrees)', () => {
+      expect(selectOrphans([wt(null)], [])).toEqual([])
+    })
+
+    it('sweeps everything when nothing is referenced', () => {
+      expect(selectOrphans([wt('a'), wt('b')], []).length).toBe(2)
+      expect(selectOrphans([wt('a')], undefined).length).toBe(1)
+      expect(selectOrphans(undefined, [])).toEqual([])
+    })
+  })
+
+  describe('sweepOrphans', () => {
+    it('removes the worktree of a branch nothing references any more', async () => {
+      const dev = await ensureWorktree(repoPath, 'develop')
+      const foo = await ensureWorktree(repoPath, 'feature/foo')
+      _resetForTests() // as if Epona restarted: both on disk, nothing refcounted
+
+      const r = await sweepOrphans(repoPath, ['feature/foo'])
+      expect(r.removed).toEqual([dev])
+      await expect(fs.stat(dev)).rejects.toThrow()
+      expect((await fs.stat(foo)).isDirectory()).toBe(true)
+    })
+
+    it('leaves dirty and in-use worktrees alone', async () => {
+      const dev = await ensureWorktree(repoPath, 'develop') // refcount 1 = in use
+      const foo = await ensureWorktree(repoPath, 'feature/foo')
+      await fs.writeFile(join(foo, 'scratch.txt'), 'uncommitted')
+
+      const r = await sweepOrphans(repoPath, [])
+      expect(r.removed).toEqual([])
+      expect((await fs.stat(dev)).isDirectory()).toBe(true)
+      expect((await fs.stat(foo)).isDirectory()).toBe(true)
     })
   })
 

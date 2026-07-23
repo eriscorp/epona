@@ -38,15 +38,26 @@ jobs:
       - name: Build app
         run: npm run build
 
-      - name: Package portable exe
+      - name: Package installer + portable exe
         run: npx electron-builder --win --publish never
 
-      - name: Resolve artifact version
+      # Resolve the artifact NAME as well as the version — hardcoding "epona-"
+      # silently breaks on a package rename.
+      - name: Resolve artifact name + version
         id: version
         shell: bash
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          {
+            echo "name=$(node -p "require('./package.json').name")"
+            echo "version=$(node -p "require('./package.json').version")"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Sign portable exe (SSL.com eSigner)
+      # `if:` can't reference `secrets` directly, so read it through `env:`.
+      # With no signing secrets configured the release still ships, unsigned.
+      - name: Sign installer (SSL.com eSigner)
+        if: env.ES_USERNAME != ''
+        env:
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
         uses: sslcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
         with:
           command: sign
@@ -54,14 +65,30 @@ jobs:
           password: ${{ secrets.ES_PASSWORD }}
           credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
           totp_secret: ${{ secrets.ES_TOTP_SECRET }}
-          file_path: ${{ github.workspace }}/dist/epona-${{ steps.version.outputs.version }}-portable.exe
+          file_path: ${{ github.workspace }}/dist/${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}-setup.exe
           override: true
 
-      - name: Upload Windows artifact
+      - name: Sign portable exe (SSL.com eSigner)
+        if: env.ES_USERNAME != ''
+        env:
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
+        uses: sslcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
+        with:
+          command: sign
+          username: ${{ secrets.ES_USERNAME }}
+          password: ${{ secrets.ES_PASSWORD }}
+          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
+          file_path: ${{ github.workspace }}/dist/${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}-portable.exe
+          override: true
+
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-portable
-          path: dist/*-portable.exe
+          name: windows-installers
+          path: |
+            dist/*-setup.exe
+            dist/*-portable.exe
           if-no-files-found: error
 
   build-linux:
@@ -202,6 +229,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            artifacts/**/*-setup.exe
             artifacts/**/*-portable.exe
             artifacts/**/*.deb
             artifacts/**/*.AppImage

@@ -17,6 +17,10 @@ import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import TerminalIcon from '@mui/icons-material/Terminal'
@@ -26,6 +30,8 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import PathPicker from './PathPicker'
 import BranchSelector from './BranchSelector'
 import SnackbarHost from './SnackbarHost'
+import WorktreePurgeDialog from './WorktreePurgeDialog'
+import { useWorktreePurgePrompt } from '../useWorktreePurgePrompt'
 import { useGitBranches, deriveBranchOptions } from '../useGitBranches'
 import { useDotnetRuntime } from '../useDotnetRuntime'
 import { diagnoseAndExplain } from '../gitDiagnose'
@@ -101,7 +107,7 @@ function PortField({ label, value, onCommit, disabled }) {
 export default function ServerInstancePanel({
   instances,
   selectedId,
-  runningIds,
+  statusById,
   worldDirectories,
   activeWorldDirectory,
   onSelect,
@@ -115,19 +121,28 @@ export default function ServerInstancePanel({
   const [busyLabel, setBusyLabel] = useState(null)
   const busy = busyLabel !== null
   const [snack, setSnack] = useState(null)
+  const [confirmAdoptedStop, setConfirmAdoptedStop] = useState(false)
   const [activeTab, setActiveTab] = useState(TAB_SERVER)
   const [availableConfigs, setAvailableConfigs] = useState([])
   const [configDataStore, setConfigDataStore] = useState(null)
   // Branch lists keyed by repo path so switching instances doesn't refetch
   // every time. { [repoPath]: { branches, error } | undefined }
   const { branchCache, refreshBranches } = useGitBranches()
+  // Offers to remove the worktree a branch switch leaves behind.
+  const purgePrompt = useWorktreePurgePrompt(setSnack)
   // .NET runtime/SDK state for the chip shown in repo mode. Server repo-mode
   // launches go through `dotnet run` which needs the SDK; binary mode just
   // needs the runtime — the chip is unconditional below, harmless when ignored.
   const runtime = useDotnetRuntime()
 
   const selected = instances.find((i) => i.id === selectedId) ?? null
-  const isRunning = selected && runningIds.has(selected.id)
+  // Status comes from the main process (tracked-process liveness + lobby-port
+  // probe). `adopted` means something is serving on the instance's lobby port
+  // that Epona didn't start — a server left over from an earlier run, or one
+  // started by hand.
+  const status = (selected && statusById?.[selected.id]) ?? null
+  const isRunning = Boolean(status?.running)
+  const isAdopted = status?.source === 'adopted'
   const isRepoMode = selected?.mode === 'repo'
   const useLocalXml = isRepoMode && selected?.xmlBranch !== null
 
@@ -199,6 +214,14 @@ export default function ServerInstancePanel({
     onInstancesChange(next)
   }
 
+  // Switching a pinned branch abandons that branch's worktree. Persist the new
+  // branch first, then offer to remove the old one's worktree.
+  function changeBranch(field, value) {
+    const previous = selected?.[field]
+    updateSelected({ [field]: value })
+    if (previous !== value) void purgePrompt.check(previous, { running: isRunning })
+  }
+
   function addInstance() {
     const fresh = emptyInstance(activeWorldDirectory)
     onInstancesChange([...instances, fresh])
@@ -226,7 +249,10 @@ export default function ServerInstancePanel({
     if (!result.success) setSnack({ severity: 'error', message: result.error ?? failMsg })
   }
   const handleStart = () => runBusy('Starting…', () => onStart(selected), 'Failed to start')
-  const handleStop = () => runBusy('Stopping…', () => onStop(selected.id), 'Failed to stop')
+  const stopNow = () => runBusy('Stopping…', () => onStop(selected.id), 'Failed to stop')
+  // Epona didn't start an adopted server, so confirm before reaping whatever
+  // owns the port — it might be a console the user is watching.
+  const handleStop = () => (isAdopted ? setConfirmAdoptedStop(true) : stopNow())
   const handleReset = () => runBusy('Resetting…', () => onReset(selected), 'Failed to reset')
 
   async function pickBinary() {
@@ -364,7 +390,7 @@ export default function ServerInstancePanel({
             loading={serverBranchLoading}
             noGit={selected.serverNoGit}
             error={serverBranchError}
-            onChange={(v) => updateSelected({ serverBranch: v })}
+            onChange={(v) => changeBranch('serverBranch', v)}
             onOpen={() =>
               !selected.serverNoGit &&
               selected.serverRepoPath &&
@@ -394,7 +420,7 @@ export default function ServerInstancePanel({
               <Checkbox
                 size="small"
                 checked={useLocalXml}
-                onChange={(e) => updateSelected({ xmlBranch: e.target.checked ? '' : null })}
+                onChange={(e) => changeBranch('xmlBranch', e.target.checked ? '' : null)}
               />
             }
             label={
@@ -421,7 +447,7 @@ export default function ServerInstancePanel({
                 loading={xmlBranchLoading}
                 noGit={selected.xmlNoGit}
                 error={xmlBranchError}
-                onChange={(v) => updateSelected({ xmlBranch: v })}
+                onChange={(v) => changeBranch('xmlBranch', v)}
                 onOpen={() =>
                   !selected.xmlNoGit &&
                   selected.xmlRepoPath &&
@@ -643,8 +669,13 @@ export default function ServerInstancePanel({
             {instances.map((i) => (
               <MenuItem key={i.id} value={i.id}>
                 {i.name}
-                {runningIds.has(i.id) && (
-                  <Chip size="small" label="running" color="success" sx={{ ml: 1, height: 18 }} />
+                {statusById?.[i.id]?.running && (
+                  <Chip
+                    size="small"
+                    label={statusById[i.id].source === 'adopted' ? 'running (external)' : 'running'}
+                    color={statusById[i.id].source === 'adopted' ? 'warning' : 'success'}
+                    sx={{ ml: 1, height: 18 }}
+                  />
                 )}
               </MenuItem>
             ))}
@@ -706,10 +737,16 @@ export default function ServerInstancePanel({
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isRunning ? (
               <>
-                <Tooltip title="Reset (kill and relaunch — picks up script/XML changes)">
+                <Tooltip
+                  title={
+                    isAdopted
+                      ? "Epona didn't start this server, so it can't relaunch it — Stop it first"
+                      : 'Reset (kill and relaunch — picks up script/XML changes)'
+                  }
+                >
                   <span>
                     <IconButton
-                      disabled={busy}
+                      disabled={busy || isAdopted}
                       onClick={handleReset}
                       sx={{
                         border: 1,
@@ -735,7 +772,7 @@ export default function ServerInstancePanel({
                   startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
                   sx={{ color: 'text.button' }}
                 >
-                  {busyLabel ?? 'Stop Server'}
+                  {busyLabel ?? (isAdopted ? 'Stop External Server' : 'Stop Server')}
                 </Button>
               </>
             ) : (
@@ -753,6 +790,42 @@ export default function ServerInstancePanel({
           </Box>
         </>
       )}
+
+      {confirmAdoptedStop && (
+        <Dialog open onClose={() => setConfirmAdoptedStop(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontSize: '1rem' }}>Stop external server?</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">
+              Epona didn&apos;t start this server — it found one listening on port{' '}
+              {selected?.lobbyPort}. Stopping it kills whichever process owns that port, along with
+              anything it started.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button size="small" onClick={() => setConfirmAdoptedStop(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              color="error"
+              onClick={() => {
+                setConfirmAdoptedStop(false)
+                stopNow()
+              }}
+            >
+              Stop
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      <WorktreePurgeDialog
+        worktree={purgePrompt.pending}
+        busy={purgePrompt.busy}
+        onKeep={purgePrompt.dismiss}
+        onRemove={purgePrompt.confirm}
+      />
 
       <SnackbarHost snack={snack} onClose={() => setSnack(null)} />
     </>

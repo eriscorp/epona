@@ -32,7 +32,12 @@ test.describe('Flush Worktrees removes managed worktrees', () => {
   })
 
   test('flushing removes the on-disk worktree and reports success', async () => {
-    repo = createTempRepoWithWorktree()
+    // Deliberately dirty. Epona's startup orphan sweep would otherwise collect
+    // this worktree before the test could flush it — the sweep never discards
+    // uncommitted work, and Flush (which forces) is the only thing that does.
+    // That contrast is the point: this spec proves Flush still reaches a
+    // worktree the gentle path leaves alone.
+    repo = createTempRepoWithWorktree('wt-e2e', { dirty: true })
     expect(worktreeExists(repo.worktreeDir), 'worktree should exist before flush').toBe(true)
     ;({ electronApp } = await launchEpona({ seedSettings: repoModeSettings(repo.repoDir) }))
     const page = await getMainWindow(electronApp)

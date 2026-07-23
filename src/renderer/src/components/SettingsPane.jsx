@@ -38,6 +38,8 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import AboutDialog from './AboutDialog'
+import ManagedWorktrees from './ManagedWorktrees'
+import SnackbarHost from './SnackbarHost'
 import { DEPTH } from './titleChrome'
 import eponaLogo from '../assets/epona.png'
 import { PANEL_BORDER } from '../uiConstants.js'
@@ -115,6 +117,8 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
   const [flushConfirm, setFlushConfirm] = useState(false)
   const [flushing, setFlushing] = useState(false)
   const [flushResult, setFlushResult] = useState(null) // null | { ok, repos, removed, errors }
+  // Outcome of a single per-worktree Remove — { severity, message }.
+  const [worktreeSnack, setWorktreeSnack] = useState(null)
   // Single-open accordion: only one section is expanded at a time. `false`
   // collapses all (clicking the open section closes it). Defaults to Theme.
   const [expanded, setExpanded] = useState('theme')
@@ -498,6 +502,9 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
             expanded={expanded}
             onToggle={handleAccordion}
           >
+            {/* Mounted with the section so the per-worktree git calls only run
+                when the user opens Maintenance. */}
+            {expanded === 'maintenance' && <ManagedWorktrees onResult={setWorktreeSnack} />}
             <Button
               variant="outlined"
               size="small"
@@ -646,6 +653,8 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
       )}
 
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+
+      <SnackbarHost snack={worktreeSnack} onClose={() => setWorktreeSnack(null)} />
     </Box>
   )
 }

@@ -199,6 +199,113 @@ export function releaseWorktree(repoPath, branch) {
   })
 }
 
+// Does a worktree path live under this repo's Epona-managed `.worktrees` dir?
+// Everything outside it is the user's own — the main working tree, or a
+// worktree they made by hand elsewhere — and we never touch those.
+function isManagedPath(repo, p) {
+  const wtRoot = resolvePath(repo, '.worktrees')
+  return p === wtRoot || p.startsWith(wtRoot + sep)
+}
+
+// Does a worktree have uncommitted work in it? Anything we can't answer counts
+// as dirty, so an unreadable worktree is never removed by an automatic sweep.
+async function isDirty(worktreePath) {
+  try {
+    const { stdout } = await runGit(worktreePath, ['status', '--porcelain'])
+    return stdout.trim().length > 0
+  } catch {
+    return true
+  }
+}
+
+// Every Epona-managed worktree in a repo, with the facts a caller needs to
+// decide whether removing it is safe: which branch it holds, whether it has
+// uncommitted work, and whether a running launch is still using it.
+// Returns [{ repo, branch, path, dirty, refcount }].
+export function listManaged(repoPath) {
+  const repo = resolvePath(repoPath)
+  return withMutex(repo, async () => {
+    await runGit(repo, ['worktree', 'prune']).catch(() => {})
+    const branchMap = refcounts.get(repo)
+    const out = []
+    for (const entry of await listWorktreesOnDisk(repo)) {
+      if (!isManagedPath(repo, entry.path)) continue
+      out.push({
+        repo,
+        branch: entry.branch,
+        path: entry.path,
+        dirty: await isDirty(entry.path),
+        refcount: (entry.branch && branchMap?.get(entry.branch)?.refcount) ?? 0
+      })
+    }
+    return out
+  })
+}
+
+// Remove one managed worktree by branch. Refuses the two cases where removing
+// would lose something: a launch still holds it, or it has uncommitted work and
+// the caller hasn't explicitly said to discard that. Returns
+// { ok } | { ok: false, reason: 'in-use' | 'dirty' | 'not-found' | 'git', error }.
+export function removeWorktree(repoPath, branch, { force = false } = {}) {
+  const repo = resolvePath(repoPath)
+  return withMutex(repo, async () => {
+    const branchMap = refcounts.get(repo)
+    const tracked = branchMap?.get(branch)
+    if (tracked && tracked.refcount > 0) return { ok: false, reason: 'in-use' }
+
+    await runGit(repo, ['worktree', 'prune']).catch(() => {})
+    const onDisk = await listWorktreesOnDisk(repo)
+    const entry = onDisk.find((e) => e.branch === branch && isManagedPath(repo, e.path))
+    if (!entry) {
+      // Nothing on disk — drop any stale bookkeeping and report success-ish.
+      branchMap?.delete(branch)
+      return { ok: false, reason: 'not-found' }
+    }
+    if (!force && (await isDirty(entry.path))) return { ok: false, reason: 'dirty' }
+
+    try {
+      await runGit(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), entry.path])
+      branchMap?.delete(branch)
+      if (branchMap && branchMap.size === 0) refcounts.delete(repo)
+      return { ok: true, path: entry.path }
+    } catch (err) {
+      return { ok: false, reason: 'git', error: err.message }
+    }
+  })
+}
+
+// Pure: which of these managed worktrees is safe to sweep automatically?
+// An orphan is a worktree no configured instance still points at, that no
+// running launch holds, and that has no uncommitted work. Dirty worktrees are
+// deliberately kept — the only thing that discards user work is the explicit
+// Flush action. `keepBranches` is any iterable of branch names.
+export function selectOrphans(managed, keepBranches) {
+  const keep = new Set(keepBranches ?? [])
+  return (managed ?? []).filter(
+    (w) => w.branch && !keep.has(w.branch) && !w.dirty && (w.refcount ?? 0) === 0
+  )
+}
+
+// Remove every orphan in a repo. Never forces. Returns { repo, removed[], kept[],
+// errors[] } so the caller can log what it did without a second listing.
+export async function sweepOrphans(repoPath, keepBranches) {
+  const managed = await listManaged(repoPath)
+  const orphans = selectOrphans(managed, keepBranches)
+  const removed = []
+  const errors = []
+  for (const w of orphans) {
+    const r = await removeWorktree(repoPath, w.branch)
+    if (r.ok) removed.push(w.path)
+    else if (r.reason === 'git') errors.push({ path: w.path, error: r.error })
+  }
+  return {
+    repo: resolvePath(repoPath),
+    removed,
+    kept: managed.filter((w) => !orphans.includes(w)).map((w) => w.path),
+    errors
+  }
+}
+
 // Force-remove every Epona-managed worktree for a repo, then prune git's admin
 // entries and drop in-memory refcounts — the manual "unstick me" path behind
 // Settings → Flush Worktrees. Unlike releaseWorktree this uses `--force`, so it
@@ -212,12 +319,11 @@ export function flushWorktrees(repoPath) {
     const removed = []
     const errors = []
     const wtRoot = resolvePath(repo, '.worktrees')
-    const managed = (p) => p === wtRoot || p.startsWith(wtRoot + sep)
 
     await runGit(repo, ['worktree', 'prune']).catch(() => {})
     const onDisk = await listWorktreesOnDisk(repo)
     for (const e of onDisk) {
-      if (!managed(e.path)) continue
+      if (!isManagedPath(repo, e.path)) continue
       try {
         await runGit(repo, ['worktree', 'remove', '--force', e.path])
         removed.push(e.path)

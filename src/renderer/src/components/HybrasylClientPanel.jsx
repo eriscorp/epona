@@ -12,6 +12,8 @@ import TerminalIcon from '@mui/icons-material/Terminal'
 import PathPicker from './PathPicker'
 import BranchSelector from './BranchSelector'
 import SnackbarHost from './SnackbarHost'
+import WorktreePurgeDialog from './WorktreePurgeDialog'
+import { useWorktreePurgePrompt } from '../useWorktreePurgePrompt'
 import { useGitBranches, deriveBranchOptions } from '../useGitBranches'
 import { useDotnetRuntime } from '../useDotnetRuntime'
 import { diagnoseAndExplain } from '../gitDiagnose'
@@ -41,8 +43,20 @@ export default function HybrasylClientPanel({
   // server panel uses: { severity, message, duration? }.
   const [snack, setSnack] = useState(null)
 
+  // Offers to remove the worktree a branch switch leaves behind.
+  const purgePrompt = useWorktreePurgePrompt(setSnack)
+
   const isRepoMode = hybrasyl.mode === 'repo'
   const activePath = isRepoMode ? hybrasyl.clientRepoPath : hybrasyl.binaryPath
+
+  // Persist the new branch, then ask about the old branch's worktree. The client
+  // is a singleton launch we don't track a running flag for here, so the check
+  // relies on the refcount the main process reports.
+  function changeBranch(v) {
+    const previous = hybrasyl.clientBranch
+    onChange({ targets: { hybrasyl: { ...hybrasyl, clientBranch: v } } })
+    if (previous !== v) void purgePrompt.check(previous)
+  }
 
   useEffect(() => {
     if (activePath) {
@@ -200,7 +214,7 @@ export default function HybrasylClientPanel({
             loading={branchLoading}
             noGit={hybrasyl.noGit}
             error={branchError}
-            onChange={(v) => onChange({ targets: { hybrasyl: { ...hybrasyl, clientBranch: v } } })}
+            onChange={changeBranch}
             onOpen={() =>
               !hybrasyl.noGit && hybrasyl.clientRepoPath && refreshBranches(hybrasyl.clientRepoPath)
             }
@@ -264,6 +278,13 @@ export default function HybrasylClientPanel({
           sx={{ m: 0 }}
         />
       </Tooltip>
+
+      <WorktreePurgeDialog
+        worktree={purgePrompt.pending}
+        busy={purgePrompt.busy}
+        onKeep={purgePrompt.dismiss}
+        onRemove={purgePrompt.confirm}
+      />
 
       <SnackbarHost snack={snack} onClose={() => setSnack(null)} />
     </Box>

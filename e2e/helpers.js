@@ -104,7 +104,10 @@ export async function readGeometry(electronApp, page) {
 // Used by the flush-worktrees regression spec: Settings → Maintenance → Flush
 // must actually remove it. Returns absolute paths so the spec can assert the
 // worktree dir is gone and point seeded settings at the repo.
-export function createTempRepoWithWorktree(branch = 'wt-e2e') {
+// `dirty: true` drops an uncommitted file inside the worktree. That matters
+// because the startup/quit orphan sweep deliberately keeps worktrees with
+// uncommitted work — only Flush Worktrees (which forces) discards them.
+export function createTempRepoWithWorktree(branch = 'wt-e2e', { dirty = false } = {}) {
   const repoDir = mkdtempSync(join(tmpdir(), 'epona-repo-'))
   const git = (...args) =>
     execFileSync('git', ['-C', repoDir, ...args], { stdio: 'pipe' }).toString()
@@ -126,6 +129,7 @@ export function createTempRepoWithWorktree(branch = 'wt-e2e') {
   mkdirSync(join(repoDir, '.worktrees'), { recursive: true })
   const worktreeDir = join(repoDir, '.worktrees', branch)
   git('worktree', 'add', worktreeDir, branch)
+  if (dirty) writeFileSync(join(worktreeDir, 'uncommitted.txt'), 'work in progress')
   return { repoDir, worktreeDir, branch }
 }
 
