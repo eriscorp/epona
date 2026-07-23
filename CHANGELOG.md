@@ -18,6 +18,40 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Added
+
+- **Epona now tracks running servers properly.** The Server tab asks the launcher
+  what is actually running instead of remembering what it started: it watches the
+  server process and checks the instance's lobby port. A server you started in an
+  earlier Epona session — or by hand — is picked up and shown as **running
+  (external)**, and you can stop it from Epona.
+- **Worktree housekeeping.** When you switch an instance (or the client) to a
+  different branch, Epona offers to remove the old branch's git worktree. It also
+  clears worktrees that no saved setting points at any more, at startup and at
+  quit. Worktrees with uncommitted changes are always kept — only Flush Worktrees
+  discards those, and it still asks first.
+- **Settings → Maintenance lists your managed worktrees**, with the branch, the
+  path, a "dirty" mark, and a Remove button for each.
+- **An installer.** Windows releases now ship an NSIS setup .exe next to the
+  portable build.
+
+### Fixed
+
+- **Only one Epona runs at a time.** A second launch focuses the window you
+  already have. Two copies used to fight over the same settings and cache folder,
+  and neither one could see the servers the other had started.
+- **A server that stops on its own no longer shows as running.** Closing the
+  server's console window now updates the button and releases the git worktree
+  that launch was holding.
+- **The taskbar shows the Epona icon and name** instead of a generic Electron
+  one. The running window advertised a different app ID than the installer
+  registered.
+- **Builds no longer carry Epona's own development files** — the packaged app
+  shipped the test suites, coverage reports, and internal notes inside itself.
+- **The splash window can't get stuck.** It now appears even if the window-ready
+  signal never arrives, and it closes itself if the app fails to start, instead of
+  floating on top of everything with no way to close it.
+
 ## [2.5.0] - 2026-07-12
 
 ### Added

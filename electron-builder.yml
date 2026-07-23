@@ -10,6 +10,13 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!packages/da-win32/src/**'
   - '!packages/da-win32/binding.gyp'
+  # The scaffold excludes above miss every other dev tree in the repo root, so
+  # coverage/, e2e/, docs/ and CLAUDE.md used to ship inside app.asar — none are
+  # reachable at runtime and the docs are internal. resources/** must survive:
+  # it's asarUnpack'd and holds splash.html + the icon.
+  - '!{coverage,e2e,test-results,playwright-report,docs,scripts,.claude,.agents,.codex,.github}/*'
+  - '!{CLAUDE.md,playwright.config.mjs,vitest.config.js,eslint.config.mjs}'
+  - '!**/*.tsbuildinfo'
 asarUnpack:
   - resources/**
   - node_modules/da-win32/build/**
@@ -18,11 +25,22 @@ win:
   executableName: Epona
   icon: resources/epona.png
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: portable
       arch:
         - x64
 portable:
   artifactName: ${name}-${version}-portable.${ext}
+nsis:
+  # Predictable name for the release workflow's sign + upload steps (the default
+  # is "Epona Setup <version>.exe", with spaces).
+  artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
 mac:
   category: public.app-category.games
   icon: resources/epona.png

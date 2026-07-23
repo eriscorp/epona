@@ -87,14 +87,14 @@ export default function App() {
     startupTabIndex(defaultSettings.targetKind, isWindows)
   )
   const [logPaneOpen, setLogPaneOpen] = useState(false)
-  const [runningInstances, setRunningInstances] = useState(new Set())
+  // Server running-state comes from the main process, which polls tracked-process
+  // liveness and probes each instance's lobby port. Keeping our own guess here is
+  // what used to leave the tab showing "Start Server" for a server that was very
+  // much running. Shape: { [instanceId]: { running, pid, source, ambiguousPort } }.
+  const [instanceStatus, setInstanceStatus] = useState({})
 
-  const removeRunning = (id) =>
-    setRunningInstances((prev) => {
-      const next = new Set(prev)
-      next.delete(id)
-      return next
-    })
+  const applyStatus = (snapshot) =>
+    setInstanceStatus(Object.fromEntries((snapshot ?? []).map((s) => [s.id, s])))
 
   useEffect(() => {
     hydrate().then((s) => {
@@ -124,14 +124,21 @@ export default function App() {
       ({ instanceId, pid, code, signal }) => {
         const label = signal ? `signal ${signal}` : `exit code ${code}`
         appendInstance(instanceId, 'exit', `— process ${pid} ended (${label}) —`)
-        removeRunning(instanceId)
       }
     )
+    // Seed from a forced pass, then follow main's pushes. Main only pushes when
+    // the snapshot actually changes.
+    const offStatus = window.sparkAPI.onInstanceStatus(applyStatus)
+    window.sparkAPI
+      .getInstanceStatus()
+      .then(applyStatus)
+      .catch(() => {})
     return () => {
       offLog?.()
       offExit?.()
       offInstanceLog?.()
       offInstanceExit?.()
+      offStatus?.()
     }
   }, [])
 
@@ -300,37 +307,45 @@ export default function App() {
               <ServerInstancePanel
                 instances={settings.instances}
                 selectedId={settings.activeInstance}
-                runningIds={runningInstances}
+                statusById={instanceStatus}
                 worldDirectories={settings.worldDirectories}
                 activeWorldDirectory={settings.activeWorldDirectory}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onSelect={(id) => update({ activeInstance: id })}
                 onInstancesChange={(next) => update({ instances: next })}
+                // Start/Stop/Reset write an optimistic row so the button flips on
+                // the round trip instead of waiting out the poll interval; main's
+                // next push overrides it either way.
                 onStart={async (instance) => {
                   const result = await window.sparkAPI.startInstance(instance)
                   if (result.success) {
-                    setRunningInstances((prev) => new Set(prev).add(instance.id))
+                    setInstanceStatus((prev) => ({
+                      ...prev,
+                      [instance.id]: { id: instance.id, running: true, source: 'tracked' }
+                    }))
                   }
                   return result
                 }}
                 onStop={async (instanceId) => {
                   const result = await window.sparkAPI.stopInstance(instanceId)
-                  // For cmd /c start-launched servers we don't track the PID,
-                  // so nothing actually happens on the main side. Clear the
-                  // UI's running flag anyway — the user is telling us the
-                  // instance is no longer running, and the console window
-                  // closure is the real stop signal.
-                  removeRunning(instanceId)
+                  if (result.success) {
+                    setInstanceStatus((prev) => ({
+                      ...prev,
+                      [instanceId]: { id: instanceId, running: false, source: null }
+                    }))
+                  }
                   return result
                 }}
                 onReset={async (instance) => {
                   const result = await window.sparkAPI.resetInstance(instance)
-                  // On success the instance is still running (a fresh process)
-                  // — leave the flag set. On failure the previous process was
-                  // killed but relaunch failed, so treat as stopped.
-                  if (!result.success) {
-                    removeRunning(instance.id)
-                  }
+                  setInstanceStatus((prev) => ({
+                    ...prev,
+                    [instance.id]: {
+                      id: instance.id,
+                      running: result.success,
+                      source: result.success ? 'tracked' : null
+                    }
+                  }))
                   return result
                 }}
               />

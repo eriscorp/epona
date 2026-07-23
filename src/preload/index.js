@@ -49,7 +49,15 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   startInstance: (instance) => ipcRenderer.invoke('instance:start', instance),
   stopInstance: (instanceId) => ipcRenderer.invoke('instance:stop', instanceId),
   resetInstance: (instance) => ipcRenderer.invoke('instance:reset', instance),
-  listRunningInstances: () => ipcRenderer.invoke('instance:listRunning'),
+  // Authoritative running-state, derived in main from tracked-process liveness
+  // plus a lobby-port probe. getInstanceStatus() forces a fresh pass (renderer
+  // mount); onInstanceStatus subscribes to the pushes that follow.
+  getInstanceStatus: () => ipcRenderer.invoke('instance:getStatus'),
+  onInstanceStatus: (cb) => {
+    const listener = (_, payload) => cb(payload)
+    ipcRenderer.on('instance:status', listener)
+    return () => ipcRenderer.removeListener('instance:status', listener)
+  },
   listServerConfigs: (dataDir) => ipcRenderer.invoke('instance:listServerConfigs', dataDir),
   readDataStore: (dataDir, configFileName) =>
     ipcRenderer.invoke('instance:readDataStore', dataDir, configFileName),
@@ -57,6 +65,9 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath),
   diagnoseGitRepo: (repoPath) => ipcRenderer.invoke('git:diagnoseGitRepo', repoPath),
   flushWorktrees: () => ipcRenderer.invoke('worktrees:flush'),
+  listManagedWorktrees: () => ipcRenderer.invoke('worktrees:listManaged'),
+  removeWorktree: (repoPath, branch, force) =>
+    ipcRenderer.invoke('worktrees:remove', repoPath, branch, force),
   isHybrasylDataDir: (dataDir) => ipcRenderer.invoke('instance:isHybrasylDataDir', dataDir),
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
   saveLog: (content, defaultFileName) =>
