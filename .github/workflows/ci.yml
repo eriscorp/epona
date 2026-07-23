@@ -1,0 +1,89 @@
+# Continuous integration for pull requests and main.
+#
+# release.yml only fires on a `v*` tag, so until now nothing enforced lint or
+# the unit tests before a merge — a regression could reach a release build.
+# This workflow gates every PR and every push to main.
+#
+# `lint:check` runs with `--max-warnings 0`, so ANY warning fails the job. That
+# is the point: keep `eslint .` at zero permanently instead of letting warnings
+# collect.
+#
+# Runs on windows-2022, for two reasons:
+#   1. `npm ci` runs `postinstall` -> `electron-builder install-app-deps`, which
+#      rebuilds the Windows-only `da-win32` native addon.
+#   2. Epona's main process is Windows-specific (netstat parsing, taskkill,
+#      PowerShell console wrappers), and its tests assert that behaviour.
+# The 2022 pin matches release.yml: windows-latest carries VS 18, which
+# node-gyp 11.5.0 cannot parse.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# One run per ref. A new push cancels the in-flight run for the same branch or
+# PR — unlike release.yml, cancelling a CI check costs nothing.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (0 warnings tolerated)
+        run: npm run lint:check
+
+      - name: Test
+        run: npm run test:coverage
+
+  # The Playwright/Electron specs drive the BUILT app and measure real window
+  # geometry, so they need the native addon and a full build. They are slower
+  # than the unit tests and run as their own job to keep the lint/test signal
+  # fast and separable.
+  e2e:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native addon
+        run: npm run rebuild
+
+      # `npm run e2e` builds first; the specs load out/main/index.js.
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
