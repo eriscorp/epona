@@ -1,0 +1,17 @@
+# Line endings.
+#
+# Prettier expects LF (its `endOfLine` default), and the repo stores LF. A
+# Windows checkout with git's `core.autocrlf=true` — the default on GitHub's
+# Windows runners — rewrites every file to CRLF, and `eslint .` then reports a
+# `Delete ␍` warning on every line of every file. `eol=lf` pins the working
+# tree to LF on every platform, so CI and a local Windows clone agree.
+* text=auto eol=lf
+
+# Binary assets — never normalize, never diff as text.
+*.png binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.node binary
+*.exe binary
+*.dll binary
