@@ -92,6 +92,30 @@ test.describe('Content never overflows the window', () => {
     await expectNoOverflow(page, 'settings reclosed')
   })
 
+  // The structural guarantee, independent of any particular sizing bug: if the
+  // OS hands back a client area NARROWER than the layout's preferred width, the
+  // main panel must absorb it and nothing may overflow. Forcing the window
+  // narrower simulates every cause at once (frame delta, DPI rounding, a work
+  // area too small) without depending on the harness machine's scaling.
+  test('a viewport narrower than the preferred width still does not overflow', async () => {
+    ;({ electronApp } = await launchEpona({}))
+    const page = await getMainWindow(electronApp)
+    const win = await electronApp.browserWindow(page)
+
+    for (const shortfall of [1, 12, 29, 60]) {
+      await win.evaluate((bw, short) => {
+        const [w, h] = bw.getSize()
+        bw.setMinimumSize(0, 0)
+        bw.setMaximumSize(0, 0)
+        bw.setSize(w - short, h)
+      }, shortfall)
+      // Let the resize reach the renderer and lay out.
+      await page.waitForFunction(() => true)
+      await page.waitForTimeout(150)
+      await expectNoOverflow(page, `viewport ${shortfall}px under preferred`)
+    }
+  })
+
   test('the main tabs each fit their viewport', async () => {
     ;({ electronApp } = await launchEpona({}))
     const page = await getMainWindow(electronApp)

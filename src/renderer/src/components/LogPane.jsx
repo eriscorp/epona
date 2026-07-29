@@ -7,7 +7,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import SaveAltIcon from '@mui/icons-material/SaveAlt'
 import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom'
-import { PANEL_BORDER } from '../uiConstants.js'
+import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { useRuntime } from '../store/runtimeStore.js'
 import { formatLogLines } from '../../../shared/logFormat.js'
 
@@ -63,7 +63,12 @@ export default function LogPane({ title = 'Console', source, slug, onClose }) {
   return (
     <Box
       sx={{
-        flex: '1 1 0',
+        // Rigid, like SettingsPane — App.jsx's resize request assumes each open
+        // pane is exactly PANE_W. As `1 1 0` this pane silently absorbed any
+        // width the window came back short by, which hid the mismatch here and
+        // pushed it onto the main panel instead. The main panel is now the one
+        // elastic column; the panes hold their width.
+        flex: `0 0 ${PANE_W}px`,
         minWidth: 0,
         height: '100%',
         position: 'relative',

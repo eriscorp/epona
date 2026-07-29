@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, screen } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
@@ -876,9 +876,21 @@ app.whenReady().then(() => {
     // So: clear both limits, size the CONTENT, then read back the WINDOW size we
     // actually got and lock the limits to that. e2e/content-overflow.spec.js
     // pins this.
+    //
+    // Clamp to the work area of the display the window is actually on. The
+    // renderer's preferred 800px height does not fit a 1920x1080 panel at 150%
+    // scaling (≈662 logical px of work area), and asking for more than fits
+    // leaves the OS to clamp us — after which locking min == max to the
+    // requested size pins the window to a height it never got. Ask for
+    // something achievable instead.
+    const { workAreaSize } = screen.getDisplayMatching(mainWindow.getBounds())
+    const target = {
+      width: Math.min(width, workAreaSize.width),
+      height: Math.min(height, workAreaSize.height)
+    }
     mainWindow.setMinimumSize(0, 0)
     mainWindow.setMaximumSize(0, 0)
-    mainWindow.setContentSize(width, height)
+    mainWindow.setContentSize(target.width, target.height)
     const [w, h] = mainWindow.getSize()
     mainWindow.setMinimumSize(w, h)
     mainWindow.setMaximumSize(w, h)

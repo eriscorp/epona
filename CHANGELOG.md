@@ -35,6 +35,13 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   window and sizing the content used two different coordinate systems, and the
   limits were applied before the content size instead of after.
 
+- **Epona now fits screens it previously overhung.** The window height was fixed
+  at 800px regardless of the display, which is taller than the usable desktop on
+  a 1080p screen at 125% or 150% scaling — so the bottom of the window sat off
+  the edge. Epona now asks for no more than the screen can show, and the layout
+  adapts to the window it actually gets instead of assuming it got what it asked
+  for.
+
 - **Worktrees now work when the repo path is not its canonical form** — a repo
   reached through a junction, a mapped drive, or a short (8.3) directory name.
   Epona compared the path you gave against the path git reports, which are not
