@@ -196,7 +196,12 @@ function createWindow() {
     ...(isMac
       ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 10 } }
       : { frame: false }),
-    icon: join(__dirname, '../../resources/epona.png'),
+    // 256px, not the 1024px icon master. Windows takes the packaged app's icon
+    // from the exe resource, so this mainly serves dev runs and Linux — but it
+    // is decoded at window creation either way, and 256 is the largest size any
+    // consumer of this option asks for. electron-builder still points at the
+    // 1024px resources/epona.png for the icons it generates at build time.
+    icon: join(__dirname, '../../resources/epona-icon-256.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

@@ -26,6 +26,15 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   credential leak in `electron-builder`'s upload path and a path-traversal bug
   in `postcss`. These affect only how Epona is built, not the app you run.
 
+### Changed
+
+- **Epona starts faster, and the splash screen actually shows its logo.** Every
+  place the Epona logo appeared — the splash, the title bar, the Settings
+  header, the window icon — loaded the same 1024×1024, 1.7 MB image, to draw it
+  as small as 20 pixels across. On a cold start that decode landed on the
+  splash's first paint, which is the one thing the splash exists to make fast.
+  Each spot now loads an image sized for what it actually draws.
+
 ### Fixed
 
 - **The window is no longer slightly too narrow for its own content.** On a

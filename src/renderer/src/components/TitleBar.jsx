@@ -5,7 +5,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import { toolbarBtnSx, gamifiedBtnSx } from './toolbarStyles'
 import { DEPTH, TITLE_TEXT_SHADOW, chromeTier } from './titleChrome'
 import { useSettings } from '../store/settingsStore.js'
-import eponaLogo from '../assets/epona.png'
+import eponaLogo from '../assets/epona.webp'
 
 // Flat window-button styling for plain themes — no stroke/hover-swap, just a
 // translucent wash. secondary.contrastText reads on the colored title bar.
