@@ -43,13 +43,30 @@ portable:
   # The portable exe is an NSIS self-extracting archive: every launch
   # decompresses the whole app into %TEMP% before electron exists, so no in-app
   # splash can cover it — and the stub runs `SetSilent silent` unless
-  # SPLASH_IMAGE is defined, meaning the user gets nothing for several seconds.
-  # The electron runtime dominates that unpack, so slimming app.asar does not
-  # remove the wait. 24-bit BMP in build/ (buildResources, never packaged);
-  # the fill matches splash.js's backgroundColor so the two reads as one boot.
-  #   magick -size 320x240 xc:'#0c1524' \( build/icon.png -resize 120x120 \) \
-  #     -gravity north -geometry +0+34 -composite -flatten -strip \
-  #     BMP3:build/portable-splash.bmp
+  # SPLASH_IMAGE is defined, meaning the user gets nothing for several seconds
+  # (measured here: ~3.3s before the first Epona process). The electron runtime
+  # dominates that unpack, so slimming app.asar does not remove the wait.
+  #
+  # This BMP deliberately MIRRORS resources/splash.html rather than just showing
+  # the icon: same 360x300 as the splash BrowserWindow, same radial gradient
+  # (#16294a → #0c1524 offset toward the top), same 148px logo, same EPONA
+  # wordmark (#f0e6cc, 22px, 3px tracking) and "Loading…" (#7f8fb0, 12px). The
+  # extraction splash then hands off to the electron splash with no visible
+  # change except the spinner starting — the gap at the bottom is where it goes.
+  # A static BMP cannot animate, which is the only reason the spinner is absent.
+  #
+  # 24-bit, in build/ (buildResources — never packaged). Regenerate with:
+  #   magick -size 360x600 radial-gradient:'#16294a'-'#0c1524' \
+  #     -crop 360x300+0+204 +repage \
+  #     \( build/icon.png -resize 148x148 \) -gravity north -geometry +0+18 \
+  #     -composite -gravity north \
+  #     -font Segoe-UI-Semibold -pointsize 22 -kerning 3 -fill '#f0e6cc' \
+  #       -annotate +0+186 'EPONA' \
+  #     -font Segoe-UI -pointsize 12 -kerning 1 -fill '#7f8fb0' \
+  #       -annotate +0+220 'Loading…' \
+  #     -flatten -strip -type TrueColor BMP3:build/portable-splash.bmp
+  # (The oversized gradient + crop puts the gradient's centre at 32% height, to
+  # match the CSS `radial-gradient(circle at 50% 32%, …)` in splash.html.)
   splashImage: build/portable-splash.bmp
 nsis:
   # Predictable name for the release workflow's sign + upload steps (the default
