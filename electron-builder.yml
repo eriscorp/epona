@@ -40,6 +40,17 @@ win:
         - x64
 portable:
   artifactName: ${name}-${version}-portable.${ext}
+  # The portable exe is an NSIS self-extracting archive: every launch
+  # decompresses the whole app into %TEMP% before electron exists, so no in-app
+  # splash can cover it — and the stub runs `SetSilent silent` unless
+  # SPLASH_IMAGE is defined, meaning the user gets nothing for several seconds.
+  # The electron runtime dominates that unpack, so slimming app.asar does not
+  # remove the wait. 24-bit BMP in build/ (buildResources, never packaged);
+  # the fill matches splash.js's backgroundColor so the two reads as one boot.
+  #   magick -size 320x240 xc:'#0c1524' \( build/icon.png -resize 120x120 \) \
+  #     -gravity north -geometry +0+34 -composite -flatten -strip \
+  #     BMP3:build/portable-splash.bmp
+  splashImage: build/portable-splash.bmp
 nsis:
   # Predictable name for the release workflow's sign + upload steps (the default
   # is "Epona Setup <version>.exe", with spaces).
