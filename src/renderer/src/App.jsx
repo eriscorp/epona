@@ -22,7 +22,7 @@ import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
 import ReportIssueDialog from './components/ReportIssueDialog'
-import { PANEL_BORDER_COLOR } from './uiConstants.js'
+import { PANEL_BORDER_COLOR, MAIN_W, PANE_W } from './uiConstants.js'
 import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
@@ -58,8 +58,8 @@ const LegacyTabDisabled = forwardRef(function LegacyTabDisabled(props, ref) {
   )
 })
 
-const MAIN_W = 480
-const PANE_W = 360
+// MAIN_W / PANE_W live in uiConstants.js so SettingsPane and LogPane size
+// themselves from the same numbers this resize request is built from.
 const WINDOW_H = 800
 
 const themes = {
@@ -212,13 +212,26 @@ export default function App() {
           // pixel height would then reveal a background.default letterbox band
           // (obvious on the light themes).
           height: '100%',
+          // Last line of defence. The flex rules above mean the layout should
+          // already fit any viewport it is given; if some future child does
+          // overflow anyway, clip it rather than letting the whole app scroll
+          // sideways and push content past the right edge.
+          overflowX: 'hidden',
           bgcolor: 'background.default'
         }}
       >
         <Box
           data-testid="main-panel"
           sx={{
-            flex: `0 0 ${MAIN_W}px`,
+            // Grow AND shrink from a MAIN_W basis, rather than a rigid
+            // `0 0 MAIN_W`. The panes are rigid, so at the requested window
+            // width this still resolves to exactly MAIN_W — but when the OS
+            // hands back a narrower client area than we asked for, the shortfall
+            // is absorbed here instead of overflowing off the right edge.
+            // minWidth: 0 is required for a flex child to shrink below its
+            // content's intrinsic width.
+            flex: `1 1 ${MAIN_W}px`,
+            minWidth: 0,
             height: '100%',
             display: 'flex',
             flexDirection: 'column',

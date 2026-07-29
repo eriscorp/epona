@@ -18,7 +18,29 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Security
+
+- **Epona now runs on Electron 41.10.3**, up from 41.2.0 — eight patch releases
+  of Chromium security fixes that the app was missing. No behavior changes.
+- **Build-toolchain dependencies updated** to clear nine advisories, including a
+  credential leak in `electron-builder`'s upload path and a path-traversal bug
+  in `postcss`. These affect only how Epona is built, not the app you run.
+
 ### Fixed
+
+- **The window is no longer slightly too narrow for its own content.** On a
+  display with Windows scaling above 100%, Epona sized its window ~29px
+  narrower than the layout it had just asked for, so panels, fields and buttons
+  ran off the right edge — and dragging the window wider "fixed" it. Sizing the
+  window and sizing the content used two different coordinate systems, and the
+  limits were applied before the content size instead of after.
+
+- **Epona now fits screens it previously overhung.** The window height was fixed
+  at 800px regardless of the display, which is taller than the usable desktop on
+  a 1080p screen at 125% or 150% scaling — so the bottom of the window sat off
+  the edge. Epona now asks for no more than the screen can show, and the layout
+  adapts to the window it actually gets instead of assuming it got what it asked
+  for.
 
 - **Worktrees now work when the repo path is not its canonical form** — a repo
   reached through a junction, a mapped drive, or a short (8.3) directory name.

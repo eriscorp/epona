@@ -42,7 +42,7 @@ import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { DEPTH } from './titleChrome'
 import eponaLogo from '../assets/epona.png'
-import { PANEL_BORDER } from '../uiConstants.js'
+import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 import { detectProtectedLocation } from '../../../shared/protectedPaths.js'
 
@@ -55,7 +55,6 @@ const THEMES = [
   { key: 'mundanes', label: 'Mundanes' }
 ]
 
-const PANE_W = 360
 const emptyProfile = { name: '', hostname: '', port: 2610, redirect: true }
 const emptyWorldDir = { name: '', path: '' }
 
