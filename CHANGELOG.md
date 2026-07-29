@@ -18,6 +18,8 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-07-29
+
 ### Security
 
 - **Epona now runs on Electron 41.10.3**, up from 41.2.0 — eight patch releases
