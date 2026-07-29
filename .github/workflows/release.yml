@@ -94,6 +94,13 @@ jobs:
             dist/*-setup.exe
             dist/*-portable.exe
           if-no-files-found: error
+          # These exist only to hand the packages to the `release` job minutes
+          # later. The published Release keeps its own copy, and release assets
+          # do NOT count against Actions storage -- but these artifacts do, at
+          # the 90-day default. Three releases of ~630MB exhausted the quota on
+          # a sibling repo: every build job failed with "Artifact storage quota
+          # has been hit", which skipped `release` and published nothing.
+          retention-days: 1
 
   build-linux:
     runs-on: ubuntu-latest
@@ -123,6 +130,13 @@ jobs:
             dist/*.deb
             dist/*.AppImage
           if-no-files-found: error
+          # These exist only to hand the packages to the `release` job minutes
+          # later. The published Release keeps its own copy, and release assets
+          # do NOT count against Actions storage -- but these artifacts do, at
+          # the 90-day default. Three releases of ~630MB exhausted the quota on
+          # a sibling repo: every build job failed with "Artifact storage quota
+          # has been hit", which skipped `release` and published nothing.
+          retention-days: 1
 
   build-mac:
     runs-on: macos-latest
@@ -208,6 +222,13 @@ jobs:
           name: macos-dmg
           path: dist/*.dmg
           if-no-files-found: error
+          # These exist only to hand the packages to the `release` job minutes
+          # later. The published Release keeps its own copy, and release assets
+          # do NOT count against Actions storage -- but these artifacts do, at
+          # the 90-day default. Three releases of ~630MB exhausted the quota on
+          # a sibling repo: every build job failed with "Artifact storage quota
+          # has been hit", which skipped `release` and published nothing.
+          retention-days: 1
 
   release:
     runs-on: ubuntu-latest

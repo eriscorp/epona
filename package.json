@@ -28,26 +28,34 @@
     "build:mac": "npm run build && electron-builder --mac --config.beforeBuild=scripts/noop-before-build.cjs",
     "build:linux": "npm run build && electron-builder --linux AppImage --config.beforeBuild=scripts/noop-before-build.cjs"
   },
+  "_dependenciesNote": [
+    "electron-builder copies EVERY `dependencies` entry into app.asar verbatim.",
+    "Only main and preload are externalized (externalizeDepsPlugin); the renderer",
+    "config has none, so vite already bundles every UI library into out/renderer.",
+    "Anything renderer-only listed here therefore ships TWICE. Keep this list to",
+    "what main/preload actually require at run time.",
+    "da-win32 is easy to get wrong: it is loaded via createRequire(), not a static",
+    "import, AND it is rollup-external, so it is NOT bundled and must be present in",
+    "node_modules at run time. A grep for import/require will not find it."
+  ],
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@fontsource/cinzel": "^5.2.8",
-    "@fontsource/cinzel-decorative": "^5.2.8",
-    "@fontsource/crimson-pro": "^5.2.8",
-    "@mui/icons-material": "^9.1.1",
-    "@mui/material": "^9.1.2",
     "da-win32": "file:packages/da-win32",
-    "react-icons": "^5.6.0",
-    "zod": "^4.4.3",
-    "zustand": "^5.0.14"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.1.0",
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
     "@electron-toolkit/utils": "^4.0.0",
     "@electron/rebuild": "^4.0.1",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@eslint/js": "^9.39.4",
+    "@fontsource/cinzel": "^5.2.8",
+    "@fontsource/cinzel-decorative": "^5.2.8",
+    "@fontsource/crimson-pro": "^5.2.8",
+    "@mui/icons-material": "^9.1.1",
+    "@mui/material": "^9.1.2",
     "@playwright/test": "^1.61.1",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.9",
@@ -60,7 +68,9 @@
     "prettier": "^3.8.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-icons": "^5.6.0",
     "vite": "^6.4.1",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "zustand": "^5.0.14"
   }
 }

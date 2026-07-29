@@ -22,6 +22,12 @@ export default function NavToolbar({
   // Non-Windows points at a Dark Ages asset folder, which carries no version —
   // so report whether assets have been located, and which folder.
   const assetsName = clientPath ? basenameOfPath(clientPath) : ''
+  // The "not found" line is text.disabled everywhere except hybrasyl, whose
+  // disabled slate (#607888) sits on this toolbar's secondary.main teal
+  // (#1e5e56) at almost no contrast and reads as muddy. Its info cyan
+  // (#6de7f7) is legible there, and "info" is the right register anyway: a
+  // client that has not been located yet is a notice, not a fault.
+  const notFoundColor = theme === 'hybrasyl' ? 'info.main' : 'text.disabled'
   const status = isWindows
     ? detectedVersion
       ? { found: true, label: `Client: ${detectedVersion}` }
@@ -47,7 +53,7 @@ export default function NavToolbar({
         <Typography
           data-testid="client-status"
           variant="caption"
-          sx={{ color: 'text.disabled', opacity: 0.9 }}
+          sx={{ color: notFoundColor, opacity: 0.9 }}
         >
           {status.label}
         </Typography>
