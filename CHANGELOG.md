@@ -18,6 +18,14 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Security
+
+- **Epona now runs on Electron 41.10.3**, up from 41.2.0 — eight patch releases
+  of Chromium security fixes that the app was missing. No behavior changes.
+- **Build-toolchain dependencies updated** to clear nine advisories, including a
+  credential leak in `electron-builder`'s upload path and a path-traversal bug
+  in `postcss`. These affect only how Epona is built, not the app you run.
+
 ### Fixed
 
 - **Worktrees now work when the repo path is not its canonical form** — a repo
