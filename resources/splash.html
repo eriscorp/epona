@@ -63,13 +63,15 @@
   </head>
   <body>
     <!-- Sized for its 148px render (320px covers 2x DPR), not the 1024px icon
-         master. The splash used to load resources/epona.png: 1024x1024, 1.7MB,
+         master. The splash used to load the 1024x1024 master directly: 1.7MB,
          ~4MB of RGBA once decoded, all to draw a 148px logo. That decode sits
          on the critical path of the first paint, which is the one thing this
          window exists to make fast. WebP is safe here because the only consumer
          is Chromium. Regenerate with:
-           magick resources/epona.png -resize 320x320 -strip -quality 90 \
-             resources/epona-splash.webp -->
+           magick build/icon.png -resize 320x320 -strip -quality 90 \
+             resources/epona-splash.webp
+         (The master lives in build/, not resources/ — resources/ is both
+         asarUnpack'd and vite's publicDir, so anything here ships twice.) -->
     <img class="logo" src="./epona-splash.webp" alt="Epona" />
     <div class="title">EPONA</div>
     <div class="sub">Loading…</div>

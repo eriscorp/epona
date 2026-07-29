@@ -13,7 +13,14 @@ files:
   # The scaffold excludes above miss every other dev tree in the repo root, so
   # coverage/, e2e/, docs/ and CLAUDE.md used to ship inside app.asar — none are
   # reachable at runtime and the docs are internal. resources/** must survive:
-  # it's asarUnpack'd and holds splash.html + the icon.
+  # it's asarUnpack'd and holds splash.html + the runtime-sized logo assets.
+  #
+  # The 1024px icon master lives in build/, NOT resources/, and the icon: keys
+  # below point there. resources/ is both asarUnpack'd AND vite's publicDir
+  # (electron.vite.config.mjs), so anything in it ships TWICE — the master was
+  # 1.7MB of payload nothing loads at runtime. build/ is directories.
+  # buildResources, which electron-builder never packages, so the icons are
+  # still generated from it and the payload is gone.
   - '!{coverage,e2e,test-results,playwright-report,docs,scripts,.claude,.agents,.codex,.github}/*'
   - '!{CLAUDE.md,playwright.config.mjs,vitest.config.js,eslint.config.mjs}'
   - '!**/*.tsbuildinfo'
@@ -23,7 +30,7 @@ asarUnpack:
   - packages/da-win32/build/**
 win:
   executableName: Epona
-  icon: resources/epona.png
+  icon: build/icon.png
   target:
     - target: nsis
       arch:
@@ -43,7 +50,7 @@ nsis:
   createDesktopShortcut: always
 mac:
   category: public.app-category.games
-  icon: resources/epona.png
+  icon: build/icon.png
   # da-win32 is a Windows-only native module; on macOS it compiles to an
   # empty stub that's never require()'d (the load is gated behind
   # process.platform === 'win32'). The stub is byte-identical across arches
@@ -62,7 +69,7 @@ dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   category: Game
-  icon: resources/epona.png
+  icon: build/icon.png
   maintainer: Hybrasyl Maintainers <hybrasyl@eris.co>
   target:
     - deb
