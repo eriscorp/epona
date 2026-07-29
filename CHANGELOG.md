@@ -35,6 +35,17 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   splash's first paint, which is the one thing the splash exists to make fast.
   Each spot now loads an image sized for what it actually draws.
 
+- **Smaller download and install.** Epona was packaging every user-interface
+  library twice — once compiled into the app, and again as unused source
+  alongside it. Removing the duplicates cut the application payload from about
+  138 MB to 6 MB. The download itself shrinks by less, because most of it is the
+  browser engine Epona is built on.
+
+- **The portable build no longer starts in silence.** The portable `.exe`
+  unpacks itself before Epona can draw anything, which took several seconds with
+  no sign it had worked — easy to read as a failed launch and double-click
+  again. It now shows the Epona splash almost immediately, while it unpacks.
+
 ### Fixed
 
 - **The window is no longer slightly too narrow for its own content.** On a
@@ -50,6 +61,11 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   the edge. Epona now asks for no more than the screen can show, and the layout
   adapts to the window it actually gets instead of assuming it got what it asked
   for.
+
+- **"No client detected" is readable on the Hybrasyl theme.** It was drawn in a
+  muted slate that sat almost invisibly against that theme's teal toolbar. It
+  now uses the theme's cyan, which is also the right signal — a client that has
+  not been located yet is a notice, not an error.
 
 - **Worktrees now work when the repo path is not its canonical form** — a repo
   reached through a junction, a mapped drive, or a short (8.3) directory name.
