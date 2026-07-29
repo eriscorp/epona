@@ -28,6 +28,13 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Fixed
 
+- **The window is no longer slightly too narrow for its own content.** On a
+  display with Windows scaling above 100%, Epona sized its window ~29px
+  narrower than the layout it had just asked for, so panels, fields and buttons
+  ran off the right edge — and dragging the window wider "fixed" it. Sizing the
+  window and sizing the content used two different coordinate systems, and the
+  limits were applied before the content size instead of after.
+
 - **Worktrees now work when the repo path is not its canonical form** — a repo
   reached through a junction, a mapped drive, or a short (8.3) directory name.
   Epona compared the path you gave against the path git reports, which are not

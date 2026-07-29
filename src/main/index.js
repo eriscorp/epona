@@ -861,14 +861,27 @@ app.whenReady().then(() => {
     // Resize by relocking min == max instead of toggling setResizable. The old
     // toggle added/removed WS_THICKFRAME around setContentSize on Windows, which
     // left the web contents offset to the right (a left-side letterbox that
-    // sprang back when the pane closed). Unlock the floor first so we never pass
-    // through a min > max state, size to the target, then relock so the
-    // frameless window still can't be edge-dragged. frame:false ⇒ window size ==
-    // content size, so the same width/height serve both.
+    // sprang back when the pane closed).
+    //
+    // CRITICAL: setMinimumSize/setMaximumSize are WINDOW-coordinate APIs;
+    // setContentSize is a CONTENT-coordinate API. They differ by the frame delta,
+    // so the max must NOT be set to the requested width before sizing — it clamps
+    // the window before the content can reach the target, and the viewport comes
+    // back short. The old comment claimed "frame:false ⇒ window size == content
+    // size"; that is false on Windows, where a resizable frameless window still
+    // carries WS_THICKFRAME. On a 150%-scaled display the shortfall reached 29px:
+    // the renderer laid out to its hardcoded MAIN_W of 480 inside a 451px
+    // viewport, overflowing to the right.
+    //
+    // So: clear both limits, size the CONTENT, then read back the WINDOW size we
+    // actually got and lock the limits to that. e2e/content-overflow.spec.js
+    // pins this.
     mainWindow.setMinimumSize(0, 0)
-    mainWindow.setMaximumSize(width, height)
+    mainWindow.setMaximumSize(0, 0)
     mainWindow.setContentSize(width, height)
-    mainWindow.setMinimumSize(width, height)
+    const [w, h] = mainWindow.getSize()
+    mainWindow.setMinimumSize(w, h)
+    mainWindow.setMaximumSize(w, h)
   })
 
   app.on('activate', () => {
