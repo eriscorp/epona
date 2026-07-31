@@ -50,7 +50,8 @@ Desktop.ini
 # =========================
 # IDEs
 # =========================
-.vscode/
+# .vscode/ is deliberately NOT ignored — it carries the shared Action Buttons
+# config (house standard), so everyone gets the same one-click scripts.
 .idea/
 
 # =========================

@@ -43,8 +43,8 @@ warning when launched on a non-`win32` platform.
 
 ### Supported client versions
 
-| Version | MD5 hash |
-| --- | --- |
+| Version           | MD5 hash                           |
+| ----------------- | ---------------------------------- |
 | US Dark Ages 7.37 | `36f4689b09a4a91c74555b3c3603b196` |
 | US Dark Ages 7.39 | `ca31b8165ea7409d285d81616d8ca4f2` |
 | US Dark Ages 7.40 | `9dc6fb13d0470331bf5ba230343fce42` |
@@ -211,15 +211,15 @@ Legacy target needs. Lives in [`packages/da-win32/`](packages/da-win32/)
 and is designed to be extracted to its own published package when
 sibling tools (e.g. Taliesin asset injection) need the same calls.
 
-| JS function | kernel32 call |
-| --- | --- |
-| `createSuspendedProcess(path)` | `CreateProcessA` |
-| `openProcess(pid, access)` | `OpenProcess` |
+| JS function                             | kernel32 call        |
+| --------------------------------------- | -------------------- |
+| `createSuspendedProcess(path)`          | `CreateProcessA`     |
+| `openProcess(pid, access)`              | `OpenProcess`        |
 | `writeProcessMemory(handle, addr, buf)` | `WriteProcessMemory` |
-| `readProcessMemory(handle, addr, size)` | `ReadProcessMemory` |
-| `resumeThread(handle)` | `ResumeThread` |
-| `suspendThread(handle)` | `SuspendThread` |
-| `closeHandle(handle)` | `CloseHandle` |
+| `readProcessMemory(handle, addr, size)` | `ReadProcessMemory`  |
+| `resumeThread(handle)`                  | `ResumeThread`       |
+| `suspendThread(handle)`                 | `SuspendThread`      |
+| `closeHandle(handle)`                   | `CloseHandle`        |
 
 All Win32 handles are exposed as JS `BigInt` — never coerced to
 `Number`.
@@ -259,21 +259,35 @@ for the workflow definition.
 
 ## Project structure
 
-| Path | Purpose |
-| --- | --- |
-| `packages/da-win32/` | Reusable N-API native addon for Win32 process interop |
-| `src/main/` | Electron main process — IPC handlers, settings manager, line buffer, runtime detection, server tester, port probe |
-| `src/main/targets/` | Per-target launchers — `legacyTarget.js` (Win32 patches), `hybrasylTarget.js` (client exe / dotnet run), `serverTarget.js` (binary / repo with worktrees) |
-| `src/main/gitOps.js`, `worktreeManager.js`, `buildProps.js` | Git plumbing for repo-mode launches |
-| `src/preload/` | Context bridge exposing `sparkAPI` to the renderer |
-| `src/renderer/src/components/` | UI components — title bar, nav toolbar, profile selector, options, action buttons, settings pane, log pane, server instance panel, hybrasyl client panel |
-| `src/renderer/src/themes/` | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark) |
-| `docs/` | Active design docs (`server-launch-resolution.md`, `release-process.md`); `docs/completed/` archives shipped plan docs |
+| Path                                                        | Purpose                                                                                                                                                   |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/da-win32/`                                        | Reusable N-API native addon for Win32 process interop                                                                                                     |
+| `src/main/`                                                 | Electron main process — IPC handlers, settings manager, line buffer, runtime detection, server tester, port probe                                         |
+| `src/main/targets/`                                         | Per-target launchers — `legacyTarget.js` (Win32 patches), `hybrasylTarget.js` (client exe / dotnet run), `serverTarget.js` (binary / repo with worktrees) |
+| `src/main/gitOps.js`, `worktreeManager.js`, `buildProps.js` | Git plumbing for repo-mode launches                                                                                                                       |
+| `src/preload/`                                              | Context bridge exposing `sparkAPI` to the renderer                                                                                                        |
+| `src/renderer/src/components/`                              | UI components — title bar, nav toolbar, profile selector, options, action buttons, settings pane, log pane, server instance panel, hybrasyl client panel  |
+| `src/renderer/src/themes/`                                  | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark, Mundanes)                                                                                          |
+| `src/shared/`                                               | Pure logic shared by main, preload and renderer — no electron or node imports                                                                             |
+| `e2e/`                                                      | Playwright specs driving the built app (Windows)                                                                                                          |
+| `docs/`                                                     | Active design docs (`server-launch-resolution.md`, `release-process.md`); `docs/completed/` archives shipped plan docs                                    |
 
 ## Contributing
 
 Issues and pull requests welcome. Please open an issue before starting
-significant work.
+significant work. [CLAUDE.md](CLAUDE.md) has the build commands, the layout, and
+the things that will bite you.
+
+Run `npm run lint:check && npm test && npm run build` before opening a PR — CI
+gates all three, plus `npm audit --omit=dev --audit-level=high` and the
+Playwright suite.
+
+## Security
+
+Epona launches programs and patches a running client's memory, so its trust
+boundary is worth reading before you change the main process: see
+[SECURITY.md](SECURITY.md). Report vulnerabilities through the shared intake
+repo, or in-app via **Settings → About → Report an issue**.
 
 ## Author
 
@@ -285,7 +299,7 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
-*Epona is the spiritual successor to [Spark](https://github.com/hybrasyl/spark)
+_Epona is the spiritual successor to [Spark](https://github.com/hybrasyl/spark)
 (C#/WPF), rewritten on the Electron stack and substantially expanded
 to cover Hybrasyl client launches and server orchestration in addition
-to the original DA-launcher remit.*
+to the original DA-launcher remit._
