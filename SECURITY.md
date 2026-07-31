@@ -51,8 +51,12 @@ Recorded so they read as pending work rather than as decisions:
   at its own top frame. Epona loads no remote content and opens no child windows, so there is no
   second frame to send one today — but the check is cheap insurance the siblings have and this does
   not.
-- **`sandbox: false` on the main window**, inherited from the scaffold, because the preload uses
-  Node built-ins.
+- **`sandbox: false` on the main window**, inherited from the scaffold. Not because the preload
+  needs Node — it imports only `electron` and `@electron-toolkit/preload`. The blocker is that
+  `externalizeDepsPlugin()` leaves `require("@electron-toolkit/preload")` in the built preload, and
+  a sandboxed preload may require only `electron`. Nothing consumes the `window.electron` global
+  that package exposes, so removing it makes `sandbox: true` reachable. The splash window already
+  runs sandboxed.
 
 ## Reporting a vulnerability
 
