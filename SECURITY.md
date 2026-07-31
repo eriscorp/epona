@@ -29,6 +29,7 @@ native addon. The renderer asks it to.
 | Git operations        | Arguments are passed as an argv array to `spawn` with no shell (`src/main/gitExec.js`), so a branch or path containing shell metacharacters is data rather than a command.                                                                                                               |
 | Renderer process      | Runs in the OS sandbox (`sandbox: true`), with context isolation on and Node integration off. The preload requires nothing beyond `electron`, which is what makes that possible; `e2e/preload-sandbox.spec.js` asserts it stays that way.                                                |
 | Renderer → main IPC   | Every handler registers through a guarded `ipcMain` (`src/main/windowSecurity.js`) that accepts a message only from the top frame of a window Epona itself created, at a location Epona itself loaded. Subframes, unregistered windows and a window that navigated away are all refused. |
+| Shipped binary        | Hardened with Electron fuses: `runAsNode`, `--inspect` arguments and `NODE_OPTIONS` are disabled, and app code loads only from `app.asar`. Without the first, `ELECTRON_RUN_AS_NODE=1 Epona.exe -e "…"` would turn the signed binary into a general-purpose Node interpreter.            |
 
 ### What is deliberately not guarded, and why
 
@@ -44,13 +45,12 @@ that point they can already run programs as you, so Epona is not the weak link �
 
 ## Known gaps
 
-Recorded so they read as pending work rather than as decisions. The two this section used to list
-alongside the one below — the scaffold's `sandbox: false`, and the missing IPC sender check — are
-closed; see _Renderer process_ and _Renderer → main IPC_ in the table above.
+None outstanding. This section listed three — the scaffold's `sandbox: false`, no IPC sender check,
+and no Electron fuses — and all three are closed; see _Renderer process_, _Renderer → main IPC_ and
+_Shipped binary_ in the table above.
 
-- **No Electron fuses.** Sibling apps set `electronFuses.runAsNode: false` and disable `--inspect`
-  and `NODE_OPTIONS` in `electron-builder.yml`. Epona does not yet. Until it does, a packaged build
-  inherits `ELECTRON_RUN_AS_NODE` from its environment.
+Kept as a heading rather than deleted, because the next gap should land here rather than going
+unrecorded.
 
 ## Reporting a vulnerability
 
