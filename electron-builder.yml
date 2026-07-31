@@ -1,5 +1,32 @@
 appId: co.eris.epona
 productName: Epona
+# Turn off escape hatches built into the Electron binary that Epona never uses.
+# The one that matters is runAsNode: without it,
+#   ELECTRON_RUN_AS_NODE=1 Epona.exe -e "<script>"
+# turns the shipped, signed binary into a general-purpose Node interpreter — a
+# real capability handed to anything that can set an environment variable. It
+# also makes the app immune to the trap where that variable, exported in a
+# shell, makes a healthy launch look like a crash.
+#
+# onlyLoadAppFromAsar is the one that can break a packaged launch, and epona is
+# the first app in the house to combine it with an asarUnpack'd NATIVE addon
+# (da-win32 resolves out of app.asar.unpacked). Verified on a real package: the
+# fuse governs where APP code is loaded from, not native module resolution, and
+# the addon still loads. Re-check it if the asarUnpack list changes.
+#
+# Native electron-builder config, NOT an afterPack hook: on the mac universal
+# build the per-arch packs must stay pristine and the fuses have to be flipped
+# once on the merged app right before signing. A per-arch hook corrupts the
+# universal merge with an "identical SHAs" failure.
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  enableNodeOptionsEnvironmentVariable: false
+  onlyLoadAppFromAsar: true
+  # Flipping fuses rewrites the Electron Framework binary and invalidates the
+  # ad-hoc signature that is mandatory on Apple Silicon; re-apply it before the
+  # real signing step runs.
+  resetAdHocDarwinSignature: true
 directories:
   buildResources: build
 # ALLOWLIST, not a denylist. electron-builder packages the whole project

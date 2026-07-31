@@ -1,8 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 
-contextBridge.exposeInMainWorld('electron', electronAPI)
-
+// `electron` is the ONLY module this file may require. The main window runs with
+// `sandbox: true`, and a sandboxed preload gets a polyfilled loader that resolves
+// `electron` and a handful of Node built-ins — nothing else. Importing any package
+// here re-breaks the sandbox, and it fails at run time in the packaged app rather
+// than at build time, because `externalizeDepsPlugin` leaves the bare `require` in
+// the bundle for anything listed in `dependencies`.
+//
+// `@electron-toolkit/preload` used to be imported here to expose a `window.electron`
+// bridge that nothing in the renderer ever read. Removing it is what made the
+// sandbox reachable.
 contextBridge.exposeInMainWorld('sparkAPI', {
   platform: process.platform,
   // Signals the main process that the renderer has hydrated its settings, so
