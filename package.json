@@ -42,6 +42,37 @@
     "da-win32": "file:packages/da-win32",
     "zod": "^4.4.3"
   },
+  "_overridesNote": [
+    "TWO entries, and the second is why the first is safe. Do not remove one alone.",
+    "",
+    "brace-expansion <=5.0.7 carries a high-severity DoS advisory (GHSA-mh99-v99m-4gvg).",
+    "It reaches us only through dev tooling -- eslint, electron-builder, @electron/rebuild",
+    "-- so nothing that ships is affected. It is an override rather than a bump because",
+    "there is nothing to bump to: the advisory range spans every major. npm's own",
+    "`audit fix --force` answer is to downgrade eslint-plugin-react to 7.22.0 and",
+    "electron-builder to 22.14.13, four majors back, to settle a DoS in a build tool.",
+    "",
+    "The trap: brace-expansion 5.x CHANGED ITS EXPORT SHAPE. 1.x/2.x were",
+    "`module.exports = expand`; 5.x is `module.exports = { expand, ... }`. minimatch 3.x",
+    "does `var expand = require('brace-expansion')` and calls it, so under a bare",
+    "brace-expansion override it dies with `TypeError: expand is not a function` --",
+    "but ONLY for a pattern containing braces, because minimatch 3.x short-circuits",
+    "braceExpand for patterns without them. Our eslint config globs",
+    "`**/*.{js,jsx,mjs,cjs}`, so we hit it immediately; an app whose config happens to",
+    "use no braces passes and ships the landmine instead.",
+    "",
+    "Hence the second override. eslint 9 pins @eslint/config-array 0.21.x, which bundles",
+    "minimatch 3.1.5; 0.23.x moved to minimatch ^10, which imports the NAMED export and",
+    "is compatible with brace-expansion 5.x. Overriding it fixes the root cause without",
+    "an eslint 10 major bump. Verified that eslint still genuinely lints (166 files, and",
+    "it still reports a seeded error) rather than silently matching nothing.",
+    "",
+    "Drop both once eslint 10 lands here -- it depends on minimatch ^10 directly."
+  ],
+  "overrides": {
+    "brace-expansion": "^5.0.9",
+    "@eslint/config-array": "^0.23.5"
+  },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.1.0",
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
