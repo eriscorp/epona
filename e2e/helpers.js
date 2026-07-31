@@ -30,7 +30,14 @@ export async function launchEpona({ seedSettings, localAppData: reuseDir } = {})
   // main process throws at app.setPath. We want a real Electron app here.
   const env = { ...process.env, LOCALAPPDATA: localAppData, NODE_ENV: 'test' }
   delete env.ELECTRON_RUN_AS_NODE
-  const electronApp = await electron.launch({ args: [mainEntry], cwd: repoRoot, env })
+  // Launch the PROJECT DIRECTORY, not out/main/index.js directly. Electron given
+  // a file argument treats that file as the whole app and never reads our
+  // package.json — so app.getVersion() returns Electron's own version and
+  // app.getAppPath() returns out/main. Both then differ from a packaged build,
+  // which is the one thing these specs exist to model. Pointing at '.' makes
+  // Electron resolve package.json -> main -> out/main/index.js, exactly as the
+  // packaged app and `electron-vite preview` do.
+  const electronApp = await electron.launch({ args: ['.'], cwd: repoRoot, env })
   return { electronApp, localAppData }
 }
 

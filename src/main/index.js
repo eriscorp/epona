@@ -26,6 +26,7 @@ import {
 import { collectConfiguredRepoPaths, collectReferencedBranches } from './repoRoots.js'
 import { createSplashWindow } from './splash.js'
 import { formatLogLines } from '../shared/logFormat.js'
+import { isSafeExternalUrl } from '../shared/externalUrl.js'
 import {
   createInstanceManager,
   toSafeResult,
@@ -35,6 +36,7 @@ import {
 import { initSessionLog, captureError } from './sessionLog.js'
 import { installGlobalErrorHandlers } from './errorHandlers.js'
 import { registerDiagnosticsHandlers } from './diagnostics.js'
+import { registerChangelogHandlers } from './changelog.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
@@ -221,9 +223,20 @@ function createWindow() {
     if (!splashWindow) mainWindow.show()
   })
 
+  // Renderer link handling. `window.open` / target=_blank never opens an Electron
+  // window; it is handed to the OS browser instead — but only for http(s)/mailto.
+  // Without the scheme check, a `file:` or custom-scheme URL in renderer content
+  // would be executed by the OS on the user's behalf.
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (isSafeExternalUrl(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
+  })
+
+  // The main window renders Epona's own bundle and nothing else. A stray in-page
+  // navigation (a plain <a href> that escaped the handler above) would replace the
+  // app with remote content inside a window that has a preload bridge attached.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL()) event.preventDefault()
   })
 
   return mainWindow
@@ -350,9 +363,11 @@ app.whenReady().then(() => {
   ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
   // App / diagnostics (About card). Reveal opens the app-owned settings folder;
-  // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs.
+  // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs;
+  // registerChangelogHandlers backs the What's New dialog.
   ipcMain.handle('app:revealSettings', () => shell.openPath(dataDir))
   registerDiagnosticsHandlers(ipcMain, () => app.getVersion())
+  registerChangelogHandlers(ipcMain)
 
   // File dialogs. Each accepts an optional defaultPath so callers can pre-fill
   // the picker with the current setting value — without it Electron's dialog

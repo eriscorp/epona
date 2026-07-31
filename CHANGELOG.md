@@ -18,6 +18,28 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Added
+
+- **A "What's New" button in Settings → About.** It shows the release notes for
+  the version you are running, with the full history below it — no need to go to
+  GitHub to find out what changed. The notes ship inside the app, so it works
+  offline.
+
+### Changed
+
+- **"Reveal logs folder" moved out of Settings → About.** It is still on the
+  Report an Issue dialog, which is where it is actually useful; the About card
+  now offers What's New in its place.
+- **Epona installs smaller.** The packaged app was still carrying about 12 MB of
+  files nothing at runtime reads — test-coverage reports and the animated
+  screenshots from the README among them.
+
+### Security
+
+- **Links now open only if they are web links.** Anything Epona hands to your
+  browser is checked to be `http`, `https` or `mailto` first, and the main window
+  can no longer be navigated away from the app.
+
 ## [2.7.0] - 2026-07-29
 
 ### Security

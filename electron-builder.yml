@@ -2,28 +2,48 @@ appId: co.eris.epona
 productName: Epona
 directories:
   buildResources: build
+# ALLOWLIST, not a denylist. electron-builder packages the whole project
+# directory by default and `files` subtracts from it, so the scaffold's negation
+# list leaks every time a new top-level directory appears — and it did. The
+# previous list also used the single-star form (`!coverage/*`), which drops only
+# a directory's immediate children: coverage/lcov-report/** (7.4 MB), docs/images/**
+# (5.2 MB of demo GIFs) and .github/workflows/** all still shipped inside app.asar.
+# An allowlist cannot leak that way. Name what runs; everything else is absent by
+# construction.
+#
+# resources/** must survive: it is asarUnpack'd and holds splash.html plus the
+# runtime-sized logo assets. The 1024px icon master lives in build/, NOT
+# resources/, and the icon: keys below point there — build/ is
+# directories.buildResources, which electron-builder never packages, so the
+# icons are still generated from it and the payload is gone.
+#
+# packages/da-win32 is the workspace member behind the `da-win32` file: dep. Its
+# build output is loaded via createRequire at run time (and asarUnpack'd below),
+# so the compiled addon ships while its C++ sources and binding.gyp do not.
+#
+# Name the ONE .node file, not build/**. node-gyp leaves 9.0 MB in build/ and
+# index.js loads exactly `./build/Release/da_win32.node` from it — the rest is
+# linker and MSBuild intermediates (build/Release/obj/**.tlog alone is 3.5 MB,
+# plus .iobj/.ipdb/.lib/.exp). The old denylist shipped all of it because it only
+# excluded src/ and binding.gyp.
+#
+# CHANGELOG.md ships deliberately — Settings > About > What's New reads it from
+# app.getAppPath() at run time. It is the one doc that is a runtime asset.
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!packages/da-win32/src/**'
-  - '!packages/da-win32/binding.gyp'
-  # The scaffold excludes above miss every other dev tree in the repo root, so
-  # coverage/, e2e/, docs/ and CLAUDE.md used to ship inside app.asar — none are
-  # reachable at runtime and the docs are internal. resources/** must survive:
-  # it's asarUnpack'd and holds splash.html + the runtime-sized logo assets.
-  #
-  # The 1024px icon master lives in build/, NOT resources/, and the icon: keys
-  # below point there. resources/ is both asarUnpack'd AND vite's publicDir
-  # (electron.vite.config.mjs), so anything in it ships TWICE — the master was
-  # 1.7MB of payload nothing loads at runtime. build/ is directories.
-  # buildResources, which electron-builder never packages, so the icons are
-  # still generated from it and the payload is gone.
-  - '!{coverage,e2e,test-results,playwright-report,docs,scripts,.claude,.agents,.codex,.github}/*'
-  - '!{CLAUDE.md,playwright.config.mjs,vitest.config.js,eslint.config.mjs}'
-  - '!**/*.tsbuildinfo'
+  - out/**
+  - resources/**
+  - node_modules/**
+  # npm links the da-win32 workspace member into node_modules, so the addon's
+  # build dir arrives through the broad node_modules allow above as well. Only
+  # da_win32.node is loaded; subtract the MSBuild + linker leftovers beside it.
+  - '!node_modules/da-win32/build/Release/obj/**'
+  - '!node_modules/da-win32/build/Release/*.{exp,iobj,ipdb,lib}'
+  - '!node_modules/da-win32/build/*.{vcxproj,filters}'
+  - packages/da-win32/{index.js,package.json}
+  - packages/da-win32/build/Release/da_win32.node
+  - packages/da-win32/bin/**
+  - package.json
+  - CHANGELOG.md
 asarUnpack:
   - resources/**
   - node_modules/da-win32/build/**

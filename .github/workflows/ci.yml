@@ -53,6 +53,15 @@ jobs:
       - name: Test
         run: npm run test:coverage
 
+      # Both narrowings are load-bearing. `--omit=dev` because eslint and
+      # electron-builder never ship, so an advisory in one is something to
+      # schedule rather than something that should red an unrelated PR;
+      # `--audit-level=high` for the same reason at a finer grain. A gate that
+      # cries wolf gets deleted, and then there is no gate. The dev tree is
+      # audited by hand instead — the other half of the no-dependabot decision.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
   # The Playwright/Electron specs drive the BUILT app and measure real window
   # geometry, so they need the native addon and a full build. They are slower
   # than the unit tests and run as their own job to keep the lint/test signal

@@ -37,7 +37,9 @@ import StarBorderIcon from '@mui/icons-material/StarBorder'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
+import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined'
 import AboutDialog from './AboutDialog'
+import WhatsNewDialog from './WhatsNewDialog'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { DEPTH } from './titleChrome'
@@ -111,6 +113,7 @@ function SettingsSection({ panel, title, expanded, onToggle, action, detailsSx, 
 
 export default function SettingsPane({ settings, versions, onClose, onChange, onReportIssue }) {
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
   const [worldDirDialog, setWorldDirDialog] = useState(null) // null | { mode, worldDir }
   const [flushConfirm, setFlushConfirm] = useState(false)
@@ -603,10 +606,10 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
             <Button
               variant="text"
               size="small"
-              startIcon={<FolderOpenIcon />}
-              onClick={() => window.sparkAPI.revealLogs()}
+              startIcon={<NewReleasesOutlinedIcon />}
+              onClick={() => setWhatsNewOpen(true)}
             >
-              Reveal logs folder
+              What&apos;s New
             </Button>
           </Box>
         </SettingsSection>
@@ -652,6 +655,8 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
       )}
 
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+
+      <WhatsNewDialog open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
 
       <SnackbarHost snack={worktreeSnack} onClose={() => setWorktreeSnack(null)} />
     </Box>

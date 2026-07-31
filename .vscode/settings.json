@@ -1,0 +1,13 @@
+{
+  "files.eol": "\n",
+  "actionButtons": {
+    "commands": [
+      { "name": "> test", "command": "npm run test" },
+      { "name": "> test:coverage", "command": "npm run test:coverage" },
+      { "name": "> lint:check", "command": "npm run lint:check" },
+      { "name": "> dev", "command": "npm run dev" },
+      { "name": "> build:portable", "command": "npm run build:portable" }
+    ],
+    "loadNpmCommands": false
+  }
+}
