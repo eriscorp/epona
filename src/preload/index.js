@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   buildDiagnostics: () => ipcRenderer.invoke('diagnostics:build'),
   openIssue: (payload) => ipcRenderer.invoke('diagnostics:openIssue', payload),
   copyReport: (payload) => ipcRenderer.invoke('diagnostics:copyReport', payload),
+  // What's New — the parsed sections of the CHANGELOG.md packaged with this build.
+  readChangelog: () => ipcRenderer.invoke('changelog:read'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: (defaultPath) => ipcRenderer.invoke('dialog:openExe', defaultPath),
   pickFile: (title, filters, defaultPath) =>
