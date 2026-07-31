@@ -45,6 +45,11 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   in it cannot reach your files directly — it can only ask the trusted part of
   Epona, which checks every request.
 
+- **Those requests are now checked for where they came from.** Everything the
+  interface asks Epona to do — read your settings, launch a client, run a git
+  command — is accepted only from Epona's own window showing Epona's own page.
+  Anything else asking is refused.
+
 - **The shipped Epona binary can no longer be used to run arbitrary code.**
   Electron applications ship with developer escape hatches switched on, one of
   which lets anyone who can set an environment variable turn the signed
