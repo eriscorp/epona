@@ -56,8 +56,12 @@ divergence from the skeleton, not an oversight. The full gate is
 - **CI pins `windows-2022`, not `windows-latest`.** node-gyp 11.5.0 cannot parse VS 18, which
   windows-latest now carries, and the `da-win32` rebuild dies on it.
 - **Renderer libraries belong in `devDependencies`.** Vite bundles them; anything in `dependencies`
-  is also copied into `app.asar` as unread source. Only `@electron-toolkit/preload`, `da-win32` and
-  `zod` are genuine runtime deps.
+  is also copied into `app.asar` as unread source. Only `da-win32` and `zod` are genuine runtime
+  deps.
+- **The preload may import `electron` and nothing else.** The main window runs `sandbox: true`, and
+  a sandboxed preload's loader resolves only `electron` plus a few Node built-ins. Adding a package
+  import there builds and links fine, then throws in the packaged app and takes the whole bridge
+  with it. Guarded by `e2e/preload-sandbox.spec.js`.
 - **The themes are not a factory.** Six hand-written theme objects in `src/renderer/src/themes/`,
   `danaan` especially. Do not try to collapse them into a generator.
 

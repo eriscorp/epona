@@ -206,7 +206,11 @@ function createWindow() {
     icon: join(__dirname, '../../resources/epona-icon-256.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // The scaffold ships `sandbox: false`, which is only needed when the preload
+      // requires something beyond `electron`. Ours does not (see src/preload/index.js),
+      // so the renderer runs in the OS sandbox like the splash already did. Turning
+      // this back off means auditing what the preload pulls in first.
+      sandbox: true
     }
   })
 

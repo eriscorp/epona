@@ -27,6 +27,7 @@ native addon. The renderer asks it to.
 | Session logs          | Scrubbed once at capture, in main, so every source — main errors, renderer errors, React boundary catches — lands already safe to hand to a bug report. Five sessions are kept.                                                              |
 | Client memory patches | Every original byte is verified before anything is written, the patch is verified after writing, and any failure rewinds in reverse order. A partially patched client is never resumed — it is terminated (`src/main/patches/installer.js`). |
 | Git operations        | Arguments are passed as an argv array to `spawn` with no shell (`src/main/gitExec.js`), so a branch or path containing shell metacharacters is data rather than a command.                                                                   |
+| Renderer process      | Runs in the OS sandbox (`sandbox: true`), with context isolation on and Node integration off. The preload requires nothing beyond `electron`, which is what makes that possible; `e2e/preload-sandbox.spec.js` asserts it stays that way.    |
 
 ### What is deliberately not guarded, and why
 
@@ -51,12 +52,7 @@ Recorded so they read as pending work rather than as decisions:
   at its own top frame. Epona loads no remote content and opens no child windows, so there is no
   second frame to send one today — but the check is cheap insurance the siblings have and this does
   not.
-- **`sandbox: false` on the main window**, inherited from the scaffold. Not because the preload
-  needs Node — it imports only `electron` and `@electron-toolkit/preload`. The blocker is that
-  `externalizeDepsPlugin()` leaves `require("@electron-toolkit/preload")` in the built preload, and
-  a sandboxed preload may require only `electron`. Nothing consumes the `window.electron` global
-  that package exposes, so removing it makes `sandbox: true` reachable. The splash window already
-  runs sandboxed.
+  _(The scaffold's `sandbox: false` was the third gap here; it is closed — see the table above.)_
 
 ## Reporting a vulnerability
 
