@@ -40,6 +40,17 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   browser is checked to be `http`, `https` or `mailto` first, and the main window
   can no longer be navigated away from the app.
 
+- **Epona's interface now runs in the operating system's sandbox.** The part of
+  the app that draws the window is confined the way a browser tab is, so a flaw
+  in it cannot reach your files directly — it can only ask the trusted part of
+  Epona, which checks every request.
+
+- **The shipped Epona binary can no longer be used to run arbitrary code.**
+  Electron applications ship with developer escape hatches switched on, one of
+  which lets anyone who can set an environment variable turn the signed
+  `Epona.exe` into a general-purpose script interpreter. Those are now switched
+  off.
+
 ## [2.7.0] - 2026-07-29
 
 ### Security

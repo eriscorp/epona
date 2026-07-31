@@ -62,6 +62,9 @@ divergence from the skeleton, not an oversight. The full gate is
   a sandboxed preload's loader resolves only `electron` plus a few Node built-ins. Adding a package
   import there builds and links fine, then throws in the packaged app and takes the whole bridge
   with it. Guarded by `e2e/preload-sandbox.spec.js`.
+- **Register IPC handlers on `ipc`, never the raw `ipcMain`.** `guardIpc` wraps it once in
+  `whenReady` so the sender check applies by construction; a handler added on the raw import
+  silently opts out of it. See `src/main/windowSecurity.js`.
 - **The themes are not a factory.** Six hand-written theme objects in `src/renderer/src/themes/`,
   `danaan` especially. Do not try to collapse them into a generator.
 
