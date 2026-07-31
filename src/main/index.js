@@ -26,7 +26,12 @@ import {
 import { collectConfiguredRepoPaths, collectReferencedBranches } from './repoRoots.js'
 import { createSplashWindow } from './splash.js'
 import { formatLogLines } from '../shared/logFormat.js'
-import { isSafeExternalUrl } from '../shared/externalUrl.js'
+import {
+  initWindowSecurity,
+  registerTrustedWindow,
+  hardenWindow,
+  guardIpc
+} from './windowSecurity.js'
 import {
   createInstanceManager,
   toSafeResult,
@@ -214,6 +219,11 @@ function createWindow() {
     }
   })
 
+  // Trusted before it loads: registerTrustedWindow is what lets this window's IPC
+  // through guardIpc, and the guard fails closed, so registering after the load
+  // would reject whatever the renderer sends during hydration.
+  registerTrustedWindow(mainWindow)
+
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -227,21 +237,10 @@ function createWindow() {
     if (!splashWindow) mainWindow.show()
   })
 
-  // Renderer link handling. `window.open` / target=_blank never opens an Electron
-  // window; it is handed to the OS browser instead — but only for http(s)/mailto.
-  // Without the scheme check, a `file:` or custom-scheme URL in renderer content
-  // would be executed by the OS on the user's behalf.
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    if (isSafeExternalUrl(details.url)) void shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // The main window renders Epona's own bundle and nothing else. A stray in-page
-  // navigation (a plain <a href> that escaped the handler above) would replace the
-  // app with remote content inside a window that has a preload bridge attached.
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (url !== mainWindow.webContents.getURL()) event.preventDefault()
-  })
+  // Child windows denied, navigation away from our own bundle denied, and any
+  // http(s)/mailto URL from either handed to the OS browser instead. The policy
+  // lives in windowSecurity.js so it is stated once rather than per window.
+  hardenWindow(mainWindow, { allowExternal: true, openExternal: (url) => shell.openExternal(url) })
 
   return mainWindow
 }
@@ -251,6 +250,20 @@ app.whenReady().then(() => {
   // creating windows or the settings manager here would race the first instance
   // on the same userData dir, which is exactly what the lock prevents.
   if (!gotSingleInstanceLock) return
+
+  // Record the renderer locations we trust, BEFORE any window loads. The IPC
+  // guard fails closed against this list, so an empty list rejects everything —
+  // which is the safe direction, but it means this call is load-bearing.
+  initWindowSecurity(
+    app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'],
+    join(__dirname, '../renderer/index.html')
+  )
+
+  // Every handler below registers through `ipc`, never the raw `ipcMain`, so the
+  // sender check applies by construction rather than by each handler remembering
+  // to ask for it. A new handler added on the raw import silently opts out — that
+  // is the one way to get this wrong, so keep the import unused past this point.
+  const ipc = guardIpc(ipcMain)
 
   // userData is already pinned to Local at module load (see dataDir above).
   removeStrayRoamingData()
@@ -345,7 +358,7 @@ app.whenReady().then(() => {
   // on the renderer's 'app:ready' signal, with a safety timeout so a renderer
   // that throws before signalling can't leave the app permanently invisible.
   splashWindow = createSplashWindow()
-  ipcMain.on('app:ready', revealMainWindow)
+  ipc.on('app:ready', revealMainWindow)
   setTimeout(revealMainWindow, 15000)
 
   createAndWireMainWindow()
@@ -355,23 +368,23 @@ app.whenReady().then(() => {
   void sweepAllOrphans('startup')
 
   // Settings
-  ipcMain.handle('settings:load', () => settingsManager.load())
-  ipcMain.handle('settings:save', (_, settings) => {
+  ipc.handle('settings:load', () => settingsManager.load())
+  ipc.handle('settings:save', (_, settings) => {
     const parsed = settingsSchema.parse(settings)
     return settingsManager.save(parsed)
   })
 
   // Client versions
-  ipcMain.handle('versions:list', () => listVersions())
-  ipcMain.handle('app:getVersion', () => app.getVersion())
-  ipcMain.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
+  ipc.handle('versions:list', () => listVersions())
+  ipc.handle('app:getVersion', () => app.getVersion())
+  ipc.handle('client:detectVersion', async (_, exePath) => detectVersion(exePath))
 
   // App / diagnostics (About card). Reveal opens the app-owned settings folder;
   // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs;
   // registerChangelogHandlers backs the What's New dialog.
-  ipcMain.handle('app:revealSettings', () => shell.openPath(dataDir))
-  registerDiagnosticsHandlers(ipcMain, () => app.getVersion())
-  registerChangelogHandlers(ipcMain)
+  ipc.handle('app:revealSettings', () => shell.openPath(dataDir))
+  registerDiagnosticsHandlers(ipc, () => app.getVersion())
+  registerChangelogHandlers(ipc)
 
   // File dialogs. Each accepts an optional defaultPath so callers can pre-fill
   // the picker with the current setting value — without it Electron's dialog
@@ -382,7 +395,7 @@ app.whenReady().then(() => {
     return typeof p === 'string' && p.length > 0 ? p : undefined
   }
 
-  ipcMain.handle('dialog:openFile', async (_, title, filters, defaultPath) => {
+  ipc.handle('dialog:openFile', async (_, title, filters, defaultPath) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: title || 'Select File',
       filters: filters || [{ name: 'All files', extensions: ['*'] }],
@@ -391,7 +404,7 @@ app.whenReady().then(() => {
     })
     return result.canceled ? null : result.filePaths[0]
   })
-  ipcMain.handle('dialog:openDirectory', async (_, title, defaultPath, message) => {
+  ipc.handle('dialog:openDirectory', async (_, title, defaultPath, message) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: title || 'Select Directory',
       // macOS renders `message` prominently inside the dialog — use it to spell
@@ -402,7 +415,7 @@ app.whenReady().then(() => {
     })
     return result.canceled ? null : result.filePaths[0]
   })
-  ipcMain.handle('dialog:openExe', async (_, defaultPath) => {
+  ipc.handle('dialog:openExe', async (_, defaultPath) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Dark Ages Executable',
       filters: [{ name: 'Executables', extensions: ['exe'] }],
@@ -413,8 +426,8 @@ app.whenReady().then(() => {
   })
 
   // Hybrasyl client validation
-  ipcMain.handle('hybrasyl:detectPath', async (_, path) => resolveHybrasylPath(path))
-  ipcMain.handle('hybrasyl:checkRuntime', async () => checkDotnetRuntime())
+  ipc.handle('hybrasyl:detectPath', async (_, path) => resolveHybrasylPath(path))
+  ipc.handle('hybrasyl:checkRuntime', async () => checkDotnetRuntime())
 
   // Launch + test
   // Only the singleton (repo / dotnet run) child is tracked — exe launches are
@@ -500,7 +513,7 @@ app.whenReady().then(() => {
   // Manual "save log" button in LogPane — renderer formats its own buffer and
   // ships the text here. We just open a save dialog and write. Returning the
   // chosen path lets the renderer surface a "saved to …" toast.
-  ipcMain.handle('log:save', async (_, payload) => {
+  ipc.handle('log:save', async (_, payload) => {
     const content = typeof payload?.content === 'string' ? payload.content : ''
     const defaultFileName =
       typeof payload?.defaultFileName === 'string' && payload.defaultFileName.length > 0
@@ -526,7 +539,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('client:launch', async (_, targetKind, _renderSettings, profile) => {
+  ipc.handle('client:launch', async (_, targetKind, _renderSettings, profile) => {
     // Spawn-path hardening: disk wins. The renderer's settings payload is
     // ignored so a compromised renderer can't redirect the spawn target —
     // we only execute paths the user persisted via dialog + save.
@@ -573,7 +586,7 @@ app.whenReady().then(() => {
     }
     return { success: false, error: `Unknown targetKind: ${targetKind}` }
   })
-  ipcMain.handle('client:testConnection', async (_, hostname, port, version) =>
+  ipc.handle('client:testConnection', async (_, hostname, port, version) =>
     testConnection(hostname, port, version)
   )
 
@@ -618,15 +631,15 @@ app.whenReady().then(() => {
     })
   }
 
-  ipcMain.handle('instance:listServerConfigs', async (_, dataDir) => listServerConfigs(dataDir))
-  ipcMain.handle('instance:readDataStore', async (_, dataDir, configFileName) =>
+  ipc.handle('instance:listServerConfigs', async (_, dataDir) => listServerConfigs(dataDir))
+  ipc.handle('instance:readDataStore', async (_, dataDir, configFileName) =>
     readDataStore(dataDir, configFileName)
   )
-  ipcMain.handle('instance:isHybrasylDataDir', async (_, dataDir) => isHybrasylDataDir(dataDir))
+  ipc.handle('instance:isHybrasylDataDir', async (_, dataDir) => isHybrasylDataDir(dataDir))
 
   // Open a path in the OS file explorer. Used by the LogDir quick-open button.
   // shell.openPath returns '' on success, error string on failure.
-  ipcMain.handle('shell:openPath', async (_, path) => {
+  ipc.handle('shell:openPath', async (_, path) => {
     if (typeof path !== 'string' || path.length === 0) {
       return { ok: false, error: 'no path' }
     }
@@ -637,22 +650,22 @@ app.whenReady().then(() => {
   // Git ops for the repo-mode picker — list branches in a chosen repo, and
   // an inline-validation check so the path picker can flag "not a git repo"
   // before the user tries to launch.
-  ipcMain.handle('git:listBranches', async (_, repoPath) => {
+  ipc.handle('git:listBranches', async (_, repoPath) => {
     try {
       return { ok: true, branches: await listBranches(repoPath) }
     } catch (err) {
       return { ok: false, error: err.message, branches: [] }
     }
   })
-  ipcMain.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
-  ipcMain.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
+  ipc.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
+  ipc.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
 
   // Force-clear managed worktrees for every configured repo — the Settings
   // "Flush Worktrees" escape hatch for the occasional "already exists" wedge.
   // Gathers repo paths from the hybrasyl client target and every server
   // instance, resolves each to its git top level (dedup), and flushes it. The
   // renderer confirms first (this discards uncommitted work in those worktrees).
-  ipcMain.handle('worktrees:flush', async () => {
+  ipc.handle('worktrees:flush', async () => {
     const settings = await settingsManager.load()
     const roots = await configuredRepoRoots(settings)
     const errors = []
@@ -668,7 +681,7 @@ app.whenReady().then(() => {
   // Every Epona-managed worktree across the configured repos, with the facts the
   // UI needs to decide: branch, path, dirty, and whether a launch still holds it.
   // Feeds both the Settings → Maintenance list and the branch-switch prompt.
-  ipcMain.handle('worktrees:listManaged', async () => {
+  ipc.handle('worktrees:listManaged', async () => {
     const settings = await settingsManager.load()
     const out = []
     for (const root of await configuredRepoRoots(settings)) {
@@ -683,7 +696,7 @@ app.whenReady().then(() => {
 
   // Remove one managed worktree. Refuses an in-use or dirty worktree unless the
   // renderer passes force after confirming with the user.
-  ipcMain.handle('worktrees:remove', async (_, repoPath, branch, force) => {
+  ipc.handle('worktrees:remove', async (_, repoPath, branch, force) => {
     if (typeof repoPath !== 'string' || typeof branch !== 'string' || !branch) {
       return { ok: false, reason: 'not-found' }
     }
@@ -724,7 +737,7 @@ app.whenReady().then(() => {
   })
   statusMonitor.start()
 
-  ipcMain.handle('instance:getStatus', async () => statusMonitor.refresh())
+  ipc.handle('instance:getStatus', async () => statusMonitor.refresh())
 
   // Stop for an instance Epona doesn't track — the status monitor adopted it
   // from its listening lobby port. We have no child and no wrapper pid, so ask
@@ -756,7 +769,7 @@ app.whenReady().then(() => {
     return { success: true, wasRunning: true, adopted: true, pid }
   }
 
-  ipcMain.handle('instance:start', async (_, supplied) => {
+  ipc.handle('instance:start', async (_, supplied) => {
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
     const instance = resolved.instance
@@ -782,7 +795,7 @@ app.whenReady().then(() => {
     return spawnAndTrackInstance(instance)
   })
 
-  ipcMain.handle('instance:stop', async (_, instanceId) => {
+  ipc.handle('instance:stop', async (_, instanceId) => {
     const tracked = instanceChildren.get(instanceId)
     if (!tracked) return stopAdoptedInstance(instanceId)
 
@@ -829,7 +842,7 @@ app.whenReady().then(() => {
   // before relaunching so the new server doesn't race the old one on the
   // port bind. The renderer keeps the running flag set across the gap so
   // the UI doesn't flicker mid-restart.
-  ipcMain.handle('instance:reset', async (_, supplied) => {
+  ipc.handle('instance:reset', async (_, supplied) => {
     // Same disk-wins resolution as instance:start.
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
@@ -878,9 +891,9 @@ app.whenReady().then(() => {
   }
 
   // Window controls
-  ipcMain.on('window:minimize', () => mainWindow.minimize())
-  ipcMain.on('window:close', () => mainWindow.close())
-  ipcMain.on('window:resize', (_, { width, height }) => {
+  ipc.on('window:minimize', () => mainWindow.minimize())
+  ipc.on('window:close', () => mainWindow.close())
+  ipc.on('window:resize', (_, { width, height }) => {
     if (typeof width !== 'number' || typeof height !== 'number') return
     // Resize by relocking min == max instead of toggling setResizable. The old
     // toggle added/removed WS_THICKFRAME around setContentSize on Windows, which

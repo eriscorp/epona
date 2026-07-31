@@ -16,18 +16,19 @@ launches executables, writes to disk, and writes into the memory of another proc
 The main process is the only code that touches the filesystem, spawns processes, or loads the
 native addon. The renderer asks it to.
 
-| Surface               | What guards it                                                                                                                                                                                                                               |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Settings crossing IPC | Zod-validated against `src/main/schemas/settings.js` on save, and validated again on load; a settings file that fails validation is refused rather than partially applied.                                                                   |
-| Settings on disk      | Written atomically (temp file → rename, with a retry for the Windows antivirus EPERM race) and kept with a backup, so an interrupted write cannot leave a truncated config.                                                                  |
-| Window navigation     | The main window may not navigate away from the bundle it loaded. A `will-navigate` to any other URL is cancelled.                                                                                                                            |
-| Opening a link        | `http`, `https` and `mailto` only (`src/shared/externalUrl.js`). A `file:`, `smb:` or custom-scheme URL is refused rather than handed to the operating system.                                                                               |
-| Report Issue payloads | Zod-validated at the IPC boundary; the diagnostics block is scrubbed of usernames, home directories, deep file paths, e-mail addresses and IPv4 addresses before it is ever shown.                                                           |
-| Bug reports           | Assembled locally, scrubbed, and shown to you **editable** for review. Nothing is sent anywhere until you press the button, and then only to the GitHub issue page it opens.                                                                 |
-| Session logs          | Scrubbed once at capture, in main, so every source — main errors, renderer errors, React boundary catches — lands already safe to hand to a bug report. Five sessions are kept.                                                              |
-| Client memory patches | Every original byte is verified before anything is written, the patch is verified after writing, and any failure rewinds in reverse order. A partially patched client is never resumed — it is terminated (`src/main/patches/installer.js`). |
-| Git operations        | Arguments are passed as an argv array to `spawn` with no shell (`src/main/gitExec.js`), so a branch or path containing shell metacharacters is data rather than a command.                                                                   |
-| Renderer process      | Runs in the OS sandbox (`sandbox: true`), with context isolation on and Node integration off. The preload requires nothing beyond `electron`, which is what makes that possible; `e2e/preload-sandbox.spec.js` asserts it stays that way.    |
+| Surface               | What guards it                                                                                                                                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Settings crossing IPC | Zod-validated against `src/main/schemas/settings.js` on save, and validated again on load; a settings file that fails validation is refused rather than partially applied.                                                                                                               |
+| Settings on disk      | Written atomically (temp file → rename, with a retry for the Windows antivirus EPERM race) and kept with a backup, so an interrupted write cannot leave a truncated config.                                                                                                              |
+| Window navigation     | The main window may not navigate away from the bundle it loaded. A `will-navigate` to any other URL is cancelled.                                                                                                                                                                        |
+| Opening a link        | `http`, `https` and `mailto` only (`src/shared/externalUrl.js`). A `file:`, `smb:` or custom-scheme URL is refused rather than handed to the operating system.                                                                                                                           |
+| Report Issue payloads | Zod-validated at the IPC boundary; the diagnostics block is scrubbed of usernames, home directories, deep file paths, e-mail addresses and IPv4 addresses before it is ever shown.                                                                                                       |
+| Bug reports           | Assembled locally, scrubbed, and shown to you **editable** for review. Nothing is sent anywhere until you press the button, and then only to the GitHub issue page it opens.                                                                                                             |
+| Session logs          | Scrubbed once at capture, in main, so every source — main errors, renderer errors, React boundary catches — lands already safe to hand to a bug report. Five sessions are kept.                                                                                                          |
+| Client memory patches | Every original byte is verified before anything is written, the patch is verified after writing, and any failure rewinds in reverse order. A partially patched client is never resumed — it is terminated (`src/main/patches/installer.js`).                                             |
+| Git operations        | Arguments are passed as an argv array to `spawn` with no shell (`src/main/gitExec.js`), so a branch or path containing shell metacharacters is data rather than a command.                                                                                                               |
+| Renderer process      | Runs in the OS sandbox (`sandbox: true`), with context isolation on and Node integration off. The preload requires nothing beyond `electron`, which is what makes that possible; `e2e/preload-sandbox.spec.js` asserts it stays that way.                                                |
+| Renderer → main IPC   | Every handler registers through a guarded `ipcMain` (`src/main/windowSecurity.js`) that accepts a message only from the top frame of a window Epona itself created, at a location Epona itself loaded. Subframes, unregistered windows and a window that navigated away are all refused. |
 
 ### What is deliberately not guarded, and why
 
@@ -43,16 +44,13 @@ that point they can already run programs as you, so Epona is not the weak link �
 
 ## Known gaps
 
-Recorded so they read as pending work rather than as decisions:
+Recorded so they read as pending work rather than as decisions. The two this section used to list
+alongside the one below — the scaffold's `sandbox: false`, and the missing IPC sender check — are
+closed; see _Renderer process_ and _Renderer → main IPC_ in the table above.
 
 - **No Electron fuses.** Sibling apps set `electronFuses.runAsNode: false` and disable `--inspect`
   and `NODE_OPTIONS` in `electron-builder.yml`. Epona does not yet. Until it does, a packaged build
   inherits `ELECTRON_RUN_AS_NODE` from its environment.
-- **No IPC sender check.** Handlers do not verify that a message came from Epona's own main window
-  at its own top frame. Epona loads no remote content and opens no child windows, so there is no
-  second frame to send one today — but the check is cheap insurance the siblings have and this does
-  not.
-  _(The scaffold's `sandbox: false` was the third gap here; it is closed — see the table above.)_
 
 ## Reporting a vulnerability
 
