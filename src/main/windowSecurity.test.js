@@ -135,6 +135,54 @@ describe('isSenderAllowed', () => {
     registerTrustedWindow(win)
     expect(isSenderAllowed(fakeEvent(win, { url: `${PROD_URL}?panel=settings#top` }))).toBe(true)
   })
+
+  it('rejects a remote file:// host whose path mirrors our own', () => {
+    // A file: URL has the opaque origin "null", so an origin-based key carries NO
+    // host information and every file:// host compares equal. Without the host in
+    // the key, a page loaded from an attacker's share at a matching path is
+    // accepted as our own content — with our preload attached.
+    initWindowSecurity(undefined, PROD_HTML)
+
+    // Derive the adversary from the trusted URL's OWN pathname, so the two differ
+    // in host and nothing else. Spelling a path literal here instead would make
+    // the test pass for the wrong reason: on win32 `pathToFileURL('/opt/x')`
+    // resolves against the current drive and yields `/E:/opt/x`, which would
+    // never have matched regardless of the key.
+    const trusted = new URL(PROD_URL)
+    const remote = `file://attacker.example${trusted.pathname}`
+    expect(trusted.origin).toBe('null') // the reason this is a trap
+    expect(new URL(remote).origin).toBe('null') // ...and why the two compared equal
+    expect(new URL(remote).pathname).toBe(trusted.pathname) // differ only in host
+
+    const win = fakeWindow(1)
+    registerTrustedWindow(win)
+    expect(isSenderAllowed(fakeEvent(win, { url: remote }))).toBe(false)
+    // ...and the genuine local path still matches, so the fix did not overshoot.
+    expect(isSenderAllowed(fakeEvent(win, { url: PROD_URL }))).toBe(true)
+  })
+
+  it.runIf(process.platform === 'win32')(
+    'keys a UNC install path by its share host, which has no drive letter to save it',
+    () => {
+      // "Windows is spared because the path starts with a drive letter" is a
+      // property of the PATH, not the platform. Epona's nsis installer lets the
+      // user choose the directory, and a UNC one yields a real host and a
+      // pathname with no drive letter — so under an origin-based key it was as
+      // forgeable as the POSIX installs.
+      const uncHtml = '\\\\fileserver\\apps\\Epona\\resources\\app.asar\\out\\renderer\\index.html'
+      const uncUrl = pathToFileURL(uncHtml)
+      expect(uncUrl.host).toBe('fileserver')
+      expect(uncUrl.pathname.startsWith('/apps/')).toBe(true) // no drive letter
+
+      initWindowSecurity(undefined, uncHtml)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      expect(isSenderAllowed(fakeEvent(win, { url: uncUrl.href }))).toBe(true)
+      expect(
+        isSenderAllowed(fakeEvent(win, { url: `file://attacker.example${uncUrl.pathname}` }))
+      ).toBe(false)
+    }
+  )
 })
 
 describe('guardIpc', () => {
@@ -286,5 +334,22 @@ describe('hardenWindow', () => {
 
     expect(event.preventDefault).toHaveBeenCalled()
     expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('blocks navigation to a remote file:// host mirroring our own path', () => {
+    // The same opaque-origin trap as the sender check — this guard reads the same
+    // trusted set, so it was reachable the same way. Getting here means the page
+    // is treated as our own content and loads WITH our preload.
+    initWindowSecurity(undefined, PROD_HTML)
+    const win = fakeWindow(1)
+    const openExternal = vi.fn()
+    hardenWindow(win, { allowExternal: true, openExternal })
+
+    const remote = `file://attacker.example${new URL(PROD_URL).pathname}`
+    const event = { preventDefault: vi.fn() }
+    win.listeners.get('will-navigate')(event, remote)
+
+    expect(event.preventDefault).toHaveBeenCalled()
+    expect(openExternal).not.toHaveBeenCalled() // not a safe scheme either
   })
 })
