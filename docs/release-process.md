@@ -19,23 +19,33 @@ The flow at a glance:
 
 ## 1. Pre-release sanity (local)
 
-Before bumping anything, run the standard checks against `main`:
+Before bumping anything, run the full gate against `main`:
 
 ```bash
 git checkout main
 git pull
-npm run lint
-npm run test
+npm run lint:check
+npm test
+npm run build
 ```
 
-Both must be clean. Epona is plain JS — no `typecheck` step. Lint is
-expected to exit 0; if it regresses, fix before tagging rather than
-after.
+All three must be clean. Epona is plain JS — no `typecheck` step. Use
+`lint:check`, not `lint`: the latter is `eslint --fix` and rewrites
+the tree, which is not what a pre-release check should do. If lint
+regresses, fix it before tagging rather than after.
 
-Also smoke-test anything user-visible that landed since the last
-release. The dev server is the user's job to launch
-(`npm run dev` in their own shell), since Claude-launched Electron
-hasn't worked reliably.
+Then smoke-test what landed since the last release. `npm run e2e`
+builds and drives the real app under Playwright (Windows only) and
+covers most of it: the IPC sender guard in both directions, the
+preload sandbox, What's New, and the window geometry.
+
+Two limits are worth knowing. A change to the trusted-location set or
+the IPC guard can reject every IPC and the app still opens a window —
+the reveal backstop fires at 15 s — so "it launched" proves nothing;
+`e2e/ipc-guard.spec.js` asserts the allow direction, which does. And
+e2e runs against `out/`, so the Electron fuses and the packaged
+renderer path are only provable on a real artifact — launch one of
+the release's own binaries once the build lands (§5).
 
 ## 2. Bump the version
 
