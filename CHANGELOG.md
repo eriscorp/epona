@@ -18,53 +18,14 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-08-01
+
 ### Added
 
 - **A "What's New" button in Settings → About.** It shows the release notes for
   the version you are running, with the full history below it — no need to go to
   GitHub to find out what changed. The notes ship inside the app, so it works
   offline.
-
-### Changed
-
-- **"Reveal logs folder" moved out of Settings → About.** It is still on the
-  Report an Issue dialog, which is where it is actually useful; the About card
-  now offers What's New in its place.
-- **Epona installs smaller.** The packaged app was still carrying about 12 MB of
-  files nothing at runtime reads — test-coverage reports and the animated
-  screenshots from the README among them.
-
-### Security
-
-- **Links now open only if they are web links.** Anything Epona hands to your
-  browser is checked to be `http`, `https` or `mailto` first, and the main window
-  can no longer be navigated away from the app.
-
-- **Epona's interface now runs in the operating system's sandbox.** The part of
-  the app that draws the window is confined the way a browser tab is, so a flaw
-  in it cannot reach your files directly — it can only ask the trusted part of
-  Epona, which checks every request.
-
-- **Those requests are now checked for where they came from.** Everything the
-  interface asks Epona to do — read your settings, launch a client, run a git
-  command — is accepted only from Epona's own window showing Epona's own page.
-  Anything else asking is refused.
-
-- **The shipped Epona binary can no longer be used to run arbitrary code.**
-  Electron applications ship with developer escape hatches switched on, one of
-  which lets anyone who can set an environment variable turn the signed
-  `Epona.exe` into a general-purpose script interpreter. Those are now switched
-  off.
-
-## [2.7.0] - 2026-07-29
-
-### Security
-
-- **Epona now runs on Electron 41.10.3**, up from 41.2.0 — eight patch releases
-  of Chromium security fixes that the app was missing. No behavior changes.
-- **Build-toolchain dependencies updated** to clear nine advisories, including a
-  credential leak in `electron-builder`'s upload path and a path-traversal bug
-  in `postcss`. These affect only how Epona is built, not the app you run.
 
 ### Changed
 
@@ -77,14 +38,20 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 - **Smaller download and install.** Epona was packaging every user-interface
   library twice — once compiled into the app, and again as unused source
-  alongside it. Removing the duplicates cut the application payload from about
-  138 MB to 6 MB. The download itself shrinks by less, because most of it is the
-  browser engine Epona is built on.
+  alongside it — and shipping about 12 MB more that nothing at runtime reads,
+  including test-coverage reports and the animated screenshots from the README.
+  Removing all of it cut the application payload from about 138 MB to 6 MB. The
+  download itself shrinks by less, because most of it is the browser engine Epona
+  is built on.
 
 - **The portable build no longer starts in silence.** The portable `.exe`
   unpacks itself before Epona can draw anything, which took several seconds with
   no sign it had worked — easy to read as a failed launch and double-click
   again. It now shows the Epona splash almost immediately, while it unpacks.
+
+- **"Reveal logs folder" moved out of Settings → About.** It is still on the
+  Report an Issue dialog, which is where it is actually useful; the About card
+  now offers What's New in its place.
 
 ### Fixed
 
@@ -112,6 +79,36 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   Epona compared the path you gave against the path git reports, which are not
   the same string in those cases, so it could not adopt, list or remove the
   worktrees it had made.
+
+### Security
+
+- **Epona's interface now runs in the operating system's sandbox.** The part of
+  the app that draws the window is confined the way a browser tab is, so a flaw
+  in it cannot reach your files directly — it can only ask the trusted part of
+  Epona, which checks every request.
+
+- **Those requests are now checked for where they came from.** Everything the
+  interface asks Epona to do — read your settings, launch a client, run a git
+  command — is accepted only from Epona's own window showing Epona's own page.
+  Anything else asking is refused.
+
+- **The shipped Epona binary can no longer be used to run arbitrary code.**
+  Electron applications ship with developer escape hatches switched on, one of
+  which lets anyone who can set an environment variable turn the signed
+  `Epona.exe` into a general-purpose script interpreter. Those are now switched
+  off.
+
+- **Links now open only if they are web links.** Anything Epona hands to your
+  browser is checked to be `http`, `https` or `mailto` first, and the main window
+  can no longer be navigated away from the app.
+
+- **Epona now runs on Electron 41.10.3**, up from 41.2.0 — eight patch releases
+  of Chromium security fixes that the app was missing. No behavior changes.
+
+- **Build-toolchain dependencies updated** to clear ten advisories, including a
+  credential leak in `electron-builder`'s upload path, a path-traversal bug in
+  `postcss`, and a denial-of-service bug in `brace-expansion`. These affect only
+  how Epona is built, not the app you run.
 
 ## [2.6.0] - 2026-07-23
 
