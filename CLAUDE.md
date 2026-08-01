@@ -65,6 +65,11 @@ divergence from the skeleton, not an oversight. The full gate is
 - **Register IPC handlers on `ipc`, never the raw `ipcMain`.** `guardIpc` wraps it once in
   `whenReady` so the sender check applies by construction; a handler added on the raw import
   silently opts out of it. See `src/main/windowSecurity.js`.
+- **There are two icon masters, not one.** `build/icon.png` is the star, and electron-builder
+  derives the Windows and Linux icons from it. macOS uses `build/icon.icns` instead — a squircle
+  drawn for the Dock, vendored from the document repo's `docs/logos/macros/Epona.png` to
+  `build/epona-mac-icon.png` and packed by `scripts/make-mac-icns.mjs`. Regenerating runtime assets
+  from the star alone leaves macOS stale, and nothing warns you.
 - **The themes are not a factory.** Six hand-written theme objects in `src/renderer/src/themes/`,
   `danaan` especially. Do not try to collapse them into a generator.
 

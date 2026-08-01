@@ -18,6 +18,14 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-08-01
+
+### Changed
+
+- **Epona has a proper macOS icon.** The Dock and Finder showed the same square
+  logo Windows uses, which sits oddly among the rounded icons macOS draws beside
+  it. macOS now gets artwork drawn for it, sized to Apple's icon grid.
+
 ## [2.7.0] - 2026-08-01
 
 ### Added
