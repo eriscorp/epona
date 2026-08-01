@@ -125,7 +125,11 @@ nsis:
   createDesktopShortcut: always
 mac:
   category: public.app-category.games
-  icon: build/icon.png
+  # macOS gets its own artwork, not the star win/linux use: the Dock expects a
+  # squircle inset to Apple's icon grid, and a full-bleed square renders larger
+  # than every native app beside it. build/icon.icns is generated from
+  # build/epona-mac-icon.png by scripts/make-mac-icns.mjs and committed.
+  icon: build/icon.icns
   # da-win32 is a Windows-only native module; on macOS it compiles to an
   # empty stub that's never require()'d (the load is gated behind
   # process.platform === 'win32'). The stub is byte-identical across arches
