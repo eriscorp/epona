@@ -24,13 +24,40 @@ import { pathToFileURL } from 'url'
 import { isSafeExternalUrl } from '../shared/externalUrl.js'
 
 /**
- * Locations we consider "our own content", as `{ origin, pathname }`. Query and
- * hash are ignored so a future `?window=x` variant still matches.
+ * Locations we consider "our own content", each keyed as `protocol//host` plus
+ * pathname. Query and hash are ignored so a future `?window=x` variant still
+ * matches.
  *
  * Empty until `initWindowSecurity` runs, which fails CLOSED: before init nothing
  * is trusted, so a handler registered too early rejects rather than admits.
  */
 let trustedLocations = []
+
+/**
+ * The key form above. One place, so init and lookup cannot disagree.
+ *
+ * **`host` explicitly, NOT `origin`.** For a `file:` URL the WHATWG parser
+ * returns the opaque origin `"null"`, so an origin-based key carries no host
+ * information at all and every `file://` host compares equal. That makes
+ * `file://attacker.example/opt/Epona/.../index.html` indistinguishable from the
+ * local path we actually trust — a page served from a remote share at a
+ * mirroring path would satisfy both the `will-navigate` guard and the IPC sender
+ * check, with our preload attached.
+ *
+ * The usual reassurance is that Windows is spared because a trusted path starts
+ * with a drive letter and `C:` is not a legal UNC share name. That is a property
+ * of the PATH, not of the platform: `pathToFileURL` on a UNC path yields a real
+ * host and a pathname with no drive letter, and epona's nsis installer allows
+ * the user to choose the install directory. The mac dmg and the Linux deb and
+ * AppImage install under plain POSIX paths with no such accident at all, and
+ * epona ships all of them.
+ *
+ * For `http`/`https` this is identical to `origin` — the parser normalises the
+ * default port away — so nothing changes on the dev-server path.
+ */
+function locationKey(url) {
+  return `${url.protocol}//${url.host}${url.pathname}`
+}
 
 /**
  * webContents.id values for windows we constructed. An IPC from a webContents
@@ -48,8 +75,7 @@ export function initWindowSecurity(devUrl, prodIndexHtml) {
   const locations = []
   if (devUrl) {
     try {
-      const url = new URL(devUrl)
-      locations.push({ origin: url.origin, pathname: url.pathname })
+      locations.push(locationKey(new URL(devUrl)))
     } catch {
       // Malformed dev URL — leave it out and fail closed rather than guess.
     }
@@ -59,20 +85,19 @@ export function initWindowSecurity(devUrl, prodIndexHtml) {
   // and a trusted location that never matches is a LOCKOUT — every IPC rejected,
   // the app dead on arrival — not a safety margin. Epona's own install path is
   // under %LOCALAPPDATA%\Programs, which contains the user's name.
-  const prod = pathToFileURL(prodIndexHtml)
-  locations.push({ origin: prod.origin, pathname: prod.pathname })
+  locations.push(locationKey(pathToFileURL(prodIndexHtml)))
   trustedLocations = locations
 }
 
 /** True when `rawUrl` points at our own renderer content. */
 function isTrustedLocation(rawUrl) {
-  let url
+  let key
   try {
-    url = new URL(rawUrl)
+    key = locationKey(new URL(rawUrl))
   } catch {
     return false // about:blank, a bare string, anything malformed
   }
-  return trustedLocations.some((l) => l.origin === url.origin && l.pathname === url.pathname)
+  return trustedLocations.includes(key)
 }
 
 /**

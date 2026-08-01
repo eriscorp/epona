@@ -92,6 +92,12 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   command — is accepted only from Epona's own window showing Epona's own page.
   Anything else asking is refused.
 
+- **That check now tells apart two pages at the same path on different
+  machines.** It compared only the file path, so a copy of Epona's own page
+  served from a network share at a matching location was accepted as the real
+  one. It now compares the machine as well. This matters if you install Epona to
+  a network drive, and on macOS and Linux.
+
 - **The shipped Epona binary can no longer be used to run arbitrary code.**
   Electron applications ship with developer escape hatches switched on, one of
   which lets anyone who can set an environment variable turn the signed
