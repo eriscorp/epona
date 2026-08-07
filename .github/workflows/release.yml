@@ -42,10 +42,13 @@ jobs:
       - name: Build app
         run: npm run build
 
-      # CodeSignTool is a Java program. Without a JDK on PATH,
-      # CodeSignTool.bat fails at the point scripts/sign.js shells out to
-      # it, which is mid-package and after several minutes of work.
-      - name: Setup Java 17 (required by CodeSignTool)
+      # CodeSignTool is a Java program, but it ships its own JDK 11 and
+      # scripts/sign.js prefers that. This is the fallback for a future
+      # CodeSignTool layout that drops the bundled runtime — without any JDK
+      # the resolver's `java` fallback would fail mid-package, several minutes
+      # into the job. Cheap insurance; don't remove it just because the happy
+      # path no longer reads it.
+      - name: Setup Java 17 (fallback for CodeSignTool)
         uses: actions/setup-java@v5
         with:
           distribution: temurin
