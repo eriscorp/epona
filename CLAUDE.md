@@ -48,6 +48,22 @@ divergence from the skeleton, not an oversight. The full gate is
   static analysis will warn you.
 - **`electron-builder.yml` `files` is an allowlist.** Adding a new runtime asset means naming it
   there, or it silently will not ship. `CHANGELOG.md` is on that list because What's New reads it.
+- **`da-win32` reaches the payload by two paths, so subtractions need doing twice.** npm links the
+  workspace member into `node_modules`, and electron-builder resolves the junction, so
+  `packages/da-win32/**` and `node_modules/da-win32/**` copy the *same* source to two destinations.
+  Removing an unwanted file from one path leaves the other shipping it. Check with
+  `find dist/win-unpacked -name '*.node'` after packaging; two identical hashes is the current
+  expected state, three means a subtraction was missed.
+- **Windows signing happens during packaging, not after it.** `scripts/sign.js` is wired in as
+  `win.signtoolOptions.sign` and runs per binary; `scripts/after-pack-sign.js` covers
+  `da_win32.node`, which electron-builder's signable-file walk skips because it is `asarUnpack`'d.
+  Both self-skip without the `ES_*` secrets, so local builds are unsigned by design. Do not "simplify"
+  this back into a post-build step over `dist/*.exe` — that signs the wrapper and leaves the payload
+  bare, which is half of why 2.7.1 tripped Defender. See [docs/antivirus.md](docs/antivirus.md).
+- **`signingHashAlgorithms: [sha256]` is load-bearing.** Unset, electron-builder defaults to
+  `["sha1","sha256"]` and calls the sign hook twice per binary. That default assumes `signtool.exe`,
+  which takes the hash as an argument; CodeSignTool does not, so the second call re-signs identically
+  and burns another Cloud eSigner round trip and TOTP step for nothing.
 - **Resolve packaged files from `__dirname`, not `app.getAppPath()`.** Under the e2e harness the
   latter returns the entry file's directory. `join(__dirname, '../../<file>')` is correct in a
   packaged build, under `dev`, and under e2e alike.

@@ -109,9 +109,23 @@ which runs four jobs:
 
 - **`build-windows`** (pinned `windows-2022`, Node 24): `npm ci` →
   `npm run rebuild` (rebuilds the `da-win32` native addon against the
-  Electron ABI) → `npm run build` → `electron-builder --win
-  --publish never` → **code-signs** the portable exe via SSL.com
-  eSigner → uploads `dist/*-portable.exe`.
+  Electron ABI) → `npm run build` → installs Java 17 and downloads
+  SSL.com CodeSignTool → `electron-builder --win --publish never`,
+  which **code-signs every Windows binary as it packages** them →
+  verifies the signatures → uploads `dist/*-setup.exe` and
+  `dist/*-portable.exe`.
+
+  Signing is not a separate step on the finished artifacts any more.
+  `scripts/sign.js` is wired in as `win.signtoolOptions.sign` and runs
+  once per signable binary; `scripts/after-pack-sign.js` handles
+  `da_win32.node`, which electron-builder's signable-file walk skips
+  because it is `asarUnpack`'d. Signing only the two outer artifacts
+  left the whole extracted payload unsigned and contributed to the
+  Defender false positive documented in
+  [`antivirus.md`](antivirus.md). The **Verify signatures** step fails
+  the build if any binary comes out unsigned, so a half-signed release
+  cannot ship. Both scripts self-skip when the `ES_*` secrets are
+  absent, so forks still build.
 - **`build-linux`** (ubuntu-latest): builds and packages `deb` +
   `AppImage` (the `beforeBuild` hook is overridden with
   `scripts/noop-before-build.cjs` to skip the Windows-only addon
@@ -131,11 +145,22 @@ and macOS notarization are the slow steps).
 
 ## 6. After the build
 
-- Confirm all four artifacts are attached to the release page:
-  `epona-X.Y.Z-portable.exe`, `*.deb`, `*.AppImage`, `epona-X.Y.Z.dmg`.
+- Confirm all artifacts are attached to the release page:
+  `epona-X.Y.Z-setup.exe`, `epona-X.Y.Z-portable.exe`, `*.deb`,
+  `*.AppImage`, `epona-X.Y.Z.dmg`, and `SHA256SUMS.txt`.
 - Confirm the Discord post landed.
 - Smoke-test the artifact: download the portable exe, run on a clean
   profile to make sure the native addon loaded and the app launches.
+- Check the signature survived the round trip:
+  `Get-AuthenticodeSignature .\epona-X.Y.Z-portable.exe` → `Valid`,
+  signer `ERISCO LLC`.
+- **Submit both Windows artifacts to Microsoft** at
+  <https://www.microsoft.com/en-us/wdsi/filesubmission> as a *software
+  developer*, before announcing widely. Each release is a new file with
+  no reputation, and Defender's ML classifier flags Epona readily —
+  submitting ahead of the first user report is much cheaper than
+  handling it afterwards. Always do this when the signing certificate
+  or the NSIS stub changes. Background in [`antivirus.md`](antivirus.md).
 - If anything's wrong, delete the release, delete the tag
   (`git push --delete origin vX.Y.Z`), fix forward, re-tag, re-push.
   Tags are cheap; don't be precious about them.

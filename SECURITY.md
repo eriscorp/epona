@@ -81,9 +81,19 @@ The latest release only. Epona ships forward; there are no maintenance branches.
   contents. The `files` allowlist in `electron-builder.yml` exists to keep development trees out of
   the payload, not to hide anything.
 - **Windows artifacts are Authenticode-signed** through SSL.com eSigner when signing credentials are
-  configured; the step self-skips otherwise, so unsigned builds are possible and are what unofficial
-  builds will be. **macOS builds are Developer ID-signed, notarized and stapled** — both the `.app`
-  and the `.dmg`.
+  configured; the hook self-skips otherwise, so unsigned builds are possible and are what unofficial
+  builds will be. Signing happens **during** packaging rather than on the finished artifacts, so it
+  covers the whole payload — `Epona.exe`, `elevate.exe`, the uninstaller, the `da_win32.node` addon
+  and both outer artifacts. A release job step fails the build if any of them comes out unsigned.
+  **macOS builds are Developer ID-signed, notarized and stapled** — both the `.app` and the `.dmg`.
+- **Releases carry `SHA256SUMS.txt` and a signed build provenance attestation**
+  (`gh attestation verify <file> --repo eriscorp/epona`), so a downloaded artifact can be tied back
+  to the workflow run that produced it.
+- **Antivirus false positives are expected and are not a security finding.** Epona patches the
+  memory of the client it launches, and the portable exe self-extracts before running; both look
+  like malware to a heuristic scanner. Do not report a Defender detection as a vulnerability — see
+  [docs/antivirus.md](docs/antivirus.md) for how to verify an artifact and report the detection to
+  Microsoft.
 
 ## Out of scope
 
