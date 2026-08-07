@@ -18,6 +18,28 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Added
+
+- **Releases now carry `SHA256SUMS.txt` and a build provenance attestation.** If a
+  download is ever flagged, you can check that the bytes you have are the bytes we
+  published.
+- **A guide for when Windows flags the download**, at
+  [docs/antivirus.md](docs/antivirus.md). Defender occasionally reports Epona as
+  `Trojan:Win32/Wacatac.C!ml`. It is a false positive — Epona patches the memory of
+  the game client it launches, which is its job and also what a scanner looks for.
+  The guide covers how to verify a download, how to release it from quarantine, and
+  how to report the detection to Microsoft.
+- **The Windows installer is documented.** Releases have shipped both
+  `epona-x.y.z-setup.exe` and `epona-x.y.z-portable.exe` for some time, but only the
+  portable exe was mentioned anywhere. Both are supported; pick whichever you prefer.
+
+### Changed
+
+- **Windows downloads are now signed all the way through.** Previously only the
+  outer file carried a signature, so everything the portable exe unpacked was
+  unsigned. Every program file in the download is signed now, including the native
+  addon, and a release cannot be published if any of them is missed.
+
 ## [2.7.1] - 2026-08-01
 
 ### Changed

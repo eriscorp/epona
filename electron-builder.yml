@@ -1,5 +1,12 @@
 appId: co.eris.epona
 productName: Epona
+# Becomes LegalCopyright in the Windows VERSIONINFO resource. A PE with
+# blank version metadata scores worse with reputation-based scanners, and
+# this is the only VERSIONINFO field electron-builder lets us set
+# directly (FileDescription/ProductName come from productName, CompanyName
+# from package.json `author`). Name the same entity as the signing cert's
+# CN so the properties dialog and the "Verified publisher" string agree.
+copyright: Copyright © 2026 ERISCO LLC
 # Turn off escape hatches built into the Electron binary that Epona never uses.
 # The one that matters is runAsNode: without it,
 #   ELECTRON_RUN_AS_NODE=1 Epona.exe -e "<script>"
@@ -66,9 +73,17 @@ files:
   - '!node_modules/da-win32/build/Release/obj/**'
   - '!node_modules/da-win32/build/Release/*.{exp,iobj,ipdb,lib}'
   - '!node_modules/da-win32/build/*.{vcxproj,filters}'
+  # bin/ is @electron/rebuild's cache (gitignored). index.js loads
+  # ./build/Release/da_win32.node and nothing reads bin/, so this was a third
+  # byte-identical copy of the addon riding along. It has to be subtracted on
+  # BOTH paths — the junction means dropping it from packages/ alone leaves the
+  # node_modules/ copy shipping. Verified with `find dist -name '*.node'`:
+  # three identical hashes before, two after. Shipping needless copies of the
+  # one binary here whose imports look like process injection is the last thing
+  # this app needs; see docs/antivirus.md.
+  - '!node_modules/da-win32/bin/**'
   - packages/da-win32/{index.js,package.json}
   - packages/da-win32/build/Release/da_win32.node
-  - packages/da-win32/bin/**
   - package.json
   - CHANGELOG.md
 asarUnpack:
@@ -85,6 +100,39 @@ win:
     - target: portable
       arch:
         - x64
+  # Custom sign hook rather than electron-builder's default signtool.exe,
+  # which cannot reach a cert hosted in ssl.com Cloud eSigner. Ported from
+  # the sibling launcher, which has run it through several releases.
+  #
+  # This replaced two post-hoc `sslcom/esigner-codesign` steps in
+  # release.yml that signed ONLY the two finished artifacts. Everything
+  # the portable exe unpacked into %TEMP% was therefore unsigned inside a
+  # signed wrapper — an unsigned payload behind a self-extracting stub,
+  # which is part of why 2.7.1 tripped Trojan:Win32/Wacatac.C!ml. The hook
+  # is invoked once per signable binary instead: Epona.exe,
+  # resources/elevate.exe, the uninstaller, and both artifacts.
+  #
+  # It does NOT cover da_win32.node — electron-builder's signable-file
+  # walk ignores asarUnpack'd files. See the afterPack hook at the bottom.
+  #
+  # publisherName must match CN= on the eSigner cert; electron-builder
+  # warns when it drifts. "ERISCO LLC" is what Windows shows as the
+  # "Verified publisher" string in UAC and SmartScreen prompts.
+  signtoolOptions:
+    sign: scripts/sign.js
+    publisherName: ERISCO LLC
+    # MUST be set. Left unset, electron-builder defaults to
+    # ["sha1", "sha256"] (windowsSignToolManager.js signFile) and calls the
+    # sign hook TWICE per binary. That default assumes signtool.exe, which
+    # takes the hash as an argument; CodeSignTool does not — it signs with
+    # whatever the cert dictates, so the second call re-signs identically
+    # with -override=true and the first result is thrown away. The cost is
+    # real: every call is a Cloud eSigner round trip to an HSM plus a TOTP
+    # step, so the default doubles both signing time and eSigner quota to
+    # produce the same bytes. SHA-1 Authenticode is untrusted by modern
+    # Windows regardless.
+    signingHashAlgorithms:
+      - sha256
 portable:
   artifactName: ${name}-${version}-portable.${ext}
   # The portable exe is an NSIS self-extracting archive: every launch
@@ -157,3 +205,16 @@ appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
 beforeBuild: npx @electron/rebuild -f -w da-win32
+# Signs da_win32.node, which win.signtoolOptions.sign never sees because
+# electron-builder's signable-file walk skips asarUnpack'd files. That
+# addon is the one binary here whose import table reads like malware
+# (CREATE_SUSPENDED, WriteProcessMemory, VirtualProtectEx to executable,
+# a dynamically resolved NtQueryInformationProcess), so leaving it as the
+# only unsigned file in the payload is the worst possible arrangement.
+#
+# The comment on electronFuses above warns against doing fuse work in an
+# afterPack hook, because a per-arch hook corrupts the mac universal merge
+# with an "identical SHAs" failure. That warning still stands and this
+# hook respects it: it returns immediately unless the platform is win32,
+# so the per-arch mac packs stay byte-identical.
+afterPack: scripts/after-pack-sign.js

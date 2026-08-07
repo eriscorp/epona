@@ -9,12 +9,12 @@ on:
 permissions:
   contents: write
 
-# Every first-party action here runs on node24 natively. This flag now covers
-# one holdout: sslcom/esigner-codesign, whose newest release (v1.3.2) still
-# declares `using: node20`. Keep the flag until that action ships a node24
-# runtime — without it, GitHub removing node20 breaks the signing steps.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+# FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 used to live here for one holdout:
+# sslcom/esigner-codesign, which still declares `using: node20`. Signing moved
+# inside packaging (scripts/sign.js shells out to CodeSignTool directly), so
+# that action is gone and every action here runs on node24 natively —
+# actions/setup-java is pinned to v5 for the same reason. Don't reintroduce
+# the flag without a holdout that needs it.
 
 jobs:
   build-windows:
@@ -42,49 +42,84 @@ jobs:
       - name: Build app
         run: npm run build
 
+      # CodeSignTool is a Java program. Without a JDK on PATH,
+      # CodeSignTool.bat fails at the point scripts/sign.js shells out to
+      # it, which is mid-package and after several minutes of work.
+      - name: Setup Java 17 (required by CodeSignTool)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Signing now happens INSIDE packaging via scripts/sign.js
+      # (win.signtoolOptions.sign) and scripts/after-pack-sign.js, so the
+      # tool has to be on disk before electron-builder runs. This replaced
+      # the sslcom/esigner-codesign action, which could only sign finished
+      # artifacts and therefore left the whole extracted payload unsigned.
+      - name: Download CodeSignTool
+        shell: pwsh
+        run: |
+          # Pinned deliberately. The Cloud eSigner protocol has shifted in
+          # subtle ways between releases; test locally before bumping.
+          $version = '1.3.2'
+          $archive = "CodeSignTool-v$version-windows.zip"
+          $url = "https://github.com/SSLcom/CodeSignTool/releases/download/v$version/$archive"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+          Expand-Archive -Path $archive -DestinationPath codesigntool -Force
+          # The archive extracts to a versioned subdirectory; locate
+          # CodeSignTool.bat and pin CODE_SIGN_TOOL_PATH to whichever
+          # directory holds it, so a version bump that renames the parent
+          # folder doesn't break the build.
+          $bat = Get-ChildItem -Path codesigntool -Filter CodeSignTool.bat -Recurse | Select-Object -First 1
+          if (-not $bat) {
+            throw 'CodeSignTool.bat not found after extraction. Did the archive layout change?'
+          }
+          "CODE_SIGN_TOOL_PATH=$($bat.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "CODE_SIGN_TOOL_PATH=$($bat.Directory.FullName)"
+
+      # scripts/sign.js skips silently when the ES_* vars are absent, so a
+      # fork without secrets still produces a release — just an unsigned
+      # one. Confirm `[sign] signed …` lines appear in this step's log
+      # before trusting an artifact.
       - name: Package installer + portable exe
         run: npx electron-builder --win --publish never
+        env:
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
+          ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+          ES_CREDENTIAL_ID: ${{ secrets.ES_CREDENTIAL_ID }}
+          ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
 
-      # Resolve the artifact NAME as well as the version — hardcoding "epona-"
-      # silently breaks on a package rename.
-      - name: Resolve artifact name + version
-        id: version
-        shell: bash
+      # Fail loudly rather than shipping a half-signed release: every
+      # Windows PE in the payload must carry a valid Authenticode
+      # signature, including the da_win32.node addon. Skipped when no
+      # signing credentials are configured, since then nothing is signed
+      # by design.
+      - name: Verify signatures
+        if: env.ES_USERNAME != ''
+        shell: pwsh
+        env:
+          ES_USERNAME: ${{ secrets.ES_USERNAME }}
         run: |
-          {
-            echo "name=$(node -p "require('./package.json').name")"
-            echo "version=$(node -p "require('./package.json').version")"
-          } >> "$GITHUB_OUTPUT"
+          $targets = @(
+            'dist\win-unpacked\Epona.exe',
+            'dist\win-unpacked\resources\elevate.exe'
+          )
+          $targets += (Get-ChildItem -Path 'dist\win-unpacked\resources\app.asar.unpacked' `
+            -Filter *.node -Recurse).FullName
+          $targets += (Get-ChildItem -Path 'dist' -Filter *.exe).FullName
 
-      # `if:` can't reference `secrets` directly, so read it through `env:`.
-      # With no signing secrets configured the release still ships, unsigned.
-      - name: Sign installer (SSL.com eSigner)
-        if: env.ES_USERNAME != ''
-        env:
-          ES_USERNAME: ${{ secrets.ES_USERNAME }}
-        uses: sslcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
-        with:
-          command: sign
-          username: ${{ secrets.ES_USERNAME }}
-          password: ${{ secrets.ES_PASSWORD }}
-          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
-          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
-          file_path: ${{ github.workspace }}/dist/${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}-setup.exe
-          override: true
-
-      - name: Sign portable exe (SSL.com eSigner)
-        if: env.ES_USERNAME != ''
-        env:
-          ES_USERNAME: ${{ secrets.ES_USERNAME }}
-        uses: sslcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
-        with:
-          command: sign
-          username: ${{ secrets.ES_USERNAME }}
-          password: ${{ secrets.ES_PASSWORD }}
-          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
-          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
-          file_path: ${{ github.workspace }}/dist/${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}-portable.exe
-          override: true
+          $failed = @()
+          foreach ($t in $targets) {
+            if (-not (Test-Path $t)) { $failed += "$t (missing)"; continue }
+            $sig = Get-AuthenticodeSignature $t
+            Write-Host "$($sig.Status)`t$t"
+            if ($sig.Status -ne 'Valid') { $failed += "$t ($($sig.Status))" }
+          }
+          if ($failed.Count -gt 0) {
+            throw "Unsigned or invalid binaries:`n$($failed -join "`n")"
+          }
+          Write-Host "All $($targets.Count) Windows binaries carry a valid signature."
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
@@ -235,6 +270,15 @@ jobs:
     needs: [build-windows, build-linux, build-mac]
     if: github.ref_type == 'tag'
 
+    # id-token + attestations are for the provenance step below; the
+    # workflow-level `contents: write` has to be restated because naming
+    # permissions on a job replaces the top-level block rather than adding to
+    # it, and the release step needs write to publish.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
     steps:
       # Checkout (the release job otherwise only downloads artifacts) so the
       # CHANGELOG + extract script are on disk.
@@ -250,6 +294,32 @@ jobs:
       - name: Extract release notes from CHANGELOG
         run: node scripts/changelog-extract.mjs "${{ github.ref_name }}" > RELEASE_NOTES.md
 
+      # A user whose antivirus flags a download needs some way to tell whether
+      # the bytes they hold are the bytes we published. Flat filenames, not the
+      # per-artifact subdirectories download-artifact creates, so the file reads
+      # the way `sha256sum -c` expects.
+      - name: Generate SHA256SUMS
+        run: |
+          find artifacts -type f \
+            \( -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' \) \
+            -exec sha256sum {} + | sed 's| .*/| |' | sort -k2 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Signed, GitHub-hosted proof of which workflow run produced these exact
+      # bytes. Verifiable with:
+      #   gh attestation verify epona-X.Y.Z-setup.exe --repo eriscorp/epona
+      # Independent of Authenticode: this attests the build, the signature
+      # attests the publisher. Both feed the reputation story that the
+      # Wacatac false positive came down to.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            artifacts/**/*.exe
+            artifacts/**/*.deb
+            artifacts/**/*.AppImage
+            artifacts/**/*.dmg
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -259,6 +329,7 @@ jobs:
             artifacts/**/*.deb
             artifacts/**/*.AppImage
             artifacts/**/*.dmg
+            SHA256SUMS.txt
           # Curated CHANGELOG section on top; generate_release_notes appends the
           # auto PR list + Full Changelog link below it.
           body_path: RELEASE_NOTES.md

@@ -228,9 +228,22 @@ All Win32 handles are exposed as JS `BigInt` — never coerced to
 
 ## Installation
 
-Pre-built portable releases for Windows are on the
-[releases page](../../releases). Download `Epona-x.y.z-portable.exe`
-and run it directly — no installer, no admin rights required.
+Pre-built releases are on the [releases page](../../releases). Windows
+comes in two forms — take whichever suits you, they are the same app:
+
+- `epona-x.y.z-portable.exe` — a single file. Run it directly, no
+  installer and no admin rights. It unpacks itself on each start, so it
+  takes a few seconds longer to open.
+- `epona-x.y.z-setup.exe` — an installer, if you would rather have Start
+  menu and desktop entries and a fixed install folder.
+
+macOS and Linux builds (`.dmg`, `.deb`, `.AppImage`) are published too,
+but see the platform note above — the Win32 patches are Windows-only.
+
+Every release also carries `SHA256SUMS.txt` and a signed build
+provenance attestation. **If Windows Defender or SmartScreen flags the
+download, see [docs/antivirus.md](docs/antivirus.md)** — it is a false
+positive, and that page covers how to verify the file and report it.
 
 ## Building from source
 
@@ -241,16 +254,19 @@ addon is C++ + node-gyp). Node.js 18+; CI uses Node 24.
 npm install
 npm run rebuild         # rebuild da-win32 against Electron's ABI
 npm run dev             # development (renderer hot-reload)
-npm run build:portable  # Windows portable .exe (output in dist/)
+npm run build:portable  # Windows installer + portable .exe (output in dist/)
 npm run build:mac       # macOS dmg + zip (must run on macOS, unsigned)
 npm run build:linux     # Linux AppImage (must run from WSL2 or a Linux host)
 npm test                # vitest suite
 npm run lint            # eslint + prettier
 ```
 
-CI auto-publishes the Windows portable on tag push; macOS and Linux
-artifacts are produced locally by maintainers and attached to the
-release page when available.
+Local Windows builds are unsigned: signing needs the SSL.com Cloud
+eSigner credentials, which only CI holds. `scripts/sign.js` logs a skip
+and the build continues.
+
+CI builds and publishes every platform on tag push — Windows installer
+and portable exe, macOS dmg, Linux deb and AppImage.
 
 Releases are produced via GitHub Actions on `v*` tag push — see
 [`docs/release-process.md`](docs/release-process.md) for the full
