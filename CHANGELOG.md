@@ -18,6 +18,8 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+## [2.7.2] - 2026-08-07
+
 ### Added
 
 - **Releases now carry `SHA256SUMS.txt` and a build provenance attestation.** If a
