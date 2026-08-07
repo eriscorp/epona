@@ -39,6 +39,19 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   outer file carried a signature, so everything the portable exe unpacked was
   unsigned. Every program file in the download is signed now, including the native
   addon, and a release cannot be published if any of them is missed.
+- **Epona runs properly over Remote Desktop now.** It detects a remote session and
+  adapts on its own — no setting to find. A remote session has no graphics card to
+  use, so Epona stops trying to use one and drops the blur effect behind panels,
+  which is expensive to draw without one. Dragging the window was laggy and the app
+  used noticeable processor time while sitting idle; both are fixed.
+
+### Fixed
+
+- **The window could open far too small over Remote Desktop and refuse to be
+  resized.** Epona sizes itself to fit your screen, but a remote session can report
+  a nonsense screen size for a moment while connecting, and Epona locked itself to
+  it. It now refuses to shrink below a usable size, and re-sizes itself when the
+  screen changes — on reconnecting, or when a monitor is added or removed.
 
 ## [2.7.1] - 2026-08-01
 

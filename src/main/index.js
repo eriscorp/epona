@@ -4,6 +4,13 @@ import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
 import { killProcessTree } from './processKill.js'
 import { settingsSchema } from './schemas/settings.js'
+import {
+  detectRemoteSession,
+  clampWindowSize,
+  REMOTE_SESSION_CSS,
+  MIN_WINDOW_WIDTH,
+  MIN_WINDOW_HEIGHT
+} from '../shared/remoteSession.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
@@ -64,6 +71,25 @@ const localAppData =
     : app.getPath('appData')
 const dataDir = join(localAppData, 'Erisco', 'Epona')
 app.setPath('userData', dataDir)
+
+// Drop to software rendering in a Remote Desktop session. Like setPath above,
+// this MUST happen at module load: Electron reads the flag when it spins up the
+// GPU process, so calling it inside whenReady is too late and silently does
+// nothing.
+//
+// An RDP session has no GPU, so Chromium's GPU path is overhead with no payoff —
+// it rasterises in software anyway, then pays for GPU compositing and a readback
+// on top. Measured on a reporter's machine: laggy window dragging and ~10% CPU
+// while idle, neither reproducible on a local console session with the same
+// build.
+//
+// Detected rather than made a setting, on purpose. See src/shared/remoteSession.js
+// for why a persisted toggle cannot work this early.
+const remoteSession = detectRemoteSession()
+if (remoteSession) {
+  app.disableHardwareAcceleration()
+  console.log('[display] remote session detected — hardware acceleration disabled')
+}
 
 // Single-instance lock. A second Epona shares this userData dir and fights the
 // first over Chromium's cache / GPUCache / quota DB ("Unable to move the cache",
@@ -186,6 +212,13 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 480,
     height: 800,
+    // A backstop, not the real guard. The window:resize handler clears both
+    // limits before sizing (setMinimumSize(0, 0)), so these do not survive the
+    // first resize — clampWindowSize is what actually keeps the window usable.
+    // Worth setting anyway so the window cannot come up degenerate before the
+    // renderer's first resize arrives.
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     // Created resizable so setContentSize takes effect cleanly when panels open
     // (a resizable:false window makes it a silent no-op). We keep it from being
     // user-resized/maximized by locking min == max on every programmatic resize
@@ -223,6 +256,25 @@ function createWindow() {
   // through guardIpc, and the guard fails closed, so registering after the load
   // would reject whatever the renderer sends during hydration.
   registerTrustedWindow(mainWindow)
+
+  // Strip backdrop-filter in a remote session. Four of the six themes put
+  // `backdropFilter: blur(2px)` on MuiPaper.root, and MuiPaper backs Card,
+  // Dialog, Accordion and Menu — so most surfaces make Chromium read back what
+  // is behind them and blur it on every repaint, including every frame of a
+  // window drag. Free enough on a GPU; not on the CPU, which is all an RDP
+  // session has.
+  //
+  // Injected here rather than edited into the themes: those are hand-written and
+  // stay that way. This is a runtime mitigation for one environment and it
+  // reverts by not being injected. dom-ready fires before first paint, so there
+  // is no flash of the blurred style.
+  if (remoteSession) {
+    mainWindow.webContents.on('dom-ready', () => {
+      mainWindow.webContents.insertCSS(REMOTE_SESSION_CSS).catch((err) => {
+        console.warn('[display] remote-session CSS injection failed:', err.message)
+      })
+    })
+  }
 
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -893,8 +945,14 @@ app.whenReady().then(() => {
   // Window controls
   ipc.on('window:minimize', () => mainWindow.minimize())
   ipc.on('window:close', () => mainWindow.close())
-  ipc.on('window:resize', (_, { width, height }) => {
+  // The renderer's last requested size, replayed when the display geometry
+  // changes. Without this, a window sized against a bad work area stays wrong
+  // for the rest of the session: the renderer only re-sends on a pane toggle.
+  let lastRequestedSize = null
+
+  function applyWindowSize(width, height) {
     if (typeof width !== 'number' || typeof height !== 'number') return
+    if (!mainWindow || mainWindow.isDestroyed()) return
     // Resize by relocking min == max instead of toggling setResizable. The old
     // toggle added/removed WS_THICKFRAME around setContentSize on Windows, which
     // left the web contents offset to the right (a left-side letterbox that
@@ -920,17 +978,52 @@ app.whenReady().then(() => {
     // leaves the OS to clamp us — after which locking min == max to the
     // requested size pins the window to a height it never got. Ask for
     // something achievable instead.
+    //
+    // ...but the clamp needs a FLOOR as well as a ceiling, because its result is
+    // locked into both the minimum and the maximum below. A degenerate work area
+    // — an RDP session whose virtual display comes up small before the client
+    // negotiates the real resolution, a reconnect, a mid-session DPI change —
+    // otherwise collapses `target`, and the window is then pinned to an unusable
+    // size with no way back: `maximizable: false` and min == max block dragging
+    // and maximising alike. Reported at ~100px wide over Remote Desktop.
+    // clampWindowSize keeps the ceiling and adds the floor.
     const { workAreaSize } = screen.getDisplayMatching(mainWindow.getBounds())
-    const target = {
-      width: Math.min(width, workAreaSize.width),
-      height: Math.min(height, workAreaSize.height)
-    }
+    const target = clampWindowSize({ width, height, workAreaSize })
     mainWindow.setMinimumSize(0, 0)
     mainWindow.setMaximumSize(0, 0)
     mainWindow.setContentSize(target.width, target.height)
     const [w, h] = mainWindow.getSize()
     mainWindow.setMinimumSize(w, h)
     mainWindow.setMaximumSize(w, h)
+  }
+
+  ipc.on('window:resize', (_, { width, height }) => {
+    if (typeof width !== 'number' || typeof height !== 'number') return
+    lastRequestedSize = { width, height }
+    applyWindowSize(width, height)
+  })
+
+  // Re-apply the last requested size when the display geometry changes. An RDP
+  // session is the case that needs it: the virtual display can come up small
+  // and be renegotiated a moment later, and reconnecting or changing DPI
+  // mid-session moves it again. Without this the window keeps whatever size it
+  // was locked to against the old geometry.
+  //
+  // Replays the size the RENDERER asked for, not the clamped result — re-running
+  // the clamp against the new work area is the entire point.
+  const onDisplayChange = () => {
+    if (!lastRequestedSize) return
+    applyWindowSize(lastRequestedSize.width, lastRequestedSize.height)
+  }
+  screen.on('display-metrics-changed', onDisplayChange)
+  screen.on('display-added', onDisplayChange)
+  screen.on('display-removed', onDisplayChange)
+  // screen listeners outlive the window; drop them with it or a second window
+  // (the activate path on macOS) accumulates another set.
+  mainWindow.on('closed', () => {
+    screen.removeListener('display-metrics-changed', onDisplayChange)
+    screen.removeListener('display-added', onDisplayChange)
+    screen.removeListener('display-removed', onDisplayChange)
   })
 
   app.on('activate', () => {
