@@ -20,7 +20,7 @@
 // function; using module.exports for plain CJS interop.
 
 const { execFileSync } = require('node:child_process')
-const { existsSync, mkdirSync, copyFileSync, rmSync } = require('node:fs')
+const { existsSync, mkdirSync, copyFileSync, rmSync, readdirSync } = require('node:fs')
 const { join, basename, dirname } = require('node:path')
 
 const REQUIRED_VARS = [
@@ -36,6 +36,50 @@ const REQUIRED_VARS = [
 // file.
 function signingConfigured() {
   return REQUIRED_VARS.every((v) => process.env[v])
+}
+
+// Resolve the java + jar that CodeSignTool.bat would have run.
+//
+// We do NOT run the .bat. Two reasons, both load-bearing:
+//
+//  1. Node refuses to execFile a .bat/.cmd at all since the fix for
+//     CVE-2024-27980 — it throws EINVAL. That is what broke the v2.7.2
+//     release build ("spawnSync ...\CodeSignTool.bat EINVAL").
+//  2. The obvious workaround, running it through `cmd.exe /c`, hands the
+//     arguments to a shell. Verified locally: an `&` inside an argument
+//     terminates the command and cmd tries to run the rest. ES_PASSWORD and
+//     ES_TOTP_SECRET go through here, and a password containing & | ^ < >
+//     would break the build in a way that leaks part of the secret into a
+//     log line as a "not recognized as an internal or external command"
+//     error. Not acceptable for a credential.
+//
+// java.exe is a real executable, so execFileSync passes argv straight through
+// with no shell anywhere in the chain and any byte in a secret is safe.
+//
+// The .bat itself is a two-line wrapper (verified against v1.3.2):
+//   %CODE_SIGN_TOOL_PATH%\jdk-11.0.2\bin\java -jar %CODE_SIGN_TOOL_PATH%\jar\code_sign_tool-1.3.2.jar %*
+// so it ships its own JDK. Prefer that one; fall back to `java` on PATH if a
+// future layout drops it, which is why the workflow still installs a JDK.
+// Both the JDK directory and the jar carry version numbers, so glob rather
+// than hardcode — a CodeSignTool bump should not need a code change here.
+function resolveCodeSignTool(codeSignToolPath) {
+  const entries = existsSync(codeSignToolPath) ? readdirSync(codeSignToolPath) : []
+
+  const jdkDir = entries.find((e) => e.startsWith('jdk-'))
+  const bundledJava = jdkDir ? join(codeSignToolPath, jdkDir, 'bin', 'java.exe') : null
+  const java = bundledJava && existsSync(bundledJava) ? bundledJava : 'java'
+
+  const jarDir = join(codeSignToolPath, 'jar')
+  const jarName = existsSync(jarDir)
+    ? readdirSync(jarDir).find((e) => e.startsWith('code_sign_tool-') && e.endsWith('.jar'))
+    : null
+  if (!jarName) {
+    throw new Error(
+      `[sign] no code_sign_tool-*.jar under ${jarDir} — check CODE_SIGN_TOOL_PATH (${codeSignToolPath})`
+    )
+  }
+
+  return { java, jar: join(jarDir, jarName) }
 }
 
 // Sign one PE in place. Throws on any failure — a half-signed release is
@@ -54,12 +98,7 @@ function signFile(filePath) {
   }
 
   const codeSignToolPath = process.env.CODE_SIGN_TOOL_PATH
-  const codeSignToolBat = join(codeSignToolPath, 'CodeSignTool.bat')
-  if (!existsSync(codeSignToolBat)) {
-    throw new Error(
-      `[sign] CodeSignTool.bat not found at ${codeSignToolBat} — check CODE_SIGN_TOOL_PATH`
-    )
-  }
+  const { java, jar } = resolveCodeSignTool(codeSignToolPath)
 
   const outputDir = join(dirname(filePath), '.esigner-output')
   mkdirSync(outputDir, { recursive: true })
@@ -68,18 +107,27 @@ function signFile(filePath) {
 
   try {
     execFileSync(
-      codeSignToolBat,
+      java,
       [
+        '-jar',
+        jar,
         'sign',
         `-username=${process.env.ES_USERNAME}`,
         `-password=${process.env.ES_PASSWORD}`,
         `-credential_id=${process.env.ES_CREDENTIAL_ID}`,
         `-totp_secret=${process.env.ES_TOTP_SECRET}`,
         `-input_file_path=${filePath}`,
+        // -output_dir_path is NOT optional in practice: without it CodeSignTool
+        // prompts "The output signed file will replace the original file. Do you
+        // still want to continue [y/n]?" on stdin. On a runner that waits until
+        // the job times out. stdin is closed below so a future prompt fails fast
+        // instead of hanging, but keep passing this.
         `-output_dir_path=${outputDir}`,
         '-override=true'
       ],
-      { stdio: 'inherit', cwd: codeSignToolPath }
+      // stdin closed deliberately — see above. stdout/stderr inherited so the
+      // "Code signed successfully" line lands in the job log.
+      { stdio: ['ignore', 'inherit', 'inherit'], cwd: codeSignToolPath }
     )
   } catch (err) {
     rmSync(outputDir, { recursive: true, force: true })
