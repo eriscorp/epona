@@ -8,6 +8,9 @@ import { PICKER_SX } from '../pickerConstants'
 // server and client panels. `chip` renders an optional status chip beside the
 // label; `extraAction` appends an extra control after the Browse button (e.g.
 // the "open log folder" icon).
+// `pickTestId` names the Browse button. Optional, and only worth setting where a
+// panel shows more than one picker — every Browse button has the same accessible
+// name, so without it a role query cannot tell two of them apart.
 export default function PathPicker({
   label,
   value,
@@ -15,7 +18,8 @@ export default function PathPicker({
   disabled,
   placeholder,
   chip,
-  extraAction
+  extraAction,
+  pickTestId
 }) {
   return (
     <Box>
@@ -30,7 +34,13 @@ export default function PathPicker({
           {value || placeholder}
         </Typography>
         {onPick && (
-          <Button size="small" variant="outlined" disabled={disabled} onClick={onPick}>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={disabled}
+            onClick={onPick}
+            data-testid={pickTestId}
+          >
             Browse…
           </Button>
         )}

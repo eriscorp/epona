@@ -11,11 +11,17 @@ import LegacyAssetsPanel from './LegacyAssetsPanel'
 
 const inspectAssetDir = vi.fn()
 const pickDirectory = vi.fn()
+// The panel now embeds DarkAgesInstallPanel (HTOO-288), which subscribes to
+// installer progress on mount. Stubbed here rather than mocking the child away:
+// these tests are about the panel as the tab actually renders it, and a bridge
+// method the child needs but the preload does not expose should fail them.
+const onInstallerProgress = vi.fn()
 
 beforeEach(() => {
   inspectAssetDir.mockReset().mockResolvedValue({ ok: false, reason: 'unset' })
   pickDirectory.mockReset().mockResolvedValue(null)
-  global.window.sparkAPI = { inspectAssetDir, pickDirectory }
+  onInstallerProgress.mockReset().mockReturnValue(() => {})
+  global.window.sparkAPI = { inspectAssetDir, pickDirectory, onInstallerProgress }
 })
 
 afterEach(cleanup)
@@ -54,7 +60,7 @@ describe('LegacyAssetsPanel', () => {
     pickDirectory.mockResolvedValue('/home/user/DarkAges')
     render(<LegacyAssetsPanel clientPath="" onChange={onChange} />)
 
-    await userEvent.click(screen.getByRole('button', { name: /browse/i }))
+    await userEvent.click(screen.getByTestId('asset-folder-browse'))
     // Same setting the Windows panel uses for Dark Ages.exe — one field, two
     // meanings, decided deliberately in HTOO-296.
     await waitFor(() =>
@@ -67,7 +73,7 @@ describe('LegacyAssetsPanel', () => {
     pickDirectory.mockResolvedValue(null)
     render(<LegacyAssetsPanel clientPath="/home/user/DarkAges" onChange={onChange} />)
 
-    await userEvent.click(screen.getByRole('button', { name: /browse/i }))
+    await userEvent.click(screen.getByTestId('asset-folder-browse'))
     expect(onChange).not.toHaveBeenCalled()
   })
 

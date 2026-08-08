@@ -29,6 +29,15 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Added
 
+- **Epona can install Dark Ages on macOS and Linux.** The official installer is a
+  Windows program, so it cannot be run there — Epona reads it instead and unpacks
+  the client files directly. No Wine, no virtual machine, and nothing extra to
+  install. The Legacy Client tab now lets you pick where the files should go, then
+  either download the installer from darkages.com or point at a copy you already
+  have. Progress is shown, the download can be cancelled and resumes where it left
+  off, and the folder becomes your Dark Ages folder once it has been checked. Every
+  file is verified against the checksum in the installer as it is written, and a
+  run that fails leaves your chosen folder untouched.
 - **`EPONA_DISABLE_GPU` overrides the Remote Desktop rendering decision.** Set it
   to `1` to force software rendering anywhere, or `0` to keep hardware
   acceleration on in a session Epona reads as remote. Unset keeps the automatic

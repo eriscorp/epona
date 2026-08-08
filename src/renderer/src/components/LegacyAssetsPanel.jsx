@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import Box from '@mui/material/Box'
+import Divider from '@mui/material/Divider'
 import Typography from '@mui/material/Typography'
 import PathPicker from './PathPicker'
+import DarkAgesInstallPanel from './DarkAgesInstallPanel'
 import { describeAssetDir } from '../../../shared/assetStatus.js'
 
 // The Legacy Client tab on macOS and Linux.
@@ -50,6 +52,7 @@ export default function LegacyAssetsPanel({ clientPath, onChange }) {
         value={clientPath}
         onPick={pick}
         placeholder="Not set"
+        pickTestId="asset-folder-browse"
         chip={
           status
             ? {
@@ -66,6 +69,13 @@ export default function LegacyAssetsPanel({ clientPath, onChange }) {
           {describeAssetDir(status)}
         </Typography>
       )}
+
+      <Divider />
+
+      {/* HTOO-288. Below the picker rather than above it: a user who already has
+          the files should reach the field they need first, and the install flow is
+          the answer to the rarer question. It writes the same clientPath. */}
+      <DarkAgesInstallPanel clientPath={clientPath} onChange={onChange} />
     </Box>
   )
 }
