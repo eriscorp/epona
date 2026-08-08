@@ -1,8 +1,18 @@
 # Epona Efficiency Review
 
+## Retired 2026-08-08 (HTOO-330)
+
+Nothing below is open. The last conditional item — the full `reapPidInstance` merge — landed on `main` in PR `eriscorp/epona#34` (merge `bd1e8d5`) once HTOO-99 gave `src/main/index.js` tests, in the modified shape M1 records: `untrackPidInstance` owns the untrack-and-notify pair and the kill stays at the call sites. The other five survivors were never open items — they are decisions this review already made, and they now live in [`../00a-backlog.md`](../00a-backlog.md) with the trigger that would reopen each one.
+
+**The register is the live statement of what is unscheduled; this file is history.** Everything under the original heading below is frozen prose from 2026-07-12 and still says "skipped" and "deferred" about things that have since shipped. That is correct as of the merge and is not to be refreshed — the gap between what a review declined and what the code later did is the only reason to keep the file.
+
+Read this together with [`efficiency-review-2026-07-02.md`](efficiency-review-2026-07-02.md), the review it replaced. Both were named `docs/efficiency-review.md` in their day; they are dated by authoring date here so a third one has somewhere to go.
+
+---
+
 _Fresh repo-wide review of current `main` (July 2026), replacing the prior review
 whose entire first wave has since been implemented (archived at
-`docs/completed/efficiency-review.md`). Report-only swarm over three domains —
+`docs/plans/complete/efficiency-review-2026-07-02.md`). Report-only swarm over three domains —
 main process + IPC, renderer components + stores, and app shell + themes + shared
 utils. Excludes `*.test.js`, the `da-win32` native addon, and `out/`/`dist/`/
 `node_modules`._

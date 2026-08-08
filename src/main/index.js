@@ -702,7 +702,8 @@ app.whenReady().then(() => {
 
   // Drop a PID-tracked instance from tracking and tell the renderer it exited.
   //
-  // This is docs/efficiency-review.md M1, and it is deliberately NOT the
+  // This is docs/plans/complete/efficiency-review-2026-07-12.md M1, and it is
+  // deliberately NOT the
   // `reapPidInstance(instanceId, pid)` that finding proposed. That shape would
   // own the kill as well, and the kill is the one thing `instance:stop` and
   // `instance:reset` genuinely disagree about:

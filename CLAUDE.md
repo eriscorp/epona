@@ -9,6 +9,11 @@ posture, markdown style — live in the document repo's `docs/architecture/dev-p
 architecture standard in `electron-app-skeleton.md` beside it. **Prefer those if anything here
 conflicts; this file is repo-specific facts only.**
 
+Plans live in [docs/plans/](docs/plans/): [00-overview.md](docs/plans/00-overview.md) is the index and
+the settled decisions, [00a-backlog.md](docs/plans/00a-backlog.md) is the register of what Epona has
+declined and why, and `complete/` holds shipped plan docs. **Read the register before proposing a
+cleanup** — several obvious-looking ones are already on it with the reason they were turned down.
+
 ## Commands
 
 | Command                  | What it does                                                      |
@@ -87,7 +92,8 @@ divergence from the skeleton, not an oversight. The full gate is
   `build/epona-mac-icon.png` and packed by `scripts/make-mac-icns.mjs`. Regenerating runtime assets
   from the star alone leaves macOS stale, and nothing warns you.
 - **The themes are not a factory.** Six hand-written theme objects in `src/renderer/src/themes/`,
-  `danaan` especially. Do not try to collapse them into a generator.
+  `danaan` especially. Do not try to collapse them into a generator. Declined three times; it is the
+  headline entry in [docs/plans/00a-backlog.md](docs/plans/00a-backlog.md).
 
 ## Releases
 
