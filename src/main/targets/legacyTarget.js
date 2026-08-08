@@ -7,6 +7,45 @@ import { describeLaunchError } from './launchError.js'
 // Native addon must be loaded via require (CJS) — not bundled by Vite
 const win32 = process.platform === 'win32' ? createRequire(import.meta.url)('da-win32') : null
 
+// Resolve a profile hostname to an IPv4 address.
+//
+// `family: 4` is load-bearing, not a hint. The hostname patch below encodes the
+// address as four raw bytes, so an IPv6 answer cannot be represented at all —
+// and on a dual-stack machine `localhost` answers `::1` first, which is the
+// common case rather than an exotic one. Without the family the split produced
+// four NaNs, Buffer.from turned each into 0, and the launcher wrote 0.0.0.0
+// into the suspended client and reported success. See HTOO-88.
+export async function resolveIpv4(hostname) {
+  const { address } = await lookup(hostname, { family: 4 })
+  return address
+}
+
+// Encode a dotted-quad address as the client's hostname patch: each octet
+// preceded by 0x6a (`push imm8`), in reverse order, because the client pushes
+// the octets onto the stack and reads them back off it.
+//
+// Validates rather than trusting the caller. `resolveIpv4` should make a
+// malformed address impossible, but the failure this guards is silent — a bad
+// address produces a client that starts, connects to nothing, and gives the
+// user no reason why. An exception here surfaces as a launch error instead.
+export function encodeHostnamePatch(address) {
+  // Match the digits before converting. `Number` is too permissive to validate
+  // with: it reads '' as 0, so '127.0..1' would encode as 127.0.0.1, and it
+  // reads '0x7f' as 127 and ' 1 ' as 1. Each of those is a wrong address that
+  // encodes without complaint, which is the failure mode this whole function
+  // exists to prevent.
+  const parts = String(address).split('.')
+  const valid = parts.length === 4 && parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)
+  if (!valid) {
+    throw new Error(
+      `Cannot patch the client with "${address}" — the Legacy redirect needs an ` +
+        `IPv4 address. Set the profile hostname to an IPv4 address such as 127.0.0.1.`
+    )
+  }
+  const [a, b, c, d] = parts.map(Number)
+  return Buffer.from([0x6a, d, 0x6a, c, 0x6a, b, 0x6a, a])
+}
+
 export async function launch(settings, profile) {
   if (!win32) return { success: false, error: 'Windows only' }
 
@@ -59,10 +98,12 @@ export async function launch(settings, profile) {
 
     // 3. Apply patches
     if (profile.redirect && profile.hostname) {
-      const { address } = await lookup(profile.hostname)
-      const ip = address.split('.').map(Number)
-      const hostnameBytes = Buffer.from([0x6a, ip[3], 0x6a, ip[2], 0x6a, ip[1], 0x6a, ip[0]])
-      win32.writeProcessMemory(memHandle, version.hostnamePatchAddress, hostnameBytes)
+      const address = await resolveIpv4(profile.hostname)
+      win32.writeProcessMemory(
+        memHandle,
+        version.hostnamePatchAddress,
+        encodeHostnamePatch(address)
+      )
 
       if (version.skipHostnamePatchAddress !== null) {
         win32.writeProcessMemory(
@@ -108,23 +149,26 @@ export async function launch(settings, profile) {
       // Resolve where the image actually landed rather than assuming the
       // preferred base — the stub relocations are all module-base relative.
       const moduleBase = win32.getMainModuleBase(memHandle)
-      try {
-        installGroundItemHints({ mem: win32, handle: memHandle, moduleBase })
-      } catch (err) {
-        patchFailed = true
-        throw err
-      }
+      installGroundItemHints({ mem: win32, handle: memHandle, moduleBase })
     }
 
     return { success: true }
   } catch (err) {
+    // Fail closed for EVERY patch failure, not only a hook rollback. This flag
+    // used to be set inside the ground-item-hints block alone, so a throw from
+    // any other step fell through to resumeThreadFully below and started a
+    // client we had partly rewritten. A DNS failure or a non-IPv4 address now
+    // lands here too. If the throw came from createSuspendedProcess itself
+    // there is no thread handle and the finally does nothing, so setting this
+    // unconditionally is safe.
+    patchFailed = true
     return { success: false, error: describeLaunchError(err, clientPath) }
   } finally {
     if (memHandle) win32.closeHandle(memHandle)
     if (threadHandle) {
-      // Fail closed: a client whose hook installation blew up gets killed, not
-      // resumed. The installer rolls its own writes back, but the appendix is
-      // explicit that a partially patched process must never run.
+      // A client we may have half-patched gets killed, not resumed. The hook
+      // installer rolls its own writes back, but the appendix is explicit that
+      // a partially patched process must never run.
       if (patchFailed && processHandle) {
         try {
           win32.terminateProcess(processHandle, 1)

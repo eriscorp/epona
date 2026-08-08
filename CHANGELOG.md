@@ -18,6 +18,16 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Fixed
+
+- **`localhost` now works as a Legacy profile hostname.** The redirect asks DNS
+  for an IPv4 address specifically, so a machine that prefers IPv6 no longer
+  produces a client that starts and connects to nothing. Typing `127.0.0.1`
+  instead was the old workaround; it is no longer needed.
+- **A Legacy launch that cannot be patched no longer starts the client.**
+  Previously only a ground-item-hints failure stopped it — any other failure,
+  including an unresolvable hostname, let a partly patched client run.
+
 ## [2.7.2] - 2026-08-07
 
 ### Added
