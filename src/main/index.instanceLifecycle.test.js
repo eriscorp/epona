@@ -5,7 +5,8 @@ import { tmpdir } from 'os'
 
 // The PID-tracked instance lifecycle: instance:stop and instance:reset.
 //
-// This is the ground HTOO-99 exists to unblock. docs/efficiency-review.md M1 wants
+// This is the ground HTOO-99 exists to unblock.
+// docs/plans/complete/efficiency-review-2026-07-12.md M1 wants
 // the duplicated PID-kill/delete/childExit block in these two handlers extracted
 // into a shared `reapPidInstance`, and the review deliberately did NOT do it:
 //

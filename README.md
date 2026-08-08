@@ -302,7 +302,8 @@ for the workflow definition.
 | `src/renderer/src/themes/`                                  | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark, Mundanes)                                                                                          |
 | `src/shared/`                                               | Pure logic shared by main, preload and renderer — no electron or node imports                                                                             |
 | `e2e/`                                                      | Playwright specs driving the built app (Windows)                                                                                                          |
-| `docs/`                                                     | Active design docs (`server-launch-resolution.md`, `release-process.md`); `docs/completed/` archives shipped plan docs                                    |
+| `docs/`                                                     | Reference docs (`antivirus.md`, `da-installer.md`, `release-process.md`, `server-launch-resolution.md`)                                                   |
+| `docs/plans/`                                               | Plan index (`00-overview.md`), the deferral register (`00a-backlog.md`), and `complete/` for shipped plan docs                                            |
 
 ## Contributing
 
