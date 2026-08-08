@@ -3,6 +3,8 @@ import {
   isRemoteSession,
   detectRemoteSession,
   clampWindowSize,
+  resolveGpuOverride,
+  shouldDisableHardwareAcceleration,
   MIN_WINDOW_WIDTH,
   MIN_WINDOW_HEIGHT
 } from './remoteSession.js'
@@ -99,5 +101,73 @@ describe('clampWindowSize', () => {
       width: MIN_WINDOW_WIDTH,
       height: MIN_WINDOW_HEIGHT
     })
+  })
+})
+
+describe('resolveGpuOverride', () => {
+  it('reads unset and empty as "decide by detection"', () => {
+    expect(resolveGpuOverride(undefined)).toBe(null)
+    expect(resolveGpuOverride('')).toBe(null)
+  })
+
+  it('reads 0 as "force acceleration back on"', () => {
+    expect(resolveGpuOverride('0')).toBe(false)
+  })
+
+  it('reads anything else as "force software rendering"', () => {
+    expect(resolveGpuOverride('1')).toBe(true)
+    expect(resolveGpuOverride('true')).toBe(true)
+    expect(resolveGpuOverride('yes')).toBe(true)
+  })
+
+  it('does not fall through to detection on an unrecognised value', () => {
+    // The failure this prevents: a typo reading as an override that silently
+    // did nothing, which is indistinguishable from the override not working.
+    expect(resolveGpuOverride('maybe')).toBe(true)
+    expect(resolveGpuOverride('00')).toBe(true)
+  })
+})
+
+describe('shouldDisableHardwareAcceleration', () => {
+  const remote = { platform: 'win32', env: { SESSIONNAME: 'RDP-Tcp#2' } }
+  const local = { platform: 'win32', env: { SESSIONNAME: 'Console' } }
+
+  it('falls back to detection when the override is unset', () => {
+    expect(shouldDisableHardwareAcceleration(remote)).toBe(true)
+    expect(shouldDisableHardwareAcceleration(local)).toBe(false)
+  })
+
+  it('forces software rendering on a local machine when asked', () => {
+    // This is how the remote branch gets exercised without an RDP session.
+    expect(
+      shouldDisableHardwareAcceleration({
+        platform: 'win32',
+        env: { SESSIONNAME: 'Console', EPONA_DISABLE_GPU: '1' }
+      })
+    ).toBe(true)
+  })
+
+  it('forces acceleration back on in a remote session when asked', () => {
+    // The user's only recourse if detection is wrong for them, since there is
+    // deliberately no setting.
+    expect(
+      shouldDisableHardwareAcceleration({
+        platform: 'win32',
+        env: { SESSIONNAME: 'RDP-Tcp#2', EPONA_DISABLE_GPU: '0' }
+      })
+    ).toBe(false)
+  })
+
+  it('works on a platform detection never fires for', () => {
+    expect(shouldDisableHardwareAcceleration({ platform: 'linux', env: {} })).toBe(false)
+    expect(
+      shouldDisableHardwareAcceleration({ platform: 'linux', env: { EPONA_DISABLE_GPU: '1' } })
+    ).toBe(true)
+  })
+
+  it('leaves isRemoteSession telling the truth', () => {
+    // The override must not leak into the predicate that makes a claim about
+    // the world — that is why it lives in this function and not that one.
+    expect(isRemoteSession({ platform: 'win32', sessionName: 'Console' })).toBe(false)
   })
 })

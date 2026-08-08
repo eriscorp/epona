@@ -40,6 +40,37 @@ export function detectRemoteSession(proc = process) {
   })
 }
 
+// Read the EPONA_DISABLE_GPU escape hatch. Returns true to force software
+// rendering, false to force acceleration back on, or null for "not set — decide
+// by detection".
+//
+// It answers in BOTH directions on purpose, and the direction that is easy to
+// forget is the more useful one. Forcing it ON is how the remote-session branch
+// gets exercised on a machine with no RDP access, which is most machines.
+// Forcing it OFF is a user's only recourse if detection is ever wrong on their
+// box — precisely because there is deliberately no UI toggle.
+//
+// One rule, not a list of accepted spellings: empty or unset is unset, '0' is
+// off, anything else is on. An unrecognised value must NOT fall through to
+// detection — that would read as an override that silently did nothing.
+export function resolveGpuOverride(value) {
+  if (typeof value !== 'string' || value === '') return null
+  return value !== '0'
+}
+
+// The decision: should this process disable hardware acceleration?
+//
+// Deliberately separate from isRemoteSession, and not folded into it. That
+// function's name is a CLAIM ABOUT THE WORLD — it must not start returning true
+// for a machine that is plainly not in a remote session, or every later reader
+// is misled by a debugging flag. This one is named for the decision, so an
+// override sits inside it honestly.
+export function shouldDisableHardwareAcceleration(proc = process) {
+  const override = resolveGpuOverride(proc.env?.EPONA_DISABLE_GPU)
+  if (override !== null) return override
+  return detectRemoteSession(proc)
+}
+
 // backdrop-filter is the single most expensive thing in the UI once compositing
 // is on the CPU. Four of the six themes put `backdropFilter: blur(2px)` on
 // MuiPaper.root, and MuiPaper backs Card, Dialog, Accordion and Menu — so most

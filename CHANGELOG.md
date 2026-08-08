@@ -18,6 +18,14 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Added
+
+- **`EPONA_DISABLE_GPU` overrides the Remote Desktop rendering decision.** Set it
+  to `1` to force software rendering anywhere, or `0` to keep hardware
+  acceleration on in a session Epona reads as remote. Unset keeps the automatic
+  behaviour. There is still no setting for this on purpose — the override exists
+  for the case where the detection is wrong on your machine.
+
 ### Fixed
 
 - **`localhost` now works as a Legacy profile hostname.** The redirect asks DNS
