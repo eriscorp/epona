@@ -27,9 +27,14 @@ new patterns were lifted into **unit-tested** modules while at it — `childLine
 
 **Deliberately skipped** (judgment calls, noted at each finding):
 - **#1 theme factory** — known red herring (see below); declined.
-- **reapPidInstance (full merge)** — stop vs reset have genuinely different
-  kill-failure semantics; a shared helper in 0%-covered lifecycle code risked a
-  regression, so only the identical `childExit` notify was extracted.
+- **reapPidInstance (full merge)** — skipped in this pass: stop vs reset have
+  genuinely different kill-failure semantics; a shared helper in 0%-covered
+  lifecycle code risked a regression, so only the identical `childExit` notify was
+  extracted. **Since revisited and applied in a modified shape — see M1 below,
+  which is the current statement.** `index.js` now has tests (HTOO-99) and the
+  divergence is pinned, but the helper deliberately does not own the kill. Left
+  here rather than deleted so the reasoning survives; do not read this bullet as
+  the open state.
 - **useSnack (R4)** — `SnackbarHost` already captured the real duplication.
 - **Tab `value` from TAB_ORDER (A2)** — low urgency; the disabled-legacy-tab case
   makes a naive map riskier than the hardcoded indices are worth.
@@ -123,9 +128,24 @@ fantasyTypography) is the right amount of sharing. **Do not re-propose this.**
 ## Low value (localized; batch or defer)
 
 ### Main process
-- **M1. PID-kill/delete/childExit block duplicated** — `index.js:593-606`
-  (`instance:stop`) and `624-634` (`instance:reset`), with `before-quit` (710-722)
-  a third variant. Extract `reapPidInstance(instanceId, pid)`.
+- **M1. PID-kill/delete/childExit block duplicated** ✅ APPLIED, in a modified
+  shape — `instance:stop` and `instance:reset`. Unblocked by HTOO-99, which gave
+  `index.js` tests; `index.instanceLifecycle.test.js` pins the divergence this
+  finding was originally skipped over.
+  - **Not `reapPidInstance(instanceId, pid)` as proposed.** That shape owns the
+    kill, and the kill is the one thing the two handlers disagree about: stop
+    treats a failed kill as fatal and leaves the instance *tracked*, reset ignores
+    the result and relaunches regardless. A helper owning it would need a flag,
+    which puts the difference back out of sight — the exact risk this item was
+    deferred over. What is genuinely shared is the untrack-and-notify pair, so
+    that is what `untrackPidInstance(instanceId, pid)` owns, leaving the
+    kill-failure decision visible at both call sites.
+  - **`before-quit` is not a third caller.** It only kills: the map is about to be
+    discarded, the renderer is being torn down so there is nobody to notify, and
+    worktrees are released by `releaseAllWorktrees` + `sweepAllOrphans`. Routing it
+    through the helper would add all three back.
+  - **`statusMonitor`'s `onReap` is not one either** — the monitor deletes the
+    entry itself before calling back, so that site is correctly a bare notify.
 - **M2. Non-Windows detached-spawn block duplicated** — `serverTarget.js:225-232`
   (`launchBinary`) and `300-307` (`launchRepo`). Small `spawnDirect(spec, cwd, cleanup)`.
 - **M3. Worktree-resolve preamble partial overlap** — `hybrasylTarget.js:139-163`

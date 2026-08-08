@@ -700,6 +700,38 @@ app.whenReady().then(() => {
     })
   }
 
+  // Drop a PID-tracked instance from tracking and tell the renderer it exited.
+  //
+  // This is docs/efficiency-review.md M1, and it is deliberately NOT the
+  // `reapPidInstance(instanceId, pid)` that finding proposed. That shape would
+  // own the kill as well, and the kill is the one thing `instance:stop` and
+  // `instance:reset` genuinely disagree about:
+  //
+  //   stop  — a failed kill is fatal. It returns an error and leaves the instance
+  //           TRACKED, because the wrapper is still holding its ports and saying
+  //           otherwise would let the next Start race it on the bind.
+  //   reset — a failed kill is ignored. It untracks and relaunches regardless,
+  //           because the user asked for a running server and refusing them one
+  //           over a stale wrapper leaves them with nothing.
+  //
+  // The review skipped its own suggestion for exactly that reason ("stop vs reset
+  // have genuinely different kill-failure semantics"), so a helper that swallowed
+  // the difference behind a flag would reintroduce the risk it was skipped over.
+  // What IS shared is the untrack-and-notify pair, and that is what this owns —
+  // leaving the kill-failure decision visible at both call sites.
+  //
+  // `before-quit` is not a third caller, though the review lists it as a variant.
+  // It only kills: the map is about to be discarded, the renderer is being torn
+  // down so there is nobody to notify, and worktrees are released by
+  // releaseAllWorktrees and sweepAllOrphans instead. Routing it through here would
+  // add all three of those back.
+  //
+  // Covered by index.instanceLifecycle.test.js, which pins both sides.
+  function untrackPidInstance(instanceId, pid) {
+    instanceChildren.delete(instanceId)
+    notifyPidExit(instanceId, pid)
+  }
+
   ipc.handle('instance:listServerConfigs', async (_, dataDir) => listServerConfigs(dataDir))
   ipc.handle('instance:readDataStore', async (_, dataDir, configFileName) =>
     readDataStore(dataDir, configFileName)
@@ -1003,10 +1035,11 @@ app.whenReady().then(() => {
     const pid = tracked.value
     const result = await killProcessTree(pid)
     if (!result.ok) {
+      // Fatal here, unlike in reset — see untrackPidInstance. Staying tracked is
+      // what lets a second Stop retry the same wrapper.
       return { success: false, error: `kill failed: ${result.error.message}` }
     }
-    instanceChildren.delete(instanceId)
-    notifyPidExit(instanceId, pid)
+    untrackPidInstance(instanceId, pid)
     await runCleanup()
     // Re-derive now rather than waiting out the poll interval, so the button
     // settles immediately after the round trip.
@@ -1031,9 +1064,9 @@ app.whenReady().then(() => {
       if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 5000)
     } else {
       const pid = tracked.value
+      // The kill result is deliberately not checked — see untrackPidInstance.
       await killProcessTree(pid)
-      instanceChildren.delete(instance.id)
-      notifyPidExit(instance.id, pid)
+      untrackPidInstance(instance.id, pid)
     }
 
     try {
