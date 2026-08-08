@@ -45,9 +45,35 @@ async function chooseDestination(path = '/home/user/DarkAges') {
 }
 
 describe('DarkAgesInstallPanel', () => {
-  it('explains why unpacking is needed at all', () => {
+  it('says what it does, and explains itself on hover', async () => {
+    // Deliberately terse in the panel. The rationale lives in a tooltip rather than
+    // a paragraph, so the controls are what the eye lands on.
     render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} />)
-    expect(screen.getByText(/only runs on Windows/i)).toBeTruthy()
+    expect(screen.getByText('Unpack the client files')).toBeTruthy()
+
+    await userEvent.hover(screen.getByTestId('installer-help'))
+    await waitFor(() =>
+      expect(screen.getByText(/extract the files needed by Brigid/i)).toBeTruthy()
+    )
+  })
+
+  it('names the folder for what it holds, not for the action', () => {
+    // "Archive Storage Directory", not "Install to": the .dat archives are what
+    // land there, and the panel no longer claims to install anything.
+    render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} />)
+    expect(screen.getByText('Archive Storage Directory')).toBeTruthy()
+  })
+
+  it('uses the same wording on every platform', () => {
+    // An earlier draft branched the copy on isWindows and ended up contradicting
+    // its own buttons, which still said "install". One verb everywhere.
+    const { unmount } = render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} />)
+    const nonWindows = screen.getByTestId('installer-download').textContent
+    unmount()
+
+    render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} isWindows />)
+    expect(screen.getByTestId('installer-download').textContent).toBe(nonWindows)
+    expect(screen.getByText('Unpack the client files')).toBeTruthy()
   })
 
   it('will not start either route before a destination is chosen', () => {
@@ -239,15 +265,6 @@ describe('DarkAgesInstallPanel', () => {
       await waitFor(() =>
         expect(onChange).toHaveBeenCalledWith({ clientPath: 'C:\\Games\\DarkAges' })
       )
-    })
-
-    it('offers unpacking as an alternative rather than the only route', () => {
-      // The official installer works on Windows and stays the recommended way in.
-      // Claiming to "install" Dark Ages here would also overstate what an unpack
-      // produces: no registry entries, no Start-menu shortcut, no uninstaller.
-      render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} isWindows />)
-      expect(screen.getByText(/run the official installer instead/i)).toBeTruthy()
-      expect(screen.queryByText(/only runs on Windows/i)).toBeNull()
     })
   })
 
