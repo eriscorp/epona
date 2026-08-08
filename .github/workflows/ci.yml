@@ -8,13 +8,20 @@
 # is the point: keep `eslint .` at zero permanently instead of letting warnings
 # collect.
 #
-# Runs on windows-2022, for two reasons:
+# The `check` and `e2e` jobs run on windows-2022, for two reasons:
 #   1. `npm ci` runs `postinstall` -> `electron-builder install-app-deps`, which
 #      rebuilds the Windows-only `da-win32` native addon.
 #   2. Epona's main process is Windows-specific (netstat parsing, taskkill,
 #      PowerShell console wrappers), and its tests assert that behaviour.
 # The 2022 pin matches release.yml: windows-latest carries VS 18, which
 # node-gyp 11.5.0 cannot parse.
+#
+# `unit-posix` covers the other two platforms. That reason above is real for the
+# addon and for e2e, and it does NOT extend to the unit suite: release.yml builds
+# and signs macOS and Linux artifacts, so until this job existed both platforms
+# were first exercised at tag time, on the file users download. Every POSIX code
+# path was unrun — killPosixTree, the hybrasylTarget spawn guards, serverTarget's
+# non-Windows direct spawn. The tests were there; nothing ran them.
 
 name: CI
 
@@ -61,6 +68,54 @@ jobs:
       # audited by hand instead — the other half of the no-dependabot decision.
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+
+  # Lint and unit tests on the two platforms release.yml ships and CI never
+  # exercised. No native addon and no e2e here: the addon is Windows-only by
+  # design, and the Playwright specs need a built app.
+  unit-posix:
+    name: Unit tests (${{ matrix.os }})
+    strategy:
+      # One platform failing should not hide the other's result — the whole
+      # point of this job is to see POSIX behaviour separately.
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # `--ignore-scripts` is required, not a speed-up. `da-win32` sets
+      # `gypfile: true`, so a plain `npm ci` invokes node-gyp on it, and its
+      # binding.gyp is Windows-only — the install fails outright on both of
+      # these runners. It also skips `postinstall` (electron-builder
+      # install-app-deps) and electron's own binary download, neither of which
+      # the unit suite touches: nothing here imports the addon or launches
+      # Electron, and the one file that would (`legacyTarget.js`) resolves it to
+      # null off Windows.
+      #
+      # esbuild and rollup survive `--ignore-scripts` because both resolve their
+      # native binary through platform-specific OPTIONAL dependencies
+      # (`@esbuild/linux-x64`, `@rollup/rollup-darwin-arm64`, …) which are in
+      # package-lock.json and which npm installs by platform. esbuild's
+      # postinstall only fixes up the CLI shim; vitest and vite use the JS API,
+      # which reads the optional package directly. Checked rather than assumed —
+      # this is the step most likely to be "simplified" back to a plain npm ci.
+      - name: Install dependencies (no native builds)
+        run: npm ci --ignore-scripts
+
+      - name: Lint (0 warnings tolerated)
+        run: npm run lint:check
+
+      - name: Test
+        run: npm test
 
   # The Playwright/Electron specs drive the BUILT app and measure real window
   # geometry, so they need the native addon and a full build. They are slower
