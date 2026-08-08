@@ -12,6 +12,17 @@ export function describeAssetDir(result) {
     return `${result.datCount} Dark Ages data file${result.datCount === 1 ? '' : 's'} found`
   }
   switch (result.reason) {
+    case 'incomplete-client': {
+      // From verifyClientTree, so the folder holds .dat files but not the ones a
+      // real installation always has. Naming the first few beats a count: it is
+      // what tells a user whether they picked a partial copy or the wrong folder.
+      const missing = Array.isArray(result.missing) ? result.missing : []
+      const shown = missing.slice(0, 3).join(', ')
+      const more = missing.length > 3 ? `, and ${missing.length - 3} more` : ''
+      return missing.length > 0
+        ? `Incomplete Dark Ages folder — missing ${shown}${more}`
+        : 'Incomplete Dark Ages folder'
+    }
     case 'unset':
       return 'No folder selected yet'
     case 'missing':
