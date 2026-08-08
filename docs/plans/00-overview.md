@@ -58,9 +58,18 @@ Instance-lifecycle test coverage (HTOO-99) and the `untrackPidInstance` merge it
 
 The Legacy tab off Windows (HTOO-296), the cross-platform client unpacker, and the `EPONA_DISABLE_GPU` override. See `CHANGELOG.md` for the user-facing statement of each.
 
+**Plus a housekeeping pass on 2026-08-08** — this index and the register (PR #35, HTOO-330), the Linux icon set and window association (#36, HTOO-38 + HTOO-63), three dev-transitive advisories (#37), and the update-available banner (#38, HTOO-65).
+
+Two of those four taught the build something the plan could not have known, and both lessons are about **checks that pass for the wrong reason**:
+
+- **#36 first generated the Linux icon set from `build/icon.png`, the star, and it passed everything HTOO-38 specifies** — 1024×1024, full-bleed, real alpha. The card's invariant is necessary and not sufficient: it answers _is this artwork usable_, not _is this the right artwork_. Taking the square tile instead then uncovered a defect nobody had filed — `build/epona-mac-icon.png` was vendored before its alpha was repaired, and `make-mac-icns.mjs` had been reconstructing the corners with a flood-fill ever since. **A repair that works hides the input that needed it.**
+- **#38's two UI defects were found by writing a test, not by reading two implementations.** `getByRole('button', { name: /close/i })` had nothing to match, because MUI's `Alert` drops its own close button when `action` is passed — and that in turn is what made a clickaway the only way to dismiss the banner it was ported from. **The two defects hid each other**, which is why reading the source found neither.
+
 ## Build order (current — 2026-08-08)
 
 **Nothing is scheduled here.** Take work from the tracker; consult [`00a-backlog.md`](00a-backlog.md) before proposing a cleanup, because the thing you are about to propose may already have been declined with a reason.
+
+**One artifact check is owed** and is not in any card's done column yet: the Linux `.deb` payload for HTOO-38 and HTOO-63 — the `hicolor` size set, a full-bleed 256, and `usr/share/applications/epona.desktop` with a matching `StartupWMClass`. `fpm` does not run on Windows, so #36 verified at the `app-builder-lib` level instead. Do it on the next Linux release.
 
 ## Binding conventions
 

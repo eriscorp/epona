@@ -40,6 +40,10 @@ The five survivors of `complete/efficiency-review-2026-07-12.md`, carried here w
 
 ## Owed elsewhere — real work, but not this repo's code
 
-- **An update-available banner (HTOO-65).** Epona has none, and the card's own decision is that **the work is not "add a banner to nine apps"**: creidhne and corvath grew one independently and converged on the same scope — check a version, tell the user, no `electron-updater` and no auto-download. Two adopters choosing the same shape without coordinating means the shape belongs in `hyb-electron-template`, and the nine adopt it from there. Building a third hand-rolled checker in Epona is exactly what produces eleven notions of what "newer" means. **Trigger:** the template landing one. What Epona owes then is adoption, not design.
+- **Reconciling the update banner with the template (HTOO-65).** ~~Epona has none.~~ **Shipped 2026-08-08** in PR #38 — but as a **lift**, not a design: `src/main/updateCheck.js` and `components/UpdateSnackbar.jsx` are near-verbatim ports of creidhne's, changing the repo URL and the User-Agent and nothing else. creidhne and corvath grew an update check independently and converged on the same scope, and HTOO-65's call is that a third hand-rolled one gives eleven apps eleven notions of what "newer" means.
+
+  What is **still parked** is the reconciliation. When `hyb-electron-template` adopts one of the two, Epona should _diff_ against it rather than keep its own copy — which is why the port is deliberately faithful. **Trigger:** the template landing an implementation.
+
+  Two divergences are already known and belong upstream, both found by porting rather than by reading: MUI's `Alert` drops its own close button when `action` is passed, so creidhne's banner has no X — which makes its second defect, a clickaway writing the permanent per-version dismissal, the only way out rather than an edge case. Epona fixes both. **Do not quietly re-align to the template on these two** if the template takes creidhne's copy unfixed; fix the template.
 
 - **A Tier-1 design doc.** Epona has no `<app>-design.md` in the document repo (`00-overview.md`, decision 1). It cannot live in this repo, so it can never be a WP here. **Trigger:** a change large enough that its "why" needs settling before its "how" — a second launcher target family, or a rewrite of the instance model.
