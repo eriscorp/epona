@@ -1,10 +1,9 @@
-import { useState, useEffect, forwardRef } from 'react'
-import { ThemeProvider, CssBaseline, GlobalStyles, alpha, Tooltip } from '@mui/material'
+import { useState, useEffect } from 'react'
+import { ThemeProvider, CssBaseline, GlobalStyles, alpha } from '@mui/material'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
-import Alert from '@mui/material/Alert'
 import hybrasylTheme from './themes/hybrasyl'
 import chadulTheme from './themes/chadul'
 import danaanTheme from './themes/danaan'
@@ -18,6 +17,7 @@ import OptionsPanel from './components/OptionsPanel'
 import HybrasylClientPanel from './components/HybrasylClientPanel'
 import ServerInstancePanel from './components/ServerInstancePanel'
 import ActionButtons from './components/ActionButtons'
+import LegacyAssetsPanel from './components/LegacyAssetsPanel'
 import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
@@ -34,29 +34,10 @@ const kindToIndex = (k) => {
   return i >= 0 ? i : 0
 }
 
-// Which tab to open on startup. The Legacy client is Windows-only (it patches
-// the running Dark Ages.exe via native Win32 APIs), so never land a non-Windows
-// user on it — fall back to the Hybrasyl client tab.
-const startupTabIndex = (targetKind, isWindows) => {
-  const i = kindToIndex(targetKind)
-  if (!isWindows && TAB_ORDER[i] === 'legacy') return kindToIndex('hybrasyl')
-  return i
-}
-
-// The disabled Legacy tab on non-Windows, with a hover tooltip. A disabled
-// element doesn't fire pointer events, so the tooltip anchors on a span wrapper;
-// the props <Tabs> injects into its children (value/selected/onChange/etc.) are
-// forwarded to the real Tab rather than spread onto the span (which would warn
-// about unknown DOM attributes).
-const LegacyTabDisabled = forwardRef(function LegacyTabDisabled(props, ref) {
-  return (
-    <Tooltip title="Legacy client is only supported on Windows">
-      <Box component="span" sx={{ flexGrow: 1, display: 'flex' }}>
-        <Tab {...props} ref={ref} disabled sx={{ flexGrow: 1 }} />
-      </Box>
-    </Tooltip>
-  )
-})
+// Which tab to open on startup. Every tab is valid on every platform: the
+// Legacy tab shows the Dark Ages asset folder off Windows rather than a launch
+// surface, so there is no longer a persisted target to redirect away from.
+const startupTabIndex = (targetKind) => kindToIndex(targetKind)
 
 // MAIN_W / PANE_W live in uiConstants.js so SettingsPane and LogPane size
 // themselves from the same numbers this resize request is built from.
@@ -85,9 +66,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState(() =>
-    startupTabIndex(defaultSettings.targetKind, isWindows)
-  )
+  const [activeTab, setActiveTab] = useState(() => startupTabIndex(defaultSettings.targetKind))
   const [logPaneOpen, setLogPaneOpen] = useState(false)
   // Server running-state comes from the main process, which polls tracked-process
   // liveness and probes each instance's lobby port. Keeping our own guess here is
@@ -100,7 +79,7 @@ export default function App() {
 
   useEffect(() => {
     hydrate().then((s) => {
-      if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind, isWindows))
+      if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind))
       // Settings are hydrated and applied — tell the main process to dismiss the
       // splash and reveal the main window (now painting a populated first frame).
       window.sparkAPI.appReady()
@@ -260,11 +239,7 @@ export default function App() {
             variant="fullWidth"
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >
-            {isWindows ? (
-              <Tab value={0} label="Legacy Client" />
-            ) : (
-              <LegacyTabDisabled value={0} label="Legacy Client" />
-            )}
+            <Tab value={0} label="Legacy Client" />
             <Tab value={1} label="Hybrasyl Client" />
             <Tab value={2} label="Hybrasyl Server" />
           </Tabs>
@@ -272,28 +247,27 @@ export default function App() {
 
           {activeTab === 0 && (
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-              {!isWindows && (
-                <Alert severity="warning" variant="outlined">
-                  Legacy Client requires Windows — it patches the running .exe via native Win32
-                  APIs. On macOS or Linux you&apos;ll need a compatibility layer (Wine, CrossOver,
-                  etc.) and we can&apos;t promise it&apos;ll work.
-                </Alert>
+              {isWindows ? (
+                <>
+                  <ProfileSelector
+                    profiles={settings.profiles}
+                    activeProfile={settings.activeProfile}
+                    onChange={(id) => update({ activeProfile: id })}
+                  />
+                  <OptionsPanel
+                    settings={settings}
+                    onChange={update}
+                    availablePatches={availablePatches}
+                  />
+                  <ActionButtons
+                    targetKind="legacy"
+                    settings={settings}
+                    getActiveProfile={getActiveProfile}
+                  />
+                </>
+              ) : (
+                <LegacyAssetsPanel clientPath={settings.clientPath} onChange={update} />
               )}
-              <ProfileSelector
-                profiles={settings.profiles}
-                activeProfile={settings.activeProfile}
-                onChange={(id) => update({ activeProfile: id })}
-              />
-              <OptionsPanel
-                settings={settings}
-                onChange={update}
-                availablePatches={availablePatches}
-              />
-              <ActionButtons
-                targetKind="legacy"
-                settings={settings}
-                getActiveProfile={getActiveProfile}
-              />
             </Box>
           )}
 

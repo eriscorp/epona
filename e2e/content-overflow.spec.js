@@ -122,10 +122,11 @@ test.describe('Content never overflows the window', () => {
 
     // Exact labels — /Hybrasyl/ alone matches both the Client and Server tabs.
     for (const tab of ['Legacy Client', 'Hybrasyl Client', 'Hybrasyl Server']) {
-      const target = page.getByRole('tab', { name: tab, exact: true })
-      // The Legacy tab renders disabled off Windows.
-      if (!(await target.isEnabled())) continue
-      await target.click()
+      // Every tab is enabled on every platform since HTOO-296 — the Legacy tab
+      // shows the Dark Ages asset folder off Windows rather than a disabled
+      // launch surface. The skip that used to be here would now hide a real
+      // overflow rather than step around an unusable tab.
+      await page.getByRole('tab', { name: tab, exact: true }).click()
       await expectNoOverflow(page, `${tab} tab`)
     }
   })

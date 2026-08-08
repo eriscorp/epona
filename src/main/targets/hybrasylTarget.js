@@ -106,7 +106,7 @@ export async function launch(config, profile, daClientPath) {
       error:
         process.platform === 'win32'
           ? 'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
-          : 'Dark Ages assets path not set — use the Locate Assets button on the toolbar to pick a folder containing Dark Ages assets.'
+          : 'Dark Ages folder not set — open the Legacy Client tab and pick the folder containing your Dark Ages data files.'
     }
   }
 

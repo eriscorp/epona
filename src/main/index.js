@@ -14,6 +14,7 @@ import {
   MIN_WINDOW_HEIGHT
 } from '../shared/remoteSession.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
+import { inspectAssetDir } from './daAssets.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
 import {
@@ -702,6 +703,11 @@ app.whenReady().then(() => {
     readDataStore(dataDir, configFileName)
   )
   ipc.handle('instance:isHybrasylDataDir', async (_, dataDir) => isHybrasylDataDir(dataDir))
+
+  // Does the configured Dark Ages folder look like one? Only the Legacy tab on
+  // macOS and Linux asks — on Windows clientPath is an exe and clientVersions
+  // already answers a sharper question about it.
+  ipc.handle('assets:inspect', async (_, dirPath) => inspectAssetDir(dirPath))
 
   // Open a path in the OS file explorer. Used by the LogDir quick-open button.
   // shell.openPath returns '' on success, error string on failure.

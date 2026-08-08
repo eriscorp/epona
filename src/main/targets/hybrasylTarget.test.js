@@ -164,10 +164,14 @@ describe('launch (pre-spawn validation)', () => {
   it('errors when daClientPath is empty', async () => {
     const result = await launch({ mode: 'binary', binaryPath: '' }, null, '')
     expect(result.success).toBe(false)
+    // Both messages name where to go and fix it, and the destination differs by
+    // platform: Windows picks an exe from the toolbar, everywhere else picks a
+    // folder in the Legacy Client tab (HTOO-296).
     expect(result.error).toMatch(
-      process.platform === 'win32'
-        ? /Dark Ages client path not set/
-        : /Dark Ages assets path not set/
+      process.platform === 'win32' ? /Dark Ages client path not set/ : /Dark Ages folder not set/
+    )
+    expect(result.error).toMatch(
+      process.platform === 'win32' ? /Locate Client button/ : /Legacy Client tab/
     )
   })
 

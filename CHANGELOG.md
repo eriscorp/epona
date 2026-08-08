@@ -18,6 +18,15 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ## [Unreleased]
 
+### Changed
+
+- **The Legacy Client tab now works on macOS and Linux.** It used to be greyed
+  out with a tooltip saying the legacy client needs Windows, which is true of
+  *launching* and not of the Dark Ages files themselves — the Hybrasyl client
+  reads its graphics and sound from them. The tab now shows your Dark Ages
+  folder, tells you whether it can find the data files there, and lets you
+  change it. Windows is unchanged.
+
 ### Added
 
 - **`EPONA_DISABLE_GPU` overrides the Remote Desktop rendering decision.** Set it

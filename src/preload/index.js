@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   removeWorktree: (repoPath, branch, force) =>
     ipcRenderer.invoke('worktrees:remove', repoPath, branch, force),
   isHybrasylDataDir: (dataDir) => ipcRenderer.invoke('instance:isHybrasylDataDir', dataDir),
+  inspectAssetDir: (dirPath) => ipcRenderer.invoke('assets:inspect', dirPath),
   openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
   saveLog: (content, defaultFileName) =>
     ipcRenderer.invoke('log:save', { content, defaultFileName }),
