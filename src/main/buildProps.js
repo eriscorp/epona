@@ -54,6 +54,71 @@ export async function writeBuildProps(serverWorktreePath, xmlCsprojAbsPath) {
   return { written: true, path: filePath }
 }
 
+// Who currently has a redirect written into which server worktree.
+//   serverWorktreePath → Map<ownerId, { xmlCsprojAbsPath, xmlBranchLabel }>
+//
+// The file itself cannot answer "is somebody else using this?", because it
+// records a path and not who asked for it. Two instances on the same server
+// branch share one worktree, so the second launch silently rewrote the first
+// one's redirect and the first instance's next `dotnet` invocation picked up
+// the wrong XML. Nothing errored; the build was just wrong. See HTOO-89.
+//
+// In-memory on purpose, and it is the same trade worktreeManager's refcounts
+// make: state is per-Epona-session, so a redirect left behind by a crash has
+// no claimant and is overwritten exactly as before. That is deliberate — a
+// guard that outlived the process would turn a crash into a wedged launch that
+// only a manual file delete could clear.
+const claims = new Map()
+
+// MSBuild path comparison. Both sides come from the same join + toWindowsPath,
+// so an exact match after normalising separators is enough; nothing here
+// invents case-folding policy.
+function sameXmlTarget(a, b) {
+  return toWindowsPath(a) === toWindowsPath(b)
+}
+
+// Claim the redirect for one owner. Returns { ok: true } when the write may go
+// ahead — either nobody holds this worktree, or every holder wants the same
+// XML csproj and the file they need is the file we are about to write.
+//
+// Returns { ok: false, conflict } when a live owner has it pointed somewhere
+// else. The caller must not write in that case: the other instance is running
+// against this worktree and would silently start building the wrong XML.
+export function claimBuildProps(serverWorktreePath, xmlCsprojAbsPath, ownerId, xmlBranchLabel) {
+  const owners = claims.get(serverWorktreePath) ?? new Map()
+  for (const [id, held] of owners) {
+    if (id === ownerId) continue
+    if (!sameXmlTarget(held.xmlCsprojAbsPath, xmlCsprojAbsPath)) {
+      return { ok: false, conflict: { ownerId: id, ...held } }
+    }
+  }
+  owners.set(ownerId, { xmlCsprojAbsPath, xmlBranchLabel })
+  claims.set(serverWorktreePath, owners)
+  return { ok: true }
+}
+
+// Drop one owner's claim. Returns { last } — true when no other owner holds
+// this worktree, which is the caller's signal that removing the file is safe.
+// Without that signal, stopping one of two instances sharing a worktree would
+// pull the redirect out from under the one still running: the same defect as
+// the overwrite, reached from the teardown side instead.
+export function releaseBuildProps(serverWorktreePath, ownerId) {
+  const owners = claims.get(serverWorktreePath)
+  if (!owners) return { last: true }
+  owners.delete(ownerId)
+  if (owners.size === 0) {
+    claims.delete(serverWorktreePath)
+    return { last: true }
+  }
+  return { last: false }
+}
+
+// Test-only. Production code releases what it claims; tests want a clean slate
+// without threading owner ids through every case.
+export function _resetClaimsForTests() {
+  claims.clear()
+}
+
 // Removes Directory.Build.props from the server worktree root. Idempotent —
 // missing file is a no-op. Called when an instance with xmlBranch is torn
 // down so the worktree falls back to the NuGet PackageReference for the

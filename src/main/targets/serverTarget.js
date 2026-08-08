@@ -5,7 +5,12 @@ import { check as redisCheck } from '../redisProbe.js'
 import { isPortInUse } from '../portProbe.js'
 import { readDataStore } from '../serverConfigs.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
-import { writeBuildProps, removeBuildProps } from '../buildProps.js'
+import {
+  writeBuildProps,
+  removeBuildProps,
+  claimBuildProps,
+  releaseBuildProps
+} from '../buildProps.js'
 import { resolveDotnetPath } from '../dotnet.js'
 
 // Strip a case-insensitive .xml suffix; the server's `--config` flag wants
@@ -116,6 +121,13 @@ async function csprojSupportsLocalXml(serverWorktreePath) {
   } catch {
     return false
   }
+}
+
+// Name an instance's XML selection the way the user set it. An empty string is
+// the "use the XML repo in place" option rather than a branch, and calling that
+// a branch in an error message sends the reader looking for one.
+export function describeXmlBranch(xmlBranch) {
+  return xmlBranch ? `XML branch "${xmlBranch}"` : 'the XML checkout in place'
 }
 
 // Friendly-message preflight: is every field the launcher actually needs
@@ -264,6 +276,7 @@ async function launchRepo(instance) {
   //    Under xmlNoGit, skip the worktree but still write build-props pointing
   //    at the picked XML repo's csproj — local-XML override stays functional.
   let releaseXml = async () => {}
+  let didClaimBuildProps = false
   let didWriteBuildProps = false
   // Single teardown for every exit path — undo build-props, then release the
   // XML worktree, then the server worktree. Reads the mutable vars at call time
@@ -272,7 +285,19 @@ async function launchRepo(instance) {
   // and spawn-failure paths can both just `await cleanup()`.
   const cleanup = async () => {
     try {
-      if (didWriteBuildProps) await removeBuildProps(serverWorktreePath)
+      // Release the claim whenever we took one, even if the write that was
+      // meant to follow it never happened — a claim held by a launch that
+      // failed would block the next launch on a different XML branch for the
+      // rest of the session.
+      //
+      // Only the LAST claimant removes the file. Two instances sharing a
+      // worktree and the same XML branch both wrote it; if the first to stop
+      // deleted it, the one still running would fall back to the NuGet
+      // package on its next build. See HTOO-89.
+      if (didClaimBuildProps) {
+        const { last } = releaseBuildProps(serverWorktreePath, instance.id)
+        if (didWriteBuildProps && last) await removeBuildProps(serverWorktreePath)
+      }
     } catch {
       /* best effort */
     }
@@ -308,6 +333,26 @@ async function launchRepo(instance) {
         releaseXml = () => releaseWorktree(instance.xmlRepoPath, instance.xmlBranch)
       }
       const xmlCsproj = join(xmlWorktreePath, 'src', 'Hybrasyl.Xml.csproj')
+      // Directory.Build.props is keyed by the server worktree alone, and two
+      // instances on one server branch share that worktree. Refuse rather than
+      // overwrite: the instance already running would keep its process but
+      // start building against the other one's XML at its next dotnet
+      // invocation, with nothing reported anywhere. See HTOO-89.
+      const claim = claimBuildProps(serverWorktreePath, xmlCsproj, instance.id, instance.xmlBranch)
+      if (!claim.ok) {
+        await releaseXml()
+        await releaseServer()
+        return {
+          success: false,
+          error:
+            `Another running instance already points this server worktree at ` +
+            `${describeXmlBranch(claim.conflict.xmlBranchLabel)}, and this one needs ` +
+            `${describeXmlBranch(instance.xmlBranch)}. They share one ` +
+            `Directory.Build.props because they share a server branch. Stop the ` +
+            `other instance, or put both on the same XML branch.`
+        }
+      }
+      didClaimBuildProps = true
       await writeBuildProps(serverWorktreePath, xmlCsproj)
       didWriteBuildProps = true
     }
