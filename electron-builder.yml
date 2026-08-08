@@ -173,10 +173,12 @@ nsis:
   createDesktopShortcut: always
 mac:
   category: public.app-category.games
-  # macOS gets its own artwork, not the star win/linux use: the Dock expects a
+  # macOS gets the square tile, not the star Windows uses: the Dock expects a
   # squircle inset to Apple's icon grid, and a full-bleed square renders larger
   # than every native app beside it. build/icon.icns is generated from
-  # build/epona-mac-icon.png by scripts/make-mac-icns.mjs and committed.
+  # build/icon-square.png by scripts/make-icons.mjs and committed — the same
+  # master and the same generator that write the Linux set below, so the two
+  # platforms cannot drift apart.
   icon: build/icon.icns
   # da-win32 is a Windows-only native module; on macOS it compiles to an
   # empty stub that's never require()'d (the load is gated behind
@@ -204,16 +206,20 @@ linux:
   #    512, so nothing indexed it and every Linux desktop drew its generic
   #    blank-document icon. That is what shipped through 2.7.2.
   # 2. The Linux source list is [linux.icon, mac.icon ?? icon] — mac.icon
-  #    OUTRANKS the top-level icon. Epona sets mac.icon (its own squircle
-  #    artwork), so deleting this key does not fall back to build/icon.png; it
-  #    ships the macOS squircle on Linux. buildResources/icons is only used when
-  #    that list is empty, which mac.icon guarantees it never is.
+  #    OUTRANKS the top-level icon. Epona sets mac.icon, so deleting this key
+  #    does not fall back to the top-level build/icon.png; it hands Linux the
+  #    .icns, whose entries are inset to Apple's grid and draw ~12% small.
+  #    buildResources/icons is only used when that list is empty, which mac.icon
+  #    guarantees it never is.
   #
-  # The eight PNGs are generated from build/icon.png — the full-bleed star, NOT
-  # the macOS master, which is inset to Apple's grid and would draw ~12% small at
-  # every size. Committed rather than built in CI, exactly as build/icon.icns is.
-  # Regenerate with `node scripts/make-linux-icons.mjs`; scripts/icons.test.mjs
-  # fails if the tree drifts from the eight expected files.
+  # The eight PNGs come from build/icon-square.png, the same full-bleed master
+  # the .icns above is built from — the square tile, NOT the star, which stays
+  # Windows-only because build/portable-splash.bmp is composed from it. Linux
+  # desktops that draw square icons (Cinnamon among them) render a star's
+  # transparent corners as a smaller icon than its neighbours even when its
+  # bounding box is correct. Committed rather than built in CI, exactly as
+  # build/icon.icns is. Regenerate BOTH with `node scripts/make-icons.mjs`;
+  # scripts/icons.test.mjs fails if the tree drifts from the eight files.
   icon: build/icons
   # electron uses desktopName as app_id / WM_CLASS. Without the pair, the
   # installed entry is keyed to productName ("Epona") while Electron reports

@@ -3,18 +3,18 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { describe, expect, it } from 'vitest'
 
-// build/icons/ is GENERATED but COMMITTED — CI has no ImageMagick, so
-// electron-builder reads whatever is in the tree. That makes it exactly the kind
-// of thing that goes stale silently: change build/icon.png, forget
-// `node scripts/make-linux-icons.mjs`, and the build stays green while the .deb
-// ships the previous artwork at the previous sizes.
+// build/icons/ and build/icon.icns are GENERATED but COMMITTED — CI has no
+// ImageMagick, so electron-builder reads whatever is in the tree. That makes
+// them exactly the kind of thing that goes stale silently: change
+// build/icon-square.png, forget `node scripts/make-icons.mjs`, and the build
+// stays green while the package ships the previous artwork.
 //
 // This reads PNG headers directly rather than shelling out, so it needs no
 // ImageMagick and runs in the ordinary suite. It therefore checks the two
 // properties a header carries — geometry and colour type — and NOT the alpha
-// bounding box, which needs pixel decoding. make-linux-icons.mjs asserts the
-// bounding boxes itself, at the moment it writes them, which is where the check
-// that needs a decoder belongs.
+// bounding box, which needs pixel decoding. make-icons.mjs asserts the bounding
+// boxes itself, at the moment it writes them, which is where the check that
+// needs a decoder belongs.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUILD = join(REPO_ROOT, 'build')
 
@@ -37,14 +37,55 @@ function readHeader(path) {
 }
 
 describe('committed icon artifacts', () => {
-  it('build/icon.png is the 1024 RGBA Windows/Linux master', () => {
-    // Every file in build/icons/ is derived from this one. The generator
-    // additionally asserts it is full-bleed before it reads it.
+  it('build/icon-square.png is the 1024 RGBA master', () => {
+    // Both build/icon.icns and every file in build/icons/ are derived from this
+    // one. The generator additionally asserts it is full-bleed and that its
+    // alpha is not constant before it reads it — the check that matters most
+    // here, because an opaque master is what Epona shipped until 2.7.2.
+    expect(readHeader(join(BUILD, 'icon-square.png'))).toEqual({
+      width: 1024,
+      height: 1024,
+      colorType: RGBA
+    })
+  })
+
+  it('build/icon.png is the 1024 RGBA Windows master', () => {
+    // Deliberately different artwork — the star. Nothing generates it, and
+    // build/portable-splash.bmp is composed from it, so this only pins that it
+    // has not been replaced or folded into the square master.
     expect(readHeader(join(BUILD, 'icon.png'))).toEqual({
       width: 1024,
       height: 1024,
       colorType: RGBA
     })
+  })
+
+  it('build/icon.icns holds the ten expected entries', () => {
+    // An icns is a header plus length-prefixed OSType chunks. Reading the type
+    // list is enough to catch the failure that matters: a regeneration that
+    // wrote a short set, which macOS resolves by scaling a neighbour rather
+    // than by failing.
+    const buf = readFileSync(join(BUILD, 'icon.icns'))
+    expect(buf.subarray(0, 4).toString('ascii')).toBe('icns')
+    expect(buf.readUInt32BE(4)).toBe(buf.length)
+
+    const types = []
+    for (let o = 8; o + 8 <= buf.length; ) {
+      types.push(buf.subarray(o, o + 4).toString('ascii'))
+      o += buf.readUInt32BE(o + 4)
+    }
+    expect(types).toEqual([
+      'icp4',
+      'icp5',
+      'ic11',
+      'ic12',
+      'ic07',
+      'ic13',
+      'ic08',
+      'ic14',
+      'ic09',
+      'ic10'
+    ])
   })
 
   it('build/icons/ holds exactly the eight hicolor sizes and nothing else', () => {

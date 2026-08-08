@@ -81,13 +81,14 @@ divergence from the skeleton, not an oversight. The full gate is
 - **Register IPC handlers on `ipc`, never the raw `ipcMain`.** `guardIpc` wraps it once in
   `whenReady` so the sender check applies by construction; a handler added on the raw import
   silently opts out of it. See `src/main/windowSecurity.js`.
-- **There are two icon masters and two generators.** `build/icon.png` is the star: Windows reads it
-  directly, and `scripts/make-linux-icons.mjs` resamples it into the committed `build/icons/` set
-  Linux installs. macOS uses `build/icon.icns` instead — a squircle drawn for the Dock, vendored from
-  the document repo's `docs/logos/macros/Epona.png` to `build/epona-mac-icon.png` and packed by
-  `scripts/make-mac-icns.mjs`. **Change the star and you owe `make-linux-icons.mjs` a run;**
-  `scripts/icons.test.mjs` catches the drift, and macOS stays stale either way with nothing to warn
-  you.
+- **There are two icon masters and one generator.** `build/icon.png` is the star and is **Windows
+  only** — `build/portable-splash.bmp` is composed from it, so the two have to agree.
+  `build/icon-square.png` is the square tile (vendored from the document repo's
+  `docs/logos/macros/Epona_fixed.png`) and drives **both** macOS and Linux: `scripts/make-icons.mjs`
+  writes `build/icon.icns` and the `build/icons/` hicolor set from it. **Change the square master and
+  you owe `make-icons.mjs` a run**; `scripts/icons.test.mjs` catches the drift. Take the `_fixed`
+  variant if you ever re-vendor — the plain `Epona.png` is opaque, its corners flattened to black,
+  and the generator rejects it.
 - **`linux.icon` must stay a directory and must stay explicit.** electron-builder resolves the Linux
   icon as `[linux.icon, mac.icon ?? icon]`, so `mac.icon` outranks the top-level `icon` — deleting
   the key ships the macOS squircle on Linux rather than falling back to the star. And a single PNG is
