@@ -27,6 +27,12 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 - **A Legacy launch that cannot be patched no longer starts the client.**
   Previously only a ground-item-hints failure stopped it — any other failure,
   including an unresolvable hostname, let a partly patched client run.
+- **Two server instances on one branch no longer fight over the local XML
+  redirect.** Instances on the same server branch share a working copy, so
+  starting a second one against a different XML branch silently repointed the
+  first one's build. Epona now refuses that launch and names both branches.
+  Two instances that want the *same* XML branch still share it, and stopping
+  one no longer pulls the redirect out from under the other.
 
 ## [2.7.2] - 2026-08-07
 

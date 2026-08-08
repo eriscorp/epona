@@ -2,12 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { writeBuildProps, removeBuildProps } from './buildProps.js'
+import {
+  writeBuildProps,
+  removeBuildProps,
+  claimBuildProps,
+  releaseBuildProps,
+  _resetClaimsForTests
+} from './buildProps.js'
 
 let workDir
 
 beforeEach(async () => {
   workDir = await fs.mkdtemp(join(tmpdir(), 'epona-buildprops-'))
+  _resetClaimsForTests()
 })
 
 afterEach(async () => {
@@ -84,5 +91,68 @@ describe('removeBuildProps', () => {
 
   it('throws when serverWorktreePath is missing', async () => {
     await expect(removeBuildProps('')).rejects.toThrow(/serverWorktreePath/)
+  })
+})
+
+// HTOO-89. Two instances on one server branch share a worktree, and the
+// redirect is keyed by that worktree alone.
+describe('claimBuildProps / releaseBuildProps', () => {
+  const WT = 'E:\\repos\\server\\.worktrees\\develop'
+  const XML_A = 'E:\\repos\\xml\\.worktrees\\feature-a\\src\\Hybrasyl.Xml.csproj'
+  const XML_B = 'E:\\repos\\xml\\.worktrees\\feature-b\\src\\Hybrasyl.Xml.csproj'
+
+  it('lets the first claimant through', () => {
+    expect(claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')).toEqual({ ok: true })
+  })
+
+  it('refuses a second owner that wants a different XML target', () => {
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    const result = claimBuildProps(WT, XML_B, 'inst-2', 'feature-b')
+    expect(result.ok).toBe(false)
+    expect(result.conflict).toMatchObject({ ownerId: 'inst-1', xmlBranchLabel: 'feature-a' })
+  })
+
+  it('allows a second owner that wants the same XML target', () => {
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    expect(claimBuildProps(WT, XML_A, 'inst-2', 'feature-a')).toEqual({ ok: true })
+  })
+
+  it('compares the target by path, not by branch label', () => {
+    // Same csproj reached with the other separator: still the same file, so
+    // this must not read as a conflict.
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    expect(claimBuildProps(WT, XML_A.replace(/\\/g, '/'), 'inst-2', 'whatever')).toEqual({
+      ok: true
+    })
+  })
+
+  it('does not conflict with itself when the same owner relaunches', () => {
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    expect(claimBuildProps(WT, XML_B, 'inst-1', 'feature-b')).toEqual({ ok: true })
+  })
+
+  it('keys claims by worktree, so a different server branch is unaffected', () => {
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    const other = 'E:\\repos\\server\\.worktrees\\main'
+    expect(claimBuildProps(other, XML_B, 'inst-2', 'feature-b')).toEqual({ ok: true })
+  })
+
+  it('reports the last release so only it removes the file', () => {
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    claimBuildProps(WT, XML_A, 'inst-2', 'feature-a')
+    expect(releaseBuildProps(WT, 'inst-1')).toEqual({ last: false })
+    expect(releaseBuildProps(WT, 'inst-2')).toEqual({ last: true })
+  })
+
+  it('frees the worktree once released, so the next launch can differ', () => {
+    claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
+    releaseBuildProps(WT, 'inst-1')
+    expect(claimBuildProps(WT, XML_B, 'inst-2', 'feature-b')).toEqual({ ok: true })
+  })
+
+  it('treats an unknown release as the last one', () => {
+    // A crash-left file has no claimant. Reporting `last` lets teardown clean
+    // it up rather than leaving it to wedge the next launch.
+    expect(releaseBuildProps(WT, 'never-claimed')).toEqual({ last: true })
   })
 })
