@@ -34,10 +34,16 @@ export async function readChangelog() {
   return cached
 }
 
-// No unit test imports this module: `__dirname` exists only in the electron-vite
-// CJS bundle, not under vitest's ESM loader. The logic worth testing lives in
-// src/shared/changelog.js; that this file finds the packaged file is an e2e
-// concern, covered by e2e/whats-new.spec.js against a real build.
+// This used to say no unit test could import it, on the grounds that `__dirname`
+// exists only in the electron-vite CJS bundle. That was wrong — vite defines
+// `__dirname` per module, so `changelog.test.js` imports this file directly, and
+// the relative path above resolves from `src/main` to the repository's own
+// CHANGELOG.md just as it resolves from `out/main` to the packaged one. That makes
+// the two-levels-up convention a unit assertion rather than only an e2e one.
+//
+// e2e/whats-new.spec.js still earns its place: it proves the file is actually
+// PRESENT in a packaged build, which is a question about the electron-builder
+// `files` allowlist and cannot be answered from the source tree.
 export function registerChangelogHandlers(ipcMain) {
   ipcMain.handle('changelog:read', () => readChangelog())
 }
