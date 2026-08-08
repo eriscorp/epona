@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   copyReport: (payload) => ipcRenderer.invoke('diagnostics:copyReport', payload),
   // What's New — the parsed sections of the CHANGELOG.md packaged with this build.
   readChangelog: () => ipcRenderer.invoke('changelog:read'),
+  // Update notification — resolves to a result object, never rejects. Takes no
+  // argument: main reads the running version itself.
+  checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
   detectVersion: (exePath) => ipcRenderer.invoke('client:detectVersion', exePath),
   openExeDialog: (defaultPath) => ipcRenderer.invoke('dialog:openExe', defaultPath),
   pickFile: (title, filters, defaultPath) =>

@@ -23,6 +23,7 @@ import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
 import ReportIssueDialog from './components/ReportIssueDialog'
+import UpdateSnackbar from './components/UpdateSnackbar'
 import { PANEL_BORDER_COLOR, MAIN_W, PANE_W } from './uiConstants.js'
 import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
@@ -395,6 +396,9 @@ export default function App() {
 
         <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
         <ReportIssueDialog open={reportOpen} onClose={() => setReportOpen(false)} />
+        {/* Mounted unconditionally and self-scheduling: it renders nothing until
+            its own delayed check comes back with an undismissed newer release. */}
+        <UpdateSnackbar />
       </Box>
     </ThemeProvider>
   )

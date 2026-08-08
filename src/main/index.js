@@ -54,6 +54,7 @@ import { initSessionLog, captureError } from './sessionLog.js'
 import { installGlobalErrorHandlers } from './errorHandlers.js'
 import { registerDiagnosticsHandlers } from './diagnostics.js'
 import { registerChangelogHandlers } from './changelog.js'
+import { checkForUpdates } from './updateCheck.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
@@ -452,6 +453,10 @@ app.whenReady().then(() => {
   // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs;
   // registerChangelogHandlers backs the What's New dialog.
   ipc.handle('app:revealSettings', () => shell.openPath(dataDir))
+  // Update notification (HTOO-65). No payload to validate — the renderer sends
+  // nothing and the running version is read here rather than accepted from it,
+  // so the renderer cannot ask "is <arbitrary version> out of date".
+  ipc.handle('app:checkForUpdates', () => checkForUpdates(app.getVersion()))
   registerDiagnosticsHandlers(ipc, () => app.getVersion())
   registerChangelogHandlers(ipc)
 
