@@ -74,6 +74,34 @@ describe('installFromInstaller', () => {
     expect(await fs.readFile(join(destination, 'npc', 'npcbase.dat'), 'utf8')).toBe('npc')
   })
 
+  it('reports where the client executable landed', async () => {
+    // Consumed by the Windows path, where clientPath is a FILE rather than a
+    // directory. Reported rather than acted on: which one clientPath wants is the
+    // consumer's contract, not this module's.
+    const installer = await writeInstaller(
+      completeClient([{ destFile: '%MAINDIR%\\Darkages.exe', contents: Buffer.from('MZ client') }])
+    )
+    const destination = join(dir, 'DarkAges')
+
+    const result = await installFromInstaller({
+      installerPath: installer,
+      destinationDir: destination
+    })
+
+    // The one-word capital-D spelling the retail installer actually writes — not
+    // 'Dark Ages.exe', which is what a hand-picked file tends to be called.
+    expect(result.executablePath).toBe(join(destination, 'Darkages.exe'))
+  })
+
+  it('reports no executable when the installer carried none', async () => {
+    const installer = await writeInstaller(completeClient())
+    const result = await installFromInstaller({
+      installerPath: installer,
+      destinationDir: join(dir, 'DarkAges')
+    })
+    expect(result.executablePath).toBeNull()
+  })
+
   it('reports the phases a caller needs to narrate', async () => {
     const installer = await writeInstaller(completeClient())
     const phases = new Set()

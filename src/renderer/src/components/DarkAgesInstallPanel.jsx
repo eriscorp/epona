@@ -3,6 +3,8 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import LinearProgress from '@mui/material/LinearProgress'
+import Tooltip from '@mui/material/Tooltip'
+import InfoOutlineIcon from '@mui/icons-material/InfoOutlined'
 import Alert from '@mui/material/Alert'
 import PathPicker from './PathPicker'
 import {
@@ -11,15 +13,27 @@ import {
   installPercent
 } from '../../../shared/installProgress.js'
 
-// Getting Dark Ages onto a machine that cannot run its installer.
+// Getting the Dark Ages client files without running the installer.
 //
-// Sits under the folder picker in the Legacy tab on macOS and Linux. Two routes,
-// because the download is 208 MB and plenty of people already have the file:
-// fetch it, or point at a copy. Both end by writing the destination folder back
-// to `clientPath`, so a successful install leaves the tab configured — that is
-// the whole point, and it is why this takes `onChange` rather than reporting a
-// path for the user to then go and pick by hand.
-export default function DarkAgesInstallPanel({ clientPath, onChange }) {
+// Two routes, because the download is 208 MB and plenty of people already have
+// the file: fetch it, or point at a copy. Both end by writing the result back to
+// `clientPath`, so a successful run leaves the tab configured — that is the whole
+// point, and it is why this takes `onChange` rather than reporting a path for the
+// user to then go and pick by hand.
+//
+// `isWindows` changes exactly one thing, and it is not presentation: **what
+// `clientPath` is set to.** That setting holds a FILE on Windows — the client
+// executable — and a DIRECTORY everywhere else. Writing the folder on Windows
+// would leave the Legacy tab pointing at a directory where it expects an exe, and
+// the launch would fail somewhere that does not name this setting. So on Windows
+// we write the executable the unpack reported, falling back to the folder if the
+// installer carried none.
+//
+// The copy does NOT branch on it. An earlier draft had two versions — one framing
+// this as the only route, one offering it as an alternative to the official
+// installer — and the panel ended up arguing with its own buttons, which still
+// said "install". One heading, one tooltip, one verb.
+export default function DarkAgesInstallPanel({ clientPath, onChange, isWindows = false }) {
   const [destination, setDestination] = useState('')
   const [progress, setProgress] = useState(null)
   const [result, setResult] = useState(null)
@@ -53,11 +67,18 @@ export default function DarkAgesInstallPanel({ clientPath, onChange }) {
       setBusy(false)
       setProgress(null)
       setResult(outcome)
+      if (!outcome?.ok) return
       // Only on a verified install. Pointing clientPath at a folder that failed
       // validation would leave the tab claiming a client it already knows is bad.
-      if (outcome?.ok) onChange({ clientPath: outcome.destinationDir ?? destination })
+      //
+      // The file-or-directory split is the whole reason isWindows exists here. If
+      // the unpack found no executable, fall back to the folder rather than
+      // writing null and silently clearing the setting.
+      const unpacked = outcome.destinationDir ?? destination
+      const target = isWindows ? (outcome.executablePath ?? unpacked) : unpacked
+      onChange({ clientPath: target })
     },
-    [onChange, destination]
+    [onChange, destination, isWindows]
   )
 
   const startDownload = useCallback(async () => {
@@ -83,16 +104,24 @@ export default function DarkAgesInstallPanel({ clientPath, onChange }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Typography variant="caption" color="text.button">
-        Don’t have Dark Ages yet?
-      </Typography>
-      <Typography variant="body2" sx={{ opacity: 0.8 }}>
-        The official installer only runs on Windows, so Epona unpacks it for you. Choose where the
-        files should go, then download the installer or pick a copy you already have.
-      </Typography>
+      {/* One heading and one tooltip on every platform. The copy used to branch on
+          isWindows and explain the whole rationale in a paragraph; it now says what
+          the control does and leaves it there. isWindows still matters below, for
+          what clientPath is set to — that part is not presentation. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Typography variant="caption" color="text.button">
+          Unpack the client files
+        </Typography>
+        <Tooltip
+          title="Download the Dark Ages installer and extract the files needed by Brigid to a directory of your choosing"
+          data-testid="installer-help"
+        >
+          <InfoOutlineIcon fontSize="inherit" sx={{ opacity: 0.6, cursor: 'help' }} />
+        </Tooltip>
+      </Box>
 
       <PathPicker
-        label="Install to"
+        label="Archive Storage Directory"
         value={destination}
         onPick={pickDestination}
         disabled={busy}
@@ -108,7 +137,7 @@ export default function DarkAgesInstallPanel({ clientPath, onChange }) {
           onClick={startDownload}
           data-testid="installer-download"
         >
-          Download and install
+          Download and Unpack
         </Button>
         <Button
           size="small"
@@ -117,7 +146,7 @@ export default function DarkAgesInstallPanel({ clientPath, onChange }) {
           onClick={startFromFile}
           data-testid="installer-from-file"
         >
-          Use a downloaded installer…
+          Unpack Installer
         </Button>
         {busy && (
           <Button size="small" color="inherit" onClick={cancel} data-testid="installer-cancel">

@@ -18,6 +18,7 @@ import HybrasylClientPanel from './components/HybrasylClientPanel'
 import ServerInstancePanel from './components/ServerInstancePanel'
 import ActionButtons from './components/ActionButtons'
 import LegacyAssetsPanel from './components/LegacyAssetsPanel'
+import DarkAgesInstallPanel from './components/DarkAgesInstallPanel'
 import SettingsPane from './components/SettingsPane'
 import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
@@ -263,6 +264,17 @@ export default function App() {
                     targetKind="legacy"
                     settings={settings}
                     getActiveProfile={getActiveProfile}
+                  />
+                  <Divider />
+                  {/* The unpacker is not macOS/Linux-only. It reads the installer
+                      with zlib and works identically here, so a Windows user with
+                      no client can get one without leaving the app. Below the
+                      launch controls because launching is what this tab is for and
+                      what most visits want. */}
+                  <DarkAgesInstallPanel
+                    clientPath={settings.clientPath}
+                    onChange={update}
+                    isWindows
                   />
                 </>
               ) : (
