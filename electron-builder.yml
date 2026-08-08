@@ -173,10 +173,12 @@ nsis:
   createDesktopShortcut: always
 mac:
   category: public.app-category.games
-  # macOS gets its own artwork, not the star win/linux use: the Dock expects a
+  # macOS gets the square tile, not the star Windows uses: the Dock expects a
   # squircle inset to Apple's icon grid, and a full-bleed square renders larger
   # than every native app beside it. build/icon.icns is generated from
-  # build/epona-mac-icon.png by scripts/make-mac-icns.mjs and committed.
+  # build/icon-square.png by scripts/make-icons.mjs and committed — the same
+  # master and the same generator that write the Linux set below, so the two
+  # platforms cannot drift apart.
   icon: build/icon.icns
   # da-win32 is a Windows-only native module; on macOS it compiles to an
   # empty stub that's never require()'d (the load is gated behind
@@ -196,7 +198,38 @@ dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   category: Game
-  icon: build/icon.png
+  # A DIRECTORY, and it MUST stay explicit. Two separate traps meet here.
+  #
+  # 1. electron-builder never resamples a single PNG (app-builder-lib's
+  #    iconConverter returns a .png source as-is), so `build/icon.png` produced
+  #    exactly one hicolor entry at 1024x1024. hicolor's index.theme stops at
+  #    512, so nothing indexed it and every Linux desktop drew its generic
+  #    blank-document icon. That is what shipped through 2.7.2.
+  # 2. The Linux source list is [linux.icon, mac.icon ?? icon] — mac.icon
+  #    OUTRANKS the top-level icon. Epona sets mac.icon, so deleting this key
+  #    does not fall back to the top-level build/icon.png; it hands Linux the
+  #    .icns, whose entries are inset to Apple's grid and draw ~12% small.
+  #    buildResources/icons is only used when that list is empty, which mac.icon
+  #    guarantees it never is.
+  #
+  # The eight PNGs come from build/icon-square.png, the same full-bleed master
+  # the .icns above is built from — the square tile, NOT the star, which stays
+  # Windows-only because build/portable-splash.bmp is composed from it. Linux
+  # desktops that draw square icons (Cinnamon among them) render a star's
+  # transparent corners as a smaller icon than its neighbours even when its
+  # bounding box is correct. Committed rather than built in CI, exactly as
+  # build/icon.icns is. Regenerate BOTH with `node scripts/make-icons.mjs`;
+  # scripts/icons.test.mjs fails if the tree drifts from the eight files.
+  icon: build/icons
+  # electron uses desktopName as app_id / WM_CLASS. Without the pair, the
+  # installed entry is keyed to productName ("Epona") while Electron reports
+  # "epona", so the desktop environment cannot link a running window to it and
+  # the taskbar and window switcher fall back to a generic icon — a correct
+  # hicolor set above is not sufficient on its own. desktopName lives in
+  # package.json; this flag is what makes the .desktop FILENAME agree with it.
+  # The default flips to true in electron-builder 27, which is a no-op for us
+  # precisely because desktopName is set explicitly.
+  syncDesktopName: true
   maintainer: Hybrasyl Maintainers <hybrasyl@eris.co>
   target:
     - deb
