@@ -34,6 +34,19 @@ export { readWiseManifest } from './wiseArchive.js'
 // URL so a re-run finds the previous attempt and can resume or reuse it.
 export const CACHED_INSTALLER_NAME = 'DarkAges-installer.exe'
 
+// The client executable, as the retail installer spells it.
+//
+// `Darkages.exe` — one word, capital D. NOT `Dark Ages.exe`, which is what a
+// Windows user picking a file by hand tends to have in mind and what Epona's own
+// dialog title says. The installer's file table is the authority here, and it
+// writes the one-word form.
+//
+// It matters because `clientPath` means different things per platform: on Windows
+// it is this file, everywhere else it is the asset directory. A caller that wants
+// to point `clientPath` at a freshly unpacked tree on Windows needs the exe, not
+// the folder, so `installFromInstaller` reports where it landed.
+const CLIENT_EXECUTABLE = /^darkages\.exe$/i
+
 export class InstallError extends Error {
   constructor(message, reason) {
     super(message)
@@ -102,11 +115,17 @@ export async function installFromInstaller({
     )
   }
 
+  // Where the client executable landed, if this installer carried one. Reported
+  // rather than acted on: whether `clientPath` should be a file or a directory is
+  // the consumer's contract, not this module's business. See CLIENT_EXECUTABLE.
+  const executable = manifest.clientFiles.find((file) => CLIENT_EXECUTABLE.test(file.relativePath))
+
   return {
     destinationDir,
     installerPath,
     filesWritten: extraction.filesWritten,
     bytesWritten: extraction.bytesWritten,
+    executablePath: executable ? join(destinationDir, executable.relativePath) : null,
     skipped: manifest.skipped,
     verification
   }

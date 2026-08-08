@@ -194,6 +194,84 @@ describe('DarkAgesInstallPanel', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  describe('on Windows', () => {
+    it('points clientPath at the executable, not the folder', async () => {
+      // clientPath holds a FILE on Windows and a DIRECTORY everywhere else.
+      // Writing the folder here would leave the Legacy tab pointing at a directory
+      // where it expects an exe, and the launch would fail somewhere that does not
+      // name this setting.
+      const onChange = vi.fn()
+      installFromFile.mockResolvedValue({
+        ok: true,
+        filesWritten: 101,
+        bytesWritten: 610802176,
+        destinationDir: 'C:\\Games\\DarkAges',
+        executablePath: 'C:\\Games\\DarkAges\\Darkages.exe'
+      })
+      pickInstallerFile.mockResolvedValue('C:\\Downloads\\DarkAges741single.exe')
+      render(<DarkAgesInstallPanel clientPath="" onChange={onChange} isWindows />)
+      await chooseDestination('C:\\Games\\DarkAges')
+
+      await userEvent.click(screen.getByTestId('installer-from-file'))
+
+      await waitFor(() =>
+        expect(onChange).toHaveBeenCalledWith({
+          clientPath: 'C:\\Games\\DarkAges\\Darkages.exe'
+        })
+      )
+    })
+
+    it('falls back to the folder when no executable was unpacked', async () => {
+      // Better than writing null and silently clearing the setting.
+      const onChange = vi.fn()
+      downloadAndInstall.mockResolvedValue({
+        ok: true,
+        filesWritten: 100,
+        bytesWritten: 1024,
+        destinationDir: 'C:\\Games\\DarkAges',
+        executablePath: null
+      })
+      render(<DarkAgesInstallPanel clientPath="" onChange={onChange} isWindows />)
+      await chooseDestination('C:\\Games\\DarkAges')
+
+      await userEvent.click(screen.getByTestId('installer-download'))
+
+      await waitFor(() =>
+        expect(onChange).toHaveBeenCalledWith({ clientPath: 'C:\\Games\\DarkAges' })
+      )
+    })
+
+    it('offers unpacking as an alternative rather than the only route', () => {
+      // The official installer works on Windows and stays the recommended way in.
+      // Claiming to "install" Dark Ages here would also overstate what an unpack
+      // produces: no registry entries, no Start-menu shortcut, no uninstaller.
+      render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} isWindows />)
+      expect(screen.getByText(/run the official installer instead/i)).toBeTruthy()
+      expect(screen.queryByText(/only runs on Windows/i)).toBeNull()
+    })
+  })
+
+  it('keeps writing the folder on macOS and Linux even if an exe was found', async () => {
+    // The Hybrasyl client reads assets from the DIRECTORY on these platforms, and
+    // the retail tree does contain Darkages.exe — which is useless there.
+    const onChange = vi.fn()
+    downloadAndInstall.mockResolvedValue({
+      ok: true,
+      filesWritten: 101,
+      bytesWritten: 1024,
+      destinationDir: '/home/user/DarkAges',
+      executablePath: '/home/user/DarkAges/Darkages.exe'
+    })
+    render(<DarkAgesInstallPanel clientPath="" onChange={onChange} />)
+    await chooseDestination('/home/user/DarkAges')
+
+    await userEvent.click(screen.getByTestId('installer-download'))
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({ clientPath: '/home/user/DarkAges' })
+    )
+  })
+
   it('unsubscribes from progress when it goes away', async () => {
     const { unmount } = render(<DarkAgesInstallPanel clientPath="" onChange={() => {}} />)
     expect(emitProgress).toBeTypeOf('function')
