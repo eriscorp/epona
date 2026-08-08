@@ -35,6 +35,19 @@ contextBridge.exposeInMainWorld('sparkAPI', {
     ipcRenderer.invoke('dialog:openFile', title, filters, defaultPath),
   pickDirectory: (title, defaultPath, message) =>
     ipcRenderer.invoke('dialog:openDirectory', title, defaultPath, message),
+  // Installing Dark Ages on macOS and Linux (HTOO-288). The Legacy tab owns the
+  // UI; onInstallerProgress returns its own unsubscribe, like the log listeners.
+  pickInstallerFile: (defaultPath) => ipcRenderer.invoke('installer:pickInstaller', defaultPath),
+  pickInstallDestination: (defaultPath) =>
+    ipcRenderer.invoke('installer:pickDestination', defaultPath),
+  installFromFile: (payload) => ipcRenderer.invoke('installer:installFromFile', payload),
+  downloadAndInstall: (payload) => ipcRenderer.invoke('installer:download', payload),
+  cancelInstall: () => ipcRenderer.invoke('installer:cancel'),
+  onInstallerProgress: (cb) => {
+    const listener = (_, payload) => cb(payload)
+    ipcRenderer.on('installer:progress', listener)
+    return () => ipcRenderer.removeListener('installer:progress', listener)
+  },
   detectHybrasylPath: (path) => ipcRenderer.invoke('hybrasyl:detectPath', path),
   checkDotnetRuntime: () => ipcRenderer.invoke('hybrasyl:checkRuntime'),
   launch: (targetKind, settings, profile) =>

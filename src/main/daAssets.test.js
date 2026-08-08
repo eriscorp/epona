@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { inspectAssetDir } from './daAssets.js'
+import { inspectAssetDir, verifyClientTree, EXPECTED_CLIENT_ARCHIVES } from './daAssets.js'
 
 let dir
 
@@ -57,5 +57,69 @@ describe('inspectAssetDir', () => {
   it('rejects a folder with no data files in it', async () => {
     await fs.writeFile(join(dir, 'readme.txt'), '')
     await expect(inspectAssetDir(dir)).resolves.toEqual({ ok: false, reason: 'no-dat-files' })
+  })
+})
+
+describe('verifyClientTree', () => {
+  // The stricter question, asked straight after an extraction where we know what
+  // we wrote. inspectAssetDir stays the lenient one, for the folder picker.
+  async function writeArchives(names) {
+    for (const name of names) await fs.writeFile(join(dir, name), 'x')
+  }
+
+  it('accepts a folder holding every archive a real install has', async () => {
+    await writeArchives(EXPECTED_CLIENT_ARCHIVES)
+    await expect(verifyClientTree(dir)).resolves.toMatchObject({ ok: true, complete: true })
+  })
+
+  it('accepts the mixed case the installer actually writes', async () => {
+    // The extraction writes Legend.dat, not legend.dat. Verification has to accept
+    // the casing it just produced, or it would reject its own output.
+    await writeArchives([
+      'Legend.dat',
+      'setoa.dat',
+      'hades.dat',
+      'ia.dat',
+      'misc.dat',
+      'national.dat',
+      'roh.dat',
+      'seo.dat',
+      'cious.dat',
+      'khanpal.dat'
+    ])
+    await expect(verifyClientTree(dir)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('reports which archives a partial tree is missing', async () => {
+    await writeArchives(['Legend.dat', 'setoa.dat'])
+    const result = await verifyClientTree(dir)
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe('incomplete-client')
+    expect(result.missing).toContain('hades.dat')
+    expect(result.missing).not.toContain('legend.dat')
+  })
+
+  it('rejects a folder holding unrelated .dat files', async () => {
+    // The case that makes this stricter check worth having: inspectAssetDir is
+    // satisfied by any .dat at all, which a half-finished extraction would supply.
+    await writeArchives(['something.dat', 'other.dat'])
+    await expect(inspectAssetDir(dir)).resolves.toMatchObject({ ok: true })
+    await expect(verifyClientTree(dir)).resolves.toMatchObject({ reason: 'incomplete-client' })
+  })
+
+  it('passes the shape failures straight through', async () => {
+    // No second answer to a question inspectAssetDir already answers. HTOO-288.
+    await expect(verifyClientTree('')).resolves.toEqual({ ok: false, reason: 'unset' })
+    await expect(verifyClientTree(join(dir, 'gone'))).resolves.toEqual({
+      ok: false,
+      reason: 'missing'
+    })
+    const file = join(dir, 'Dark Ages.exe')
+    await fs.writeFile(file, '')
+    await expect(verifyClientTree(file)).resolves.toEqual({ ok: false, reason: 'not-a-directory' })
+  })
+
+  it('reports an empty folder as having no data files, not as incomplete', async () => {
+    await expect(verifyClientTree(dir)).resolves.toEqual({ ok: false, reason: 'no-dat-files' })
   })
 })

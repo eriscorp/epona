@@ -15,6 +15,8 @@ import {
 } from '../shared/remoteSession.js'
 import { launch as launchLegacy } from './targets/legacyTarget.js'
 import { inspectAssetDir } from './daAssets.js'
+import { installFromInstaller, downloadAndInstall, isCancellation } from './daInstaller/index.js'
+import { installRequestSchema, downloadRequestSchema } from './schemas/installer.js'
 import { testConnection } from './serverTester.js'
 import { listVersions, detectVersion } from './clientVersions.js'
 import {
@@ -708,6 +710,108 @@ app.whenReady().then(() => {
   // macOS and Linux asks — on Windows clientPath is an exe and clientVersions
   // already answers a sharper question about it.
   ipc.handle('assets:inspect', async (_, dirPath) => inspectAssetDir(dirPath))
+
+  // Installing Dark Ages on macOS and Linux — HTOO-288.
+  //
+  // The official installer is a Windows executable, so on these platforms it
+  // cannot be run. It can still be READ: src/main/daInstaller unpacks it with
+  // nothing but zlib. The Legacy tab drives this, and the folder it produces
+  // becomes `clientPath` — the same setting the folder picker writes, because
+  // one field with two meanings is the decision HTOO-296 already made.
+  //
+  // One install at a time. The controller is module-local rather than per-call so
+  // `installer:cancel` has something to abort, and a second start cannot orphan
+  // the first.
+  let activeInstall = null
+
+  // Where the 208 MB download is cached between attempts, so a resumed or retried
+  // install does not fetch it again. Under dataDir rather than the OS temp folder
+  // precisely because it must survive a reboot for resume to be worth having.
+  const installerCacheDir = join(dataDir, 'installer-cache')
+
+  ipc.handle('installer:pickInstaller', async (_, defaultPath) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select the Dark Ages installer',
+      // Named .exe on every platform — it is a Windows installer being read on a
+      // Mac or a Linux box, so the extension filter is about the file, not the host.
+      filters: [
+        { name: 'Dark Ages installer', extensions: ['exe'] },
+        { name: 'All files', extensions: ['*'] }
+      ],
+      message: 'Pick DarkAges741single.exe, or whichever version you downloaded.',
+      defaultPath: dialogDefault(defaultPath),
+      properties: ['openFile']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  ipc.handle('installer:pickDestination', async (_, defaultPath) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose where to install Dark Ages',
+      message: 'Epona will unpack the Dark Ages files into this folder.',
+      defaultPath: dialogDefault(defaultPath),
+      // createDirectory lets a user make the folder in the dialog, which is what
+      // the card means by "select or create an application-appropriate destination".
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // Shared by both install routes. Reports progress to the renderer and maps a
+  // thrown error onto a result object, so the renderer never has to unwrap an IPC
+  // exception to find out what went wrong.
+  async function runInstall(run) {
+    if (activeInstall)
+      return { ok: false, reason: 'busy', message: 'An install is already running' }
+    const controller = new AbortController()
+    activeInstall = controller
+    try {
+      const result = await run({
+        signal: controller.signal,
+        onProgress: (payload) => safeSend('installer:progress', payload)
+      })
+      return { ok: true, ...result }
+    } catch (error) {
+      if (isCancellation(error)) return { ok: false, reason: 'cancelled', message: 'Cancelled' }
+      return {
+        ok: false,
+        reason: error?.reason ?? 'failed',
+        message: error?.message ?? 'The install failed'
+      }
+    } finally {
+      activeInstall = null
+    }
+  }
+
+  ipc.handle('installer:installFromFile', async (_, payload) => {
+    const parsed = installRequestSchema.safeParse(payload)
+    if (!parsed.success) return { ok: false, reason: 'bad-request', message: 'Invalid request' }
+    const { installerPath, destinationDir } = parsed.data
+    return runInstall(({ signal, onProgress }) =>
+      installFromInstaller({ installerPath, destinationDir, signal, onProgress })
+    )
+  })
+
+  ipc.handle('installer:download', async (_, payload) => {
+    const parsed = downloadRequestSchema.safeParse(payload)
+    if (!parsed.success) return { ok: false, reason: 'bad-request', message: 'Invalid request' }
+    const { destinationDir } = parsed.data
+    await fs.mkdir(installerCacheDir, { recursive: true }).catch(() => {})
+    return runInstall(({ signal, onProgress }) =>
+      downloadAndInstall({
+        cacheDir: installerCacheDir,
+        destinationDir,
+        signal,
+        onProgress
+      })
+    )
+  })
+
+  ipc.handle('installer:cancel', async () => {
+    if (!activeInstall) return { ok: false, reason: 'idle' }
+    activeInstall.abort()
+    return { ok: true }
+  })
 
   // Open a path in the OS file explorer. Used by the LogDir quick-open button.
   // shell.openPath returns '' on success, error string on failure.
