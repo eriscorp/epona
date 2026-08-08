@@ -97,7 +97,7 @@ describe('the IPC sender guard', () => {
   })
 
   it('covers every channel it registers, with none opted out', () => {
-    expect(harness.handlers.size).toBe(40)
+    expect(harness.handlers.size).toBe(41)
   })
 
   it('drops a fire-and-forget message from an untrusted sender', () => {

@@ -42,6 +42,12 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
   when you want a self-contained copy of the client files — running the official
   installer is still the normal way to install the game there, and it registers
   Dark Ages with Windows in a way that unpacking does not.
+- **Epona tells you when a new version is out.** A few seconds after launch it
+  asks GitHub whether there is a newer release and, if so, shows a small notice
+  in the corner with a link to it. Dismissing the notice silences that version
+  only — a later one still speaks up. Nothing is downloaded or installed for
+  you, and a machine that is offline, behind a proxy, or rate-limited simply
+  sees nothing rather than an error.
 - **`EPONA_DISABLE_GPU` overrides the Remote Desktop rendering decision.** Set it
   to `1` to force software rendering anywhere, or `0` to keep hardware
   acceleration on in a session Epona reads as remote. Unset keeps the automatic
