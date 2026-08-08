@@ -1,7 +1,9 @@
 # Epona E2E (Playwright + Electron)
 
 End-to-end specs that drive the **built** Electron app via Playwright's
-`_electron` launcher. This is the pilot harness — currently two specs.
+`_electron` launcher. This was the house pilot for the pattern; it is now the
+regression net for the things unit tests structurally cannot reach — real window
+geometry, the packaged file layout, the OS sandbox, and the IPC wiring.
 
 ## Running
 
@@ -10,8 +12,12 @@ npm run e2e        # builds (electron-vite) then runs all specs
 npm run e2e:only   # runs specs against the existing out/ build
 ```
 
-Local-only for now. CI would need a virtual display (xvfb/headed) and a rebuilt
-`da-win32` native module; neither is wired up yet.
+**Windows only, locally and in CI.** `ci.yml` runs the whole suite as its own
+job on `windows-2022`: it rebuilds `da-win32`, builds the app, and runs every
+spec below. No virtual display is involved — the job is Windows and headed.
+
+The suite is not part of the `ubuntu-latest` / `macos-latest` unit job, and is
+not meant to be: the specs need the native addon and a built app.
 
 ## Specs
 
@@ -35,6 +41,30 @@ Local-only for now. CI would need a virtual display (xvfb/headed) and a rebuilt
 - **`multipane-geometry.spec.js`** — companion to the offset spec: the same
   content-origin invariant while the Log pane and Settings pane open (window
   480 → 840 → 1200px).
+- **`content-overflow.spec.js`** — the same family, pinning the **right** edge.
+  The other two geometry specs pin the left origin, which is how a 29px overflow
+  shipped unnoticed: every origin was stable and the content was simply wider
+  than the viewport it had been given. Guards the window-coordinate vs
+  content-coordinate distinction in `window:resize`, which is not visible in the
+  source and is easy to "simplify" back.
+- **`preload-sandbox.spec.js`** — asserts the bridge survives `sandbox: true`.
+  Nothing about this is visible at build time: a preload that imports a package
+  beyond `electron` builds fine, links fine, and then throws in the packaged app,
+  taking the whole UI with it. `src/preload/index.test.js` now makes the same
+  assertion statically, in milliseconds; this one proves it against a real build.
+- **`ipc-guard.spec.js`** — the unit tests in `src/main/windowSecurity.test.js`
+  prove the _policy_ against fakes. This proves the _wiring_: that `guardIpc`
+  actually wraps `ipcMain`, so a handler registered on the raw import cannot
+  quietly opt out of the sender check.
+- **`whats-new.spec.js`** — What's New renders the `CHANGELOG.md` packaged beside
+  the app, which ships only because `electron-builder.yml`'s `files` allowlist
+  names it. That is a packaging fact no unit test can reach. Also the regression
+  guard for `app.getAppPath()`, which returns the wrong directory under this
+  harness — a future edit "simplifying" the path resolution back to it fails here
+  instead of shipping.
+- **`worktree-sweep.spec.js`** — the startup sweep collects worktrees stranded by
+  a branch switch or a deleted instance, and must never take one with
+  uncommitted work in it.
 
 ## Gotchas (learned the hard way)
 

@@ -6,6 +6,8 @@ import { killProcessTree } from './processKill.js'
 import { settingsSchema } from './schemas/settings.js'
 import {
   detectRemoteSession,
+  resolveGpuOverride,
+  shouldDisableHardwareAcceleration,
   clampWindowSize,
   REMOTE_SESSION_CSS,
   MIN_WINDOW_WIDTH,
@@ -85,10 +87,19 @@ app.setPath('userData', dataDir)
 //
 // Detected rather than made a setting, on purpose. See src/shared/remoteSession.js
 // for why a persisted toggle cannot work this early.
-const remoteSession = detectRemoteSession()
-if (remoteSession) {
+const gpuOverride = resolveGpuOverride(process.env.EPONA_DISABLE_GPU)
+const softwareRendering = shouldDisableHardwareAcceleration()
+if (softwareRendering) {
   app.disableHardwareAcceleration()
-  console.log('[display] remote session detected — hardware acceleration disabled')
+  console.log(
+    gpuOverride === null
+      ? '[display] remote session detected — hardware acceleration disabled'
+      : '[display] EPONA_DISABLE_GPU set — hardware acceleration disabled'
+  )
+} else if (gpuOverride === false && detectRemoteSession()) {
+  // Say so. This is the recourse path for someone whose machine we read wrong,
+  // and a silent one leaves them unable to tell the override took effect.
+  console.log('[display] remote session detected, but EPONA_DISABLE_GPU=0 — acceleration left on')
 }
 
 // Single-instance lock. A second Epona shares this userData dir and fights the
@@ -268,7 +279,10 @@ function createWindow() {
   // stay that way. This is a runtime mitigation for one environment and it
   // reverts by not being injected. dom-ready fires before first paint, so there
   // is no flash of the blurred style.
-  if (remoteSession) {
+  // Keyed to the rendering decision, not to detection: the blur is expensive
+  // because compositing is on the CPU, and EPONA_DISABLE_GPU puts it there on a
+  // local machine just as surely as RDP does.
+  if (softwareRendering) {
     mainWindow.webContents.on('dom-ready', () => {
       mainWindow.webContents.insertCSS(REMOTE_SESSION_CSS).catch((err) => {
         console.warn('[display] remote-session CSS injection failed:', err.message)

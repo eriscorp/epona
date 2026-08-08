@@ -180,10 +180,15 @@ fantasyTypography) is the right amount of sharing. **Do not re-propose this.**
 
 ## Suggested first wave
 1. **C1 — flush `await`** ✅ already fixed (real bug).
-2. **#1 — `createFantasyTheme` factory** — the one high-value win (~600 lines),
-   done carefully to preserve the per-theme deviations listed above.
-3. **#2 — `pipeChildLines`** — cleanest main-process dedup.
-4. **#4 + R1 — `useBranchOptions` + `useDotnetRuntime` hooks** — small, safe,
+2. **#2 — `pipeChildLines`** — cleanest main-process dedup.
+3. **#4 + R1 — `useBranchOptions` + `useDotnetRuntime` hooks** — small, safe,
    high value-to-effort renderer extractions.
-5. **#3 — `launchRepo` cleanup consolidation** — removes an error-path
+4. **#3 — `launchRepo` cleanup consolidation** — removes an error-path
    inconsistency, not just lines.
+
+> The `createFantasyTheme` factory was item 2 of this list until 2026-08-08. It
+> is **declined** — see the "Won't do (recurring red herring)" entry above, and
+> `CLAUDE.md`. Recommending it here while rejecting it there is what made the
+> proposal keep coming back: a reader scanning top-down reached the
+> recommendation last and acted on it. If you are reading this file to decide
+> what to work on, the answer on the themes is no.

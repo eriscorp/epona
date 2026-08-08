@@ -198,6 +198,24 @@ pinned to Local (not the roaming profile) before the app is ready.
   (shared with Creidhne and Taliesin) and Spark (a faithful port of
   the original WPF launcher's dark theme).
 
+### Remote Desktop
+
+Epona detects a Remote Desktop session and switches to software
+rendering, because an RDP session has no GPU and the acceleration
+path costs more than it saves there. There is no setting for this —
+the app adapts rather than asking.
+
+If it reads your machine wrongly, `EPONA_DISABLE_GPU` overrides the
+decision in either direction:
+
+- `EPONA_DISABLE_GPU=1` — force software rendering anywhere. Useful
+  for reproducing a remote-session report on a local machine.
+- `EPONA_DISABLE_GPU=0` — keep hardware acceleration on, even in a
+  session Epona thinks is remote.
+
+Leave it unset for the normal behaviour. Either setting is reported
+on stdout at startup.
+
 <br clear="all" />
 
 ---
