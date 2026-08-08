@@ -5,6 +5,15 @@
   "main": "./out/main/index.js",
   "author": "Hybrasyl Maintainers <hybrasyl@eris.co>",
   "homepage": "https://github.com/eriscorp/epona",
+  "_desktopNameNote": [
+    "Read by electron-builder, not by npm. Electron uses it as the Linux app_id /",
+    "WM_CLASS, and linux.syncDesktopName makes the installed .desktop filename match.",
+    "Lowercase 'epona' on purpose: the Linux executable name is appInfo.sanitizedName",
+    "lowercased, so this is the one spelling that makes the .desktop filename, its",
+    "StartupWMClass and Electron's own app_id all agree. 'Epona.desktop' would look",
+    "tidier beside productName and would break the association it exists to create."
+  ],
+  "desktopName": "epona.desktop",
   "workspaces": [
     "packages/*"
   ],

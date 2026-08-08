@@ -196,7 +196,34 @@ dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   category: Game
-  icon: build/icon.png
+  # A DIRECTORY, and it MUST stay explicit. Two separate traps meet here.
+  #
+  # 1. electron-builder never resamples a single PNG (app-builder-lib's
+  #    iconConverter returns a .png source as-is), so `build/icon.png` produced
+  #    exactly one hicolor entry at 1024x1024. hicolor's index.theme stops at
+  #    512, so nothing indexed it and every Linux desktop drew its generic
+  #    blank-document icon. That is what shipped through 2.7.2.
+  # 2. The Linux source list is [linux.icon, mac.icon ?? icon] — mac.icon
+  #    OUTRANKS the top-level icon. Epona sets mac.icon (its own squircle
+  #    artwork), so deleting this key does not fall back to build/icon.png; it
+  #    ships the macOS squircle on Linux. buildResources/icons is only used when
+  #    that list is empty, which mac.icon guarantees it never is.
+  #
+  # The eight PNGs are generated from build/icon.png — the full-bleed star, NOT
+  # the macOS master, which is inset to Apple's grid and would draw ~12% small at
+  # every size. Committed rather than built in CI, exactly as build/icon.icns is.
+  # Regenerate with `node scripts/make-linux-icons.mjs`; scripts/icons.test.mjs
+  # fails if the tree drifts from the eight expected files.
+  icon: build/icons
+  # electron uses desktopName as app_id / WM_CLASS. Without the pair, the
+  # installed entry is keyed to productName ("Epona") while Electron reports
+  # "epona", so the desktop environment cannot link a running window to it and
+  # the taskbar and window switcher fall back to a generic icon — a correct
+  # hicolor set above is not sufficient on its own. desktopName lives in
+  # package.json; this flag is what makes the .desktop FILENAME agree with it.
+  # The default flips to true in electron-builder 27, which is a no-op for us
+  # precisely because desktopName is set explicitly.
+  syncDesktopName: true
   maintainer: Hybrasyl Maintainers <hybrasyl@eris.co>
   target:
     - deb

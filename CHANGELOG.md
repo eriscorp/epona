@@ -50,6 +50,13 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Fixed
 
+- **Epona draws its own icon on Linux.** The application menu used to show a
+  blank white page — the desktop's generic document icon — because the
+  installed artwork was a single 1024-pixel image, a size no Linux desktop
+  looks for. Eight standard sizes are now installed instead. Running windows
+  are also linked to the installed entry now, so the taskbar and the window
+  switcher show the icon too rather than a generic placeholder. Windows and
+  macOS are unchanged.
 - **`localhost` now works as a Legacy profile hostname.** The redirect asks DNS
   for an IPv4 address specifically, so a machine that prefers IPv6 no longer
   produces a client that starts and connects to nothing. Typing `127.0.0.1`
