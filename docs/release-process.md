@@ -3,9 +3,9 @@
 How to cut an Epona release end-to-end. Pushing a `v*` tag is the single
 action that fires the [`release.yml`](../.github/workflows/release.yml)
 GitHub Action, which builds **all three platforms** — signed Windows
-portable exe, signed + notarized macOS dmg, and Linux deb + AppImage —
-creates the GitHub Release with auto-generated notes, attaches every
-artifact, and posts to Discord.
+installer + portable exe, signed + notarized macOS dmg, and Linux deb +
+AppImage — creates the GitHub Release with auto-generated notes, attaches
+every artifact, and posts to Discord.
 
 The flow at a glance:
 
@@ -135,7 +135,7 @@ which runs four jobs:
   electron-builder, then separately signs/notarizes/staples the `.dmg`.
 - **`release`** (needs all three, only on a tag ref): downloads the
   artifacts and creates the GitHub Release via
-  `softprops/action-gh-release@v2` with `generate_release_notes: true`,
+  `softprops/action-gh-release@v3` with `generate_release_notes: true`,
   attaching the portable exe, deb, AppImage, and dmg — then posts a
   Discord announcement.
 
@@ -175,10 +175,16 @@ and macOS notarization are the slow steps).
   there is no `release.published` UI step.
 - Builds on: `windows-2022` (pinned), `ubuntu-latest`, `macos-latest` —
   all Node 24.
-- Produces: **Windows portable exe (signed), macOS dmg (signed +
-  notarized), Linux deb + AppImage** — all attached to the GitHub
-  Release automatically. Targets are configured in
-  [`electron-builder.yml`](../electron-builder.yml).
+- Produces: **Windows installer + portable exe (both signed), macOS dmg
+  (signed + notarized), Linux deb + AppImage** — all attached to the
+  GitHub Release automatically. Targets are configured in
+  [`electron-builder.yml`](../electron-builder.yml), and **only** there —
+  the packaging step runs a bare `--win`. `scripts/release-artifacts.test.mjs`
+  pins the declared targets against the release globs in both directions,
+  because a target that no glob collects is published by nothing and
+  reported by nothing (`fail_on_unmatched_files` cannot see it). Prefer
+  the **installer** when advising a user on a managed Windows endpoint;
+  see [`antivirus.md`](antivirus.md).
 - Local equivalents: `npm run build:portable` / `build:win` (Windows),
   `npm run build:mac` (→ `dist/Epona-x.y.z-*.dmg`), `npm run build:linux`
   (→ `dist/epona-x.y.z-x86_64.AppImage`, needs a Linux host or WSL2 with

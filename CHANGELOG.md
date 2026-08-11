@@ -7,92 +7,96 @@ All notable user-facing changes to Epona are recorded here. Format follows
 <!--
 Release process (the notes are authored HERE, not edited on GitHub after the fact):
   1. As you land a PR, add its user-facing change under ## [Unreleased]
-     (Added / Changed / Fixed / Removed / Deprecated / Security).
+     (Added / Changed / Deprecated / Removed / Fixed / Security).
   2. To cut a release: rename ## [Unreleased] to ## [X.Y.Z] - YYYY-MM-DD, add a
-     fresh empty ## [Unreleased] above it, and bump package.json to X.Y.Z.
+     fresh empty ## [Unreleased] above it, and bump package.json to X.Y.Z
+     (npm version X.Y.Z --no-git-tag-version).
   3. Tag vX.Y.Z and push. The release workflow runs scripts/changelog-extract.mjs
      to pull THIS version's section into the GitHub release body, then appends the
      auto-generated PR list below it.
 Keep entries user-facing — internal refactors/tests show up in the appended auto list.
+
+Write entries in ASD-STE100 Simplified Technical English (asd-ste100.org), like the rest of the
+documentation in this repo:
+  - One idea per sentence. Keep sentences below about 25 words.
+  - Present tense, active voice. Name the actor: "Epona reads the installer", not "the installer
+    is read".
+  - One term for one thing, through the whole file. Do not reach for a synonym for variety.
+  - No idioms, no metaphor, no rhetorical asides. Give the fault, then the behaviour now.
+Keep the section order of Keep a Changelog: Added, Changed, Deprecated, Removed, Fixed, Security.
+One heading of each kind per version.
+
+Sections before 2.8.0 are in the earlier, more conversational style. They are the text that was
+published with those releases, so they stay as they are. 2.8.0 is the first section written to
+the rules above.
 -->
 
 ## [Unreleased]
 
-### Changed
-
-- **The Legacy Client tab now works on macOS and Linux.** It used to be greyed
-  out with a tooltip saying the legacy client needs Windows, which is true of
-  *launching* and not of the Dark Ages files themselves — the Hybrasyl client
-  reads its graphics and sound from them. The tab now shows your Dark Ages
-  folder, tells you whether it can find the data files there, and lets you
-  change it. Windows is unchanged.
-
 ### Added
 
-- **Epona can unpack the Dark Ages client files for you, on every platform.** The
-  official installer is a Windows program, so on macOS and Linux it cannot be run
-  at all — Epona reads it instead and writes the client files directly. No Wine, no
-  virtual machine, and nothing extra to install. The Legacy Client tab lets you
-  pick where the files should go, then either download the installer from
-  darkages.com or point at a copy you already have. Progress is shown, the download
-  can be cancelled and resumes where it left off, and Epona points itself at the
-  result once it has been checked. Every file is verified against the checksum in
-  the installer as it is written, and a run that fails leaves your chosen folder
-  untouched. On **Windows** the same unpacker sits below the launch controls, for
-  when you want a self-contained copy of the client files — running the official
-  installer is still the normal way to install the game there, and it registers
-  Dark Ages with Windows in a way that unpacking does not.
-- **Epona tells you when a new version is out.** A few seconds after launch it
-  asks GitHub whether there is a newer release and, if so, shows a small notice
-  in the corner with a link to it. Dismissing the notice silences that version
-  only — a later one still speaks up. Nothing is downloaded or installed for
-  you, and a machine that is offline, behind a proxy, or rate-limited simply
-  sees nothing rather than an error.
-- **`EPONA_DISABLE_GPU` overrides the Remote Desktop rendering decision.** Set it
-  to `1` to force software rendering anywhere, or `0` to keep hardware
-  acceleration on in a session Epona reads as remote. Unset keeps the automatic
-  behaviour. There is still no setting for this on purpose — the override exists
-  for the case where the detection is wrong on your machine.
+- **Epona can unpack the Dark Ages client files on every platform.** The official client installer
+  is a Windows program. You cannot run it on macOS or Linux. Epona reads that installer and writes
+  the client files directly. You do not need Wine, a virtual machine, or any other software. The
+  Legacy Client tab asks where to put the files. You can then download the installer from
+  darkages.com, or select a copy that you have. Epona shows the progress. You can stop the
+  download, and Epona continues it from the same point. Epona compares each file with the checksum
+  in the installer as it writes the file. If a run fails, Epona does not change your folder. When
+  the check is complete, Epona points itself at the new files. On Windows, Epona shows the same
+  controls below the launch controls. On Windows, the official installer stays the usual way to
+  install the game. The official installer records Dark Ages in Windows. Epona does not.
+- **Epona tells you when a new version is available.** A few seconds after it starts, Epona asks
+  GitHub for the most recent release. If a newer release exists, Epona shows a small notice with a
+  link to it. If you close the notice, Epona does not show that version again. A later version
+  shows a new notice. Epona downloads and installs nothing. If your machine is offline, behind a
+  proxy, or rate-limited, Epona shows nothing.
+- **`EPONA_DISABLE_GPU` sets the Remote Desktop rendering decision.** Set it to `1` to use software
+  rendering on any machine. Set it to `0` to keep hardware acceleration in a session that Epona
+  reads as remote. If you do not set it, Epona decides. There is no control for this in the
+  interface. The variable is for the condition where the automatic decision is wrong on your
+  machine.
+
+### Changed
+
+- **The Legacy Client tab operates on macOS and Linux.** Epona showed the tab in grey, with a
+  message that the legacy client needs Windows. That is correct for the launch function. It is not
+  correct for the Dark Ages files, because the Hybrasyl client reads its graphics and its sounds
+  from those files. The tab now shows your Dark Ages folder. It tells you if it finds the data
+  files there. It also lets you change the folder. Windows does not change.
 
 ### Fixed
 
-- **Epona no longer fills a running server's log with its own status checks.**
-  It checked whether each server was up by opening a connection to it every
-  three seconds. Hybrasyl treats that as a player connecting and logs five lines
-  for it, one of them as an error, so a server left running beside Epona
-  collected them all day for nothing — Epona already knew the answer for a
-  server it started. It now only connects when it has no other way to tell,
-  which is how it still notices a server started outside Epona.
-- **The Remote Desktop adaptation now applies when you reconnect to a session.**
-  Windows records how a session started and never revises it, so connecting to a
-  machine you had left logged in kept Epona reading the session as local. The
-  adaptation added in 2.7.2 therefore did nothing for exactly the people who
-  reconnect, which is most of them. Epona now asks Windows directly, so it is
-  right either way.
-- **Text no longer looks smeared or shaky over Remote Desktop.** Every theme drew
-  a soft shadow behind each letter, which a remote connection cannot carry
-  cleanly. Epona drops the shadow and switches to a plainer letter shape in a
-  remote session only. Nothing changes when you sit at the machine.
-- **Epona draws its own icon on Linux.** The application menu used to show a
-  blank white page — the desktop's generic document icon — because the
-  installed artwork was a single 1024-pixel image, a size no Linux desktop
-  looks for. Eight standard sizes are now installed instead. Running windows
-  are also linked to the installed entry now, so the taskbar and the window
-  switcher show the icon too rather than a generic placeholder. Windows and
-  macOS are unchanged.
-- **`localhost` now works as a Legacy profile hostname.** The redirect asks DNS
-  for an IPv4 address specifically, so a machine that prefers IPv6 no longer
-  produces a client that starts and connects to nothing. Typing `127.0.0.1`
-  instead was the old workaround; it is no longer needed.
-- **A Legacy launch that cannot be patched no longer starts the client.**
-  Previously only a ground-item-hints failure stopped it — any other failure,
-  including an unresolvable hostname, let a partly patched client run.
-- **Two server instances on one branch no longer fight over the local XML
-  redirect.** Instances on the same server branch share a working copy, so
-  starting a second one against a different XML branch silently repointed the
-  first one's build. Epona now refuses that launch and names both branches.
-  Two instances that want the *same* XML branch still share it, and stopping
-  one no longer pulls the redirect out from under the other.
+- **Epona does not write its status checks into a running server's log.** Epona opened a
+  connection to each server every three seconds to find its status. Hybrasyl reads each connection
+  as a player and writes five lines, one of them as an error. A server that ran beside Epona
+  collected these lines continuously. Epona already knew the status of a server that it started.
+  Epona now opens a connection only when it has no other source for the status. Epona still finds
+  a server that started outside Epona.
+- **The Remote Desktop adaptation operates when you reconnect to a session.** Windows records how
+  a session started, and it does not change that record. If you connect to a machine that you left
+  in a logged-in condition, Epona read the session as local. The adaptation in 2.7.2 did nothing
+  for the persons who reconnect, and that is most of them. Epona now asks Windows directly, and it
+  gets the correct answer in both conditions.
+- **Text is clear over Remote Desktop.** Each theme drew a soft shadow behind every letter. A
+  remote connection cannot send that shadow correctly, and the text looked unsteady. Epona now
+  removes the shadow in a remote session. Epona also uses a simpler letter shape. Nothing changes
+  when you use the machine directly.
+- **Epona draws its own icon on Linux.** The application menu showed an empty white page, which is
+  the generic document icon of the desktop. Epona installed one image of 1024 pixels, and no Linux
+  desktop looks for that size. Epona now installs eight standard sizes. Epona also connects its
+  windows to the installed entry. The task bar and the window list now show the icon. Windows and
+  macOS do not change.
+- **`localhost` operates as a Legacy profile host name.** The redirect now asks DNS for an IPv4
+  address only. Before this change, a machine that prefers IPv6 got a client that started and
+  connected to nothing. You had to type `127.0.0.1` instead. That is no longer necessary.
+- **Epona does not start the legacy client when it cannot apply the patches.** Before this change,
+  only a failure of the ground-item hints stopped the launch. Any other failure let a partly
+  patched client start. An unresolvable host name is one example.
+- **Two server instances on one branch do not compete for the local XML redirect.** Instances on
+  the same server branch use one working copy. If you started a second instance against a
+  different XML branch, Epona changed the build of the first instance. Epona now refuses that
+  launch, and it gives the name of both branches. Two instances that need the same XML branch
+  still use one working copy. If you stop one of them, the redirect stays for the other.
 
 ## [2.7.2] - 2026-08-07
 
