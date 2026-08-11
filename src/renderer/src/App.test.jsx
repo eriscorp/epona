@@ -17,6 +17,9 @@ const savedSettings = { theme: 'hybrasyl', clientPath: '/home/user/DarkAges' }
 function makeSparkAPI(platform) {
   const named = {
     platform,
+    // Named rather than left to the Proxy: the fallback mints a FRESH vi.fn per
+    // property access, so an assertion on call count would always see zero.
+    appReady: vi.fn(),
     loadSettings: vi.fn().mockResolvedValue(savedSettings),
     saveSettings: vi.fn().mockResolvedValue({ ok: true }),
     getInstanceStatus: vi.fn().mockResolvedValue([]),
@@ -77,6 +80,46 @@ describe.each(['win32', 'darwin', 'linux'])('App on %s', (platform) => {
         'true'
       )
     )
+  })
+})
+
+describe('when the IPC bridge is unreachable', () => {
+  // A guardIpc lockout rejects every channel, hydrate() among them. Before the
+  // catch below existed, the rejection stopped the .then that signals app:ready:
+  // main never heard it, so the splash sat for the full 15-second backstop and
+  // the app then opened on defaults with every IPC-backed control dead — while
+  // checkboxes and text fields still worked, because those never leave the
+  // renderer. Nothing on screen said so, and Report Issue is itself an invoke.
+  async function renderBroken() {
+    global.window.sparkAPI = makeSparkAPI('win32')
+    global.window.sparkAPI.loadSettings.mockRejectedValue(
+      new Error('IPC "settings:load" rejected: untrusted sender (location-mismatch)')
+    )
+    vi.resetModules()
+    const { default: App } = await import('./App.jsx')
+    return render(<App />)
+  }
+
+  it('says so on screen instead of looking merely broken', async () => {
+    await renderBroken()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/cannot reach its background process/i)
+    // Name the two things the user would otherwise misread: dead buttons, and
+    // settings that appear to revert.
+    expect(alert.textContent).toMatch(/Buttons will not respond/i)
+    expect(alert.textContent).toMatch(/showing\s+defaults/i)
+    // The underlying error, so a report carries the actual cause.
+    expect(alert.textContent).toMatch(/location-mismatch/)
+  })
+
+  it('still signals app:ready, so a broken bridge does not also cost 15 seconds', async () => {
+    await renderBroken()
+    await waitFor(() => expect(global.window.sparkAPI.appReady).toHaveBeenCalled())
+  })
+
+  it('shows no banner on a healthy boot', async () => {
+    await renderApp('win32')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 
