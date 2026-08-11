@@ -24,6 +24,7 @@ import LogPane from './components/LogPane'
 import HelpDialog from './components/HelpDialog'
 import ReportIssueDialog from './components/ReportIssueDialog'
 import UpdateSnackbar from './components/UpdateSnackbar'
+import BridgeErrorBanner from './components/BridgeErrorBanner'
 import { PANEL_BORDER_COLOR, MAIN_W, PANE_W } from './uiConstants.js'
 import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
@@ -75,17 +76,34 @@ export default function App() {
   // what used to leave the tab showing "Start Server" for a server that was very
   // much running. Shape: { [instanceId]: { running, pid, source, ambiguousPort } }.
   const [instanceStatus, setInstanceStatus] = useState({})
+  // Non-null when the IPC bridge could not be reached at startup. Renders a
+  // banner that itself uses no IPC — the existing Report Issue dialog and
+  // "Reveal logs" are both invokes, so in exactly this state they are dead too.
+  const [bridgeError, setBridgeError] = useState(null)
 
   const applyStatus = (snapshot) =>
     setInstanceStatus(Object.fromEntries((snapshot ?? []).map((s) => [s.id, s])))
 
   useEffect(() => {
-    hydrate().then((s) => {
-      if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind))
-      // Settings are hydrated and applied — tell the main process to dismiss the
-      // splash and reveal the main window (now painting a populated first frame).
-      window.sparkAPI.appReady()
-    })
+    hydrate()
+      .then((s) => {
+        if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind))
+      })
+      .catch((err) => {
+        // hydrate() awaits an IPC invoke. If the bridge is unreachable this
+        // rejects, and WITHOUT this catch the .then never ran — so appReady was
+        // never signalled, the splash sat for the full 15s backstop, and the app
+        // then opened on default settings with every IPC-backed control dead
+        // while checkboxes and text fields still worked. Silent, and it read as
+        // "slow app with broken buttons" rather than "the bridge is down".
+        setBridgeError(err?.message ?? String(err))
+      })
+      .finally(() => {
+        // Signal READY EITHER WAY. A broken bridge must not also cost 15 seconds
+        // of blank splash — a visible app that says what is wrong beats a hidden
+        // one that says nothing.
+        window.sparkAPI?.appReady?.()
+      })
     // Runs once on mount; hydrate is a stable store action, isWindows is constant.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -222,6 +240,7 @@ export default function App() {
         >
           <TitleBar />
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
+          <BridgeErrorBanner error={bridgeError} />
           <NavToolbar
             detectedVersion={detectedVersion}
             clientPath={settings.clientPath}

@@ -16,27 +16,46 @@
 // Pure so it can live in src/shared and be unit-tested: callers pass the
 // platform and environment in rather than this module reaching for globals.
 
-// Windows sets SESSIONNAME to 'Console' for a local session and 'RDP-Tcp#NN'
-// for a remote one. Unset happens in some service and scheduled-task launch
-// contexts; treat that as local, which is the safe default — a false positive
-// would needlessly disable the GPU for someone sitting at the machine.
+// Two signals, in priority order.
 //
-// This does not detect Parsec, Sunshine, VNC or other non-RDP remote tools.
-// GetSystemMetrics(SM_REMOTESESSION) is the authoritative check but misses those
-// same tools, so a native call buys accuracy that is mostly theoretical while
-// adding a .node load to the pre-ready boot path. Not worth it.
-export function isRemoteSession({ platform, sessionName } = {}) {
+// `systemRemoteSession` is GetSystemMetrics(SM_REMOTESESSION), supplied by
+// main/remoteSessionNative.js. It queries the session live and is believed in
+// BOTH directions when present.
+//
+// `sessionName` is %SESSIONNAME% — 'Console' locally, 'RDP-Tcp#NN' remotely —
+// and is only a fallback now, because it LIES after a reconnect. Windows writes
+// it at logon and never revises it, so RDP-ing into a machine that already has
+// your session open at the console (which reconnects that session rather than
+// creating a new one) leaves every process reporting 'Console' over RDP.
+// Measured on a test machine: SESSIONNAME=Console with `query session` showing
+// rdp-tcp#0 Active. That is the common case, not a corner, and it made this
+// whole mechanism inert for the users who most needed it.
+//
+// Unset SESSIONNAME happens in some service and scheduled-task launch contexts;
+// treat that as local, which is the safe fallback direction — a false positive
+// needlessly disables the GPU for someone sitting at the machine.
+//
+// Neither signal detects Parsec, Sunshine, VNC or other non-RDP remote tools.
+export function isRemoteSession({ platform, sessionName, systemRemoteSession } = {}) {
   if (platform !== 'win32') return false
+  // Authoritative when we have it — including when it says NO. A live "not
+  // remote" beats a stale environment variable claiming otherwise.
+  if (typeof systemRemoteSession === 'boolean') return systemRemoteSession
   if (typeof sessionName !== 'string' || sessionName === '') return false
   return sessionName.toLowerCase() !== 'console'
 }
 
 // Read the real environment. Split from the predicate so tests can drive the
 // predicate directly without mutating process.env.
-export function detectRemoteSession(proc = process) {
+//
+// `systemRemoteSession` is injected rather than read here: this module is in
+// src/shared and must not import node or electron, which is what keeps it
+// unit-testable and portable to the sibling apps.
+export function detectRemoteSession(proc = process, systemRemoteSession = null) {
   return isRemoteSession({
     platform: proc.platform,
-    sessionName: proc.env?.SESSIONNAME
+    sessionName: proc.env?.SESSIONNAME,
+    systemRemoteSession
   })
 }
 
@@ -65,10 +84,10 @@ export function resolveGpuOverride(value) {
 // for a machine that is plainly not in a remote session, or every later reader
 // is misled by a debugging flag. This one is named for the decision, so an
 // override sits inside it honestly.
-export function shouldDisableHardwareAcceleration(proc = process) {
+export function shouldDisableHardwareAcceleration(proc = process, systemRemoteSession = null) {
   const override = resolveGpuOverride(proc.env?.EPONA_DISABLE_GPU)
   if (override !== null) return override
-  return detectRemoteSession(proc)
+  return detectRemoteSession(proc, systemRemoteSession)
 }
 
 // backdrop-filter is the single most expensive thing in the UI once compositing
@@ -82,10 +101,30 @@ export function shouldDisableHardwareAcceleration(proc = process) {
 // theme objects are hand-written and stay that way — this is a runtime
 // mitigation for one environment, not a design change, and it reverts by simply
 // not being injected.
+// text-shadow is the other half, and it is the half users actually SEE. Every
+// fantasy theme sets a two-layer blurred shadow on MuiCssBaseline.body —
+// `0 0 4px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.4)` — which is a blur radius on
+// every glyph in the app, re-rasterised on every repaint. Reported directly:
+// Epona's text looked "very squiggly" over RDP while oghma and mabon, which run
+// the plain skeleton themes on the same connection, looked fine.
+//
+// -webkit-font-smoothing: antialiased switches text from subpixel (ClearType) to
+// grayscale antialiasing. Subpixel AA places colour fringes on glyph edges to
+// exploit the physical RGB stripe of a local panel; sent through RDP's lossy
+// codec those fringes smear, which is the other half of "squiggly". There is no
+// physical subpixel layout on the far end to exploit in the first place.
+//
+// box-shadow is deliberately NOT stripped: the theme shadows are mostly
+// zero-blur offsets drawing carved panel edges, so removing them would restyle
+// the app for no rendering saving.
 export const REMOTE_SESSION_CSS = `
   * {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+    text-shadow: none !important;
+  }
+  body {
+    -webkit-font-smoothing: antialiased !important;
   }
 `
 
