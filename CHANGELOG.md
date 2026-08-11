@@ -56,6 +56,13 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Fixed
 
+- **Epona no longer fills a running server's log with its own status checks.**
+  It checked whether each server was up by opening a connection to it every
+  three seconds. Hybrasyl treats that as a player connecting and logs five lines
+  for it, one of them as an error, so a server left running beside Epona
+  collected them all day for nothing — Epona already knew the answer for a
+  server it started. It now only connects when it has no other way to tell,
+  which is how it still notices a server started outside Epona.
 - **Epona draws its own icon on Linux.** The application menu used to show a
   blank white page — the desktop's generic document icon — because the
   installed artwork was a single 1024-pixel image, a size no Linux desktop
