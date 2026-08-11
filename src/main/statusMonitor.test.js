@@ -93,7 +93,7 @@ describe('createStatusMonitor', () => {
     expect(snap[0]).toMatchObject({ running: false })
   })
 
-  it('probes each distinct port once, however many instances share it', async () => {
+  it('probes each distinct port once, and never a port it cannot attribute', async () => {
     const probe = vi.fn(async () => false)
     const monitor = createStatusMonitor({
       settingsManager: {
@@ -111,7 +111,62 @@ describe('createStatusMonitor', () => {
       onStatus: vi.fn()
     })
     await monitor.refresh()
-    expect(probe).toHaveBeenCalledTimes(2)
+    // 2610 is claimed by both a and b, so the snapshot refuses to attribute it
+    // and its probe result is discarded — don't pay for it. Only 2620 is asked.
+    expect(probe).toHaveBeenCalledTimes(1)
+    expect(probe.mock.calls[0][1]).toBe(2620)
+  })
+
+  it('does not probe a lobby port a live tracked instance answers for', async () => {
+    // HTOO-350. Hybrasyl treats each probe as a real client: it assigns a
+    // connection id, requests an encryption key, queues CONNECTED SERVER, reads
+    // zero bytes and disconnects — four log lines per probe, one at error level.
+    // Against a server Epona started and tracks, every one of those was thrown
+    // away, every 3 seconds, for as long as the app stayed open.
+    const probe = vi.fn(async () => false)
+    const monitor = createStatusMonitor({
+      settingsManager: { load: async () => ({ instances: [{ id: 'a', lobbyPort: 2610 }] }) },
+      instanceChildren: new Map([['a', pidEntry(4242)]]),
+      isPortInUse: probe,
+      isProcessAlive: () => true,
+      onStatus: vi.fn()
+    })
+    const snap = await monitor.refresh()
+    expect(probe).not.toHaveBeenCalled()
+    expect(snap[0]).toMatchObject({ running: true, source: 'tracked', pid: 4242 })
+  })
+
+  it('probes on the very tick that reaps a dead wrapper, not the one after', async () => {
+    // Step 2 removes the entry, so step 3 sees an untracked instance and falls
+    // back to the port. Without that ordering a server stopped outside Epona
+    // reports its true state one interval late.
+    const probe = vi.fn(async () => true)
+    const tracked = new Map([['a', pidEntry(4242)]])
+    const monitor = createStatusMonitor({
+      settingsManager: { load: async () => ({ instances: [{ id: 'a', lobbyPort: 2610 }] }) },
+      instanceChildren: tracked,
+      isPortInUse: probe,
+      isProcessAlive: () => false,
+      onStatus: vi.fn(),
+      onReap: vi.fn(async () => {})
+    })
+    const snap = await monitor.refresh()
+    expect(probe).toHaveBeenCalledOnce()
+    // Something else is on that port, so the row adopts rather than going idle.
+    expect(snap[0]).toMatchObject({ running: true, source: 'adopted' })
+  })
+
+  it('still probes an untracked instance — adoption must keep working', async () => {
+    const probe = vi.fn(async () => true)
+    const monitor = createStatusMonitor({
+      settingsManager: { load: async () => ({ instances: [{ id: 'a', lobbyPort: 2610 }] }) },
+      instanceChildren: new Map(),
+      isPortInUse: probe,
+      isProcessAlive: () => false,
+      onStatus: vi.fn()
+    })
+    expect((await monitor.refresh())[0]).toMatchObject({ running: true, source: 'adopted' })
+    expect(probe).toHaveBeenCalledOnce()
   })
 
   it('treats a failing probe as "not listening" instead of failing the pass', async () => {

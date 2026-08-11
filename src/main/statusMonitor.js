@@ -1,8 +1,17 @@
-import { buildStatusSnapshot, findDeadTracked, statusChanged } from './instanceStatus.js'
+import {
+  buildStatusSnapshot,
+  findDeadTracked,
+  portsToProbe,
+  statusChanged
+} from './instanceStatus.js'
 
 // How often to re-derive server status. Fast enough that closing a server's
-// console window updates the button before the user reaches for it, slow enough
-// that the per-instance TCP probe stays free.
+// console window updates the button before the user reaches for it.
+//
+// The probe is NOT free, which is why portsToProbe exists: a server Epona
+// started and tracks answers for itself, and connecting to it anyway wrote four
+// log lines into that server every interval for as long as the app was open.
+// The interval is only affordable because a steady state now probes nothing.
 export const POLL_INTERVAL_MS = 3000
 
 // Polls the truth about running server instances and pushes it at the renderer.
@@ -56,8 +65,11 @@ export function createStatusMonitor({
         }
       }
 
-      // 3. Probe each distinct lobby port once, in parallel.
-      const ports = [...new Set(instances.map((i) => i.lobbyPort).filter(Boolean))]
+      // 3. Probe each lobby port whose answer can still change a row, once, in
+      //    parallel. This runs AFTER the reap above on purpose: step 2 drops the
+      //    entry for a process that died, so this pass sees the instance as
+      //    untracked and probes it rather than reporting it late.
+      const ports = portsToProbe({ instances, tracked: instanceChildren, aliveByPid })
       const probes = await Promise.all(
         ports.map((p) =>
           Promise.resolve(isPortInUse('127.0.0.1', p, probeTimeoutMs))

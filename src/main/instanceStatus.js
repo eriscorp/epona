@@ -23,6 +23,57 @@ export function findAmbiguousPorts(instances) {
   return ambiguous
 }
 
+// Is a tracked entry's process still running, and what is its pid?
+//
+// The single definition of "tracked and alive", because two callers depend on
+// it and they MUST agree: buildStatusSnapshot decides whether to believe the
+// entry instead of the probe, and portsToProbe decides whether to make that
+// probe at all. Two copies of this rule would drift into either a redundant
+// probe or a row that reports nothing.
+//
+// A 'child' entry is a real ChildProcess, so its own exitCode is authoritative.
+// A 'pid' entry is a bare wrapper pid we can only ask the OS about, and an
+// absent answer means we did not sample it — treat that as alive rather than
+// reaping something on missing evidence.
+function trackedLiveness(entry, aliveByPid) {
+  const pid = entry.kind === 'child' ? entry.value?.pid : entry.value
+  const alive =
+    entry.kind === 'child' ? entry.value?.exitCode === null : (aliveByPid?.get(pid) ?? true)
+  return { pid, alive }
+}
+
+// Which lobby ports does this pass actually need to probe?
+//
+// Every probe is a real TCP connection that Hybrasyl accepts as a client: it
+// assigns a connection id, requests an encryption key, queues the CONNECTED
+// SERVER packet, reads zero bytes and disconnects — four log lines per probe,
+// one of them at error level, every poll interval, forever. So only probe a
+// port whose answer can change a row.
+//
+// Probe when:
+//   - no tracked entry exists for the instance. This is the ADOPTION path, and
+//     it is the only way Epona sees a server it did not start or one that
+//     outlived an earlier run. It must keep working.
+//   - a tracked entry exists but its process is dead. The monitor reaps those
+//     on the same tick, so this pass is where the fall-back probe has to run;
+//     without it a stop Epona did not perform reports late by one interval.
+//
+// Skip when a live tracked entry already answers for the port, and skip an
+// ambiguous port — buildStatusSnapshot refuses to attribute one to an instance,
+// so its probe result is discarded either way.
+export function portsToProbe({ instances, tracked, aliveByPid }) {
+  const ambiguous = findAmbiguousPorts(instances)
+  const ports = new Set()
+  for (const inst of instances ?? []) {
+    const port = inst?.lobbyPort
+    if (!port || ambiguous.has(port)) continue
+    const entry = tracked?.get(inst.id)
+    if (entry && trackedLiveness(entry, aliveByPid).alive) continue
+    ports.add(port)
+  }
+  return [...ports]
+}
+
 // Build the authoritative snapshot.
 //
 //   instances    — settings.instances
@@ -39,9 +90,7 @@ export function buildStatusSnapshot({ instances, tracked, aliveByPid, portsInUse
   return (instances ?? []).map((inst) => {
     const entry = tracked?.get(inst.id)
     if (entry) {
-      const pid = entry.kind === 'child' ? entry.value?.pid : entry.value
-      const alive =
-        entry.kind === 'child' ? entry.value?.exitCode === null : (aliveByPid?.get(pid) ?? true)
+      const { pid, alive } = trackedLiveness(entry, aliveByPid)
       if (alive) {
         return {
           id: inst.id,
