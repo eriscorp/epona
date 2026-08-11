@@ -55,6 +55,7 @@ import { installGlobalErrorHandlers } from './errorHandlers.js'
 import { registerDiagnosticsHandlers } from './diagnostics.js'
 import { registerChangelogHandlers } from './changelog.js'
 import { checkForUpdates } from './updateCheck.js'
+import { detectRemoteSessionNative } from './remoteSessionNative.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
@@ -91,8 +92,14 @@ app.setPath('userData', dataDir)
 //
 // Detected rather than made a setting, on purpose. See src/shared/remoteSession.js
 // for why a persisted toggle cannot work this early.
+// Ask Win32 directly. %SESSIONNAME% is written at logon and never revised, so a
+// session that started at the console and was later RECONNECTED over RDP — which
+// is what Windows does when you connect to a machine you left logged in — still
+// reports 'Console' to every process in it. That made this whole branch inert for
+// exactly the users it was written for. See main/remoteSessionNative.js.
+const systemRemoteSession = detectRemoteSessionNative()
 const gpuOverride = resolveGpuOverride(process.env.EPONA_DISABLE_GPU)
-const softwareRendering = shouldDisableHardwareAcceleration()
+const softwareRendering = shouldDisableHardwareAcceleration(process, systemRemoteSession)
 if (softwareRendering) {
   app.disableHardwareAcceleration()
   console.log(
@@ -100,7 +107,7 @@ if (softwareRendering) {
       ? '[display] remote session detected — hardware acceleration disabled'
       : '[display] EPONA_DISABLE_GPU set — hardware acceleration disabled'
   )
-} else if (gpuOverride === false && detectRemoteSession()) {
+} else if (gpuOverride === false && detectRemoteSession(process, systemRemoteSession)) {
   // Say so. This is the recourse path for someone whose machine we read wrong,
   // and a silent one leaves them unable to tell the override took effect.
   console.log('[display] remote session detected, but EPONA_DISABLE_GPU=0 — acceleration left on')

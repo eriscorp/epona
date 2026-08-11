@@ -56,6 +56,16 @@ Keep entries user-facing — internal refactors/tests show up in the appended au
 
 ### Fixed
 
+- **The Remote Desktop adaptation now applies when you reconnect to a session.**
+  Windows records how a session started and never revises it, so connecting to a
+  machine you had left logged in kept Epona reading the session as local. The
+  adaptation added in 2.7.2 therefore did nothing for exactly the people who
+  reconnect, which is most of them. Epona now asks Windows directly, so it is
+  right either way.
+- **Text no longer looks smeared or shaky over Remote Desktop.** Every theme drew
+  a soft shadow behind each letter, which a remote connection cannot carry
+  cleanly. Epona drops the shadow and switches to a plainer letter shape in a
+  remote session only. Nothing changes when you sit at the machine.
 - **Epona draws its own icon on Linux.** The application menu used to show a
   blank white page — the desktop's generic document icon — because the
   installed artwork was a single 1024-pixel image, a size no Linux desktop
