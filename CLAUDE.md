@@ -65,6 +65,14 @@ divergence from the skeleton, not an oversight. The full gate is
   Both self-skip without the `ES_*` secrets, so local builds are unsigned by design. Do not "simplify"
   this back into a post-build step over `dist/*.exe` — that signs the wrapper and leaves the payload
   bare, which is half of why 2.7.1 tripped Defender. See [docs/antivirus.md](docs/antivirus.md).
+- **A release target that no glob collects is published by nothing, silently.**
+  `fail_on_unmatched_files: true` is loud about a glob with no file behind it and says nothing
+  about a file nobody asked for, so `electron-builder.yml` and `release.yml` can disagree about
+  what ships and every gate stays green. That is how Taliesin declared an `nsis` target for
+  months and never once built it. Epona is the repo the others were fixed to match, so
+  `scripts/release-artifacts.test.mjs` pins the two files against each other in **both**
+  directions — plus the upload steps, the `needs:` list, and the signing arrangement. Add a
+  target and you owe that file an entry.
 - **`signingHashAlgorithms: [sha256]` is load-bearing.** Unset, electron-builder defaults to
   `["sha1","sha256"]` and calls the sign hook twice per binary. That default assumes `signtool.exe`,
   which takes the hash as an argument; CodeSignTool does not, so the second call re-signs identically
