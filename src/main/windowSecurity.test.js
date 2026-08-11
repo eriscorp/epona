@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { pathToFileURL } from 'url'
+import { pathToFileURL, fileURLToPath } from 'url'
 import {
   initWindowSecurity,
   registerTrustedWindow,
   isSenderAllowed,
+  senderVerdict,
+  getTrustedLocations,
   hardenWindow,
   guardIpc,
   __resetWindowSecurityForTests
@@ -161,6 +163,72 @@ describe('isSenderAllowed', () => {
     expect(isSenderAllowed(fakeEvent(win, { url: PROD_URL }))).toBe(true)
   })
 
+  // The lockout half of this gate, which is the half that actually bit. A
+  // trusted location that never matches rejects EVERY channel: the renderer
+  // cannot hydrate, so it never signals app:ready, so the window appears only on
+  // the 15s backstop showing default settings, with every IPC-backed control
+  // dead while checkboxes and text fields carry on working. Each case below is a
+  // way the two producers can spell the same file differently.
+  describe('path canonicalisation', () => {
+    it.runIf(process.platform === 'win32')(
+      'matches when only the drive-letter case differs',
+      () => {
+        // Chromium canonicalises the drive letter when it reports frame.url;
+        // pathToFileURL preserves whatever case __dirname carried. Comparing the
+        // two verbatim bricks the app.
+        initWindowSecurity(undefined, PROD_HTML)
+        const win = fakeWindow(1)
+        registerTrustedWindow(win)
+
+        const lowerDrive = PROD_URL.replace(/^file:\/\/\/C:/, 'file:///c:')
+        expect(lowerDrive).not.toBe(PROD_URL) // the disagreement is real
+        expect(isSenderAllowed(fakeEvent(win, { url: lowerDrive }))).toBe(true)
+      }
+    )
+
+    it.runIf(process.platform === 'win32')('matches a case difference anywhere in the path', () => {
+      // NTFS is case-insensitive, so these are one file, not two.
+      initWindowSecurity(undefined, PROD_HTML)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      expect(isSenderAllowed(fakeEvent(win, { url: PROD_URL.replace('AppData', 'appdata') }))).toBe(
+        true
+      )
+    })
+
+    it.runIf(process.platform !== 'win32')('keeps case significant on a case-sensitive OS', () => {
+      // The win32 fold is Windows semantics, not a general loosening.
+      const posixHtml = '/opt/Epona/resources/app.asar/out/renderer/index.html'
+      initWindowSecurity(undefined, posixHtml)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      const url = pathToFileURL(posixHtml).href
+      expect(isSenderAllowed(fakeEvent(win, { url }))).toBe(true)
+      expect(isSenderAllowed(fakeEvent(win, { url: url.replace('/opt/', '/OPT/') }))).toBe(false)
+    })
+
+    it('matches a non-ASCII install path', () => {
+      // %LOCALAPPDATA% contains the user's name, which is not required to be
+      // ASCII. Canonicalising must not break the path it is there to rescue.
+      const html = pathToFileURL(PROD_HTML).href.replace('a%20b', 'Jürgen')
+      const decoded = fileURLToPath(html)
+      initWindowSecurity(undefined, decoded)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      expect(isSenderAllowed(fakeEvent(win, { url: pathToFileURL(decoded).href }))).toBe(true)
+    })
+
+    it('still rejects a different file in the same directory', () => {
+      // Canonicalising normalises spelling, not identity.
+      initWindowSecurity(undefined, PROD_HTML)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      expect(
+        isSenderAllowed(fakeEvent(win, { url: PROD_URL.replace('index.html', 'other.html') }))
+      ).toBe(false)
+    })
+  })
+
   it.runIf(process.platform === 'win32')(
     'keys a UNC install path by its share host, which has no drive letter to save it',
     () => {
@@ -265,6 +333,96 @@ describe('guardIpc', () => {
     const raw = fakeIpcMain()
     raw.somethingElse = () => 'passthrough'
     expect(guardIpc(raw).somethingElse()).toBe('passthrough')
+  })
+
+  // Without these the gate is a brick: it fails closed and says nothing, so a
+  // lockout looks like a slow app with dead buttons rather than a broken bridge.
+  describe('onReject diagnostics', () => {
+    it('reports a location mismatch with BOTH sides of the comparison', () => {
+      initWindowSecurity(undefined, PROD_HTML)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      const raw = fakeIpcMain()
+      const onReject = vi.fn()
+
+      guardIpc(raw, { onReject }).handle('settings:load', vi.fn())
+      expect(() =>
+        raw.handlers.get('settings:load')(
+          fakeEvent(win, { url: 'file:///D:/elsewhere/index.html' })
+        )
+      ).toThrow(/location-mismatch/)
+
+      expect(onReject).toHaveBeenCalledWith({
+        channel: 'settings:load',
+        reason: 'location-mismatch',
+        senderUrl: 'file:///D:/elsewhere/index.html',
+        trusted: getTrustedLocations()
+      })
+      // The trusted side must not be empty, or the log names only the symptom.
+      expect(getTrustedLocations().length).toBeGreaterThan(0)
+    })
+
+    it('reports the silently-dropped send path too — that is window:minimize', () => {
+      initWindowSecurity(undefined, PROD_HTML)
+      const raw = fakeIpcMain()
+      const onReject = vi.fn()
+
+      guardIpc(raw, { onReject }).on('window:minimize', vi.fn())
+      raw.listeners.get('window:minimize')(fakeEvent(fakeWindow(42)))
+
+      expect(onReject).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'window:minimize', reason: 'unknown-window' })
+      )
+    })
+
+    it('never lets a throwing reporter take the guard down with it', () => {
+      initWindowSecurity(undefined, PROD_HTML)
+      const raw = fakeIpcMain()
+      const inner = vi.fn()
+
+      guardIpc(raw, {
+        onReject: () => {
+          throw new Error('log sink is on fire')
+        }
+      }).on('window:close', inner)
+
+      expect(() => raw.listeners.get('window:close')(fakeEvent(fakeWindow(42)))).not.toThrow()
+      expect(inner).not.toHaveBeenCalled() // still rejected, just also still alive
+    })
+
+    it('stays silent when a sender is allowed', () => {
+      initWindowSecurity(undefined, PROD_HTML)
+      const win = fakeWindow(1)
+      registerTrustedWindow(win)
+      const raw = fakeIpcMain()
+      const onReject = vi.fn()
+
+      guardIpc(raw, { onReject }).handle('settings:load', vi.fn())
+      raw.handlers.get('settings:load')(fakeEvent(win))
+      expect(onReject).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe('senderVerdict', () => {
+  // The reason has to distinguish "the app is locked out of itself"
+  // (location-mismatch) from the cases that mean something is genuinely wrong.
+  it('names which gate refused', () => {
+    initWindowSecurity(undefined, PROD_HTML)
+    const win = fakeWindow(1)
+
+    expect(senderVerdict(fakeEvent(win)).reason).toBe('unknown-window')
+    registerTrustedWindow(win)
+    expect(senderVerdict(fakeEvent(win))).toEqual({ allowed: true })
+    expect(senderVerdict(fakeEvent(win, { frame: null })).reason).toBe('no-sender-frame')
+    expect(senderVerdict(fakeEvent(win, { frame: { url: PROD_URL } })).reason).toBe('subframe')
+
+    const mismatch = senderVerdict(fakeEvent(win, { url: 'https://example.com/' }))
+    expect(mismatch.reason).toBe('location-mismatch')
+    expect(mismatch.senderUrl).toBe('https://example.com/')
+
+    win.webContents.isDestroyed = () => true
+    expect(senderVerdict(fakeEvent(win)).reason).toBe('destroyed-sender')
   })
 })
 

@@ -20,7 +20,7 @@
 // This is a SECOND gate. The zod schemas at each handler still validate every
 // payload; nothing here replaces them.
 
-import { pathToFileURL } from 'url'
+import { pathToFileURL, fileURLToPath } from 'url'
 import { isSafeExternalUrl } from '../shared/externalUrl.js'
 
 /**
@@ -56,7 +56,39 @@ let trustedLocations = []
  * default port away — so nothing changes on the dev-server path.
  */
 function locationKey(url) {
-  return `${url.protocol}//${url.host}${url.pathname}`
+  if (url.protocol !== 'file:') return `${url.protocol}//${url.host}${url.pathname}`
+  const canonical = canonicalFileUrl(url)
+  // Windows paths are case-insensitive, and the drive letter is where the two
+  // producers actually disagree: Chromium canonicalises it when it reports
+  // frame.url, `pathToFileURL(__dirname + ...)` preserves whatever case the
+  // module path carried. Comparing those verbatim is a LOCKOUT, not a safety
+  // margin (see initWindowSecurity). `host` is NOT folded in here — it is
+  // already lower-cased by the URL parser and stays compared exactly, which is
+  // the half that keeps a remote share from mirroring our path.
+  const pathname =
+    process.platform === 'win32' ? canonical.pathname.toLowerCase() : canonical.pathname
+  return `${canonical.protocol}//${canonical.host}${pathname}`
+}
+
+/**
+ * Round-trip a `file:` URL through Node's own path conversion so both sides of
+ * the comparison are spelled by the SAME encoder.
+ *
+ * Chromium and `pathToFileURL` do not have to agree on percent-encoding for a
+ * path containing a space, a `%`, or a non-ASCII character — and they only have
+ * to disagree once for every IPC in the app to be rejected. Decoding to a path
+ * and re-encoding collapses every equivalent spelling onto one.
+ *
+ * Falls back to the URL untouched when the conversion throws (a `file:` URL
+ * carrying an encoded separator, a UNC form Node declines). Failing to
+ * canonicalise must leave the old exact comparison in place, never widen it.
+ */
+function canonicalFileUrl(url) {
+  try {
+    return pathToFileURL(fileURLToPath(url))
+  } catch {
+    return url
+  }
 }
 
 /**
@@ -132,18 +164,42 @@ export function hardenWindow(win, { allowExternal, openExternal }) {
 }
 
 /**
- * The authority check: accept an IPC only from the top frame of a known epona
- * window, at one of our own locations. Exported for direct unit testing.
+ * The authority check, with its reasoning kept rather than collapsed to a
+ * boolean: `{ allowed }` on success, `{ allowed: false, reason, senderUrl }`
+ * otherwise.
+ *
+ * The reason exists because this gate fails CLOSED and used to fail SILENTLY,
+ * which is a brick. A location mismatch rejects every channel in the app — the
+ * renderer never hydrates, so it never signals 'app:ready', so the window is
+ * only revealed by the 15s backstop and every button is dead. That state is
+ * indistinguishable from a slow, broken app unless the guard says why.
  */
-export function isSenderAllowed(event) {
+export function senderVerdict(event) {
   const contents = event.sender
-  if (!contents || contents.isDestroyed()) return false
-  if (!trustedWindows.has(contents.id)) return false
+  if (!contents || contents.isDestroyed()) return { allowed: false, reason: 'destroyed-sender' }
+  if (!trustedWindows.has(contents.id)) return { allowed: false, reason: 'unknown-window' }
   // Must be the window's OWN top frame. An iframe inherits the preload, so a
   // subframe reaching a privileged channel is exactly what this rejects.
   const frame = event.senderFrame
-  if (!frame || frame !== contents.mainFrame) return false
-  return isTrustedLocation(frame.url)
+  if (!frame) return { allowed: false, reason: 'no-sender-frame' }
+  if (frame !== contents.mainFrame) return { allowed: false, reason: 'subframe' }
+  if (!isTrustedLocation(frame.url)) {
+    return { allowed: false, reason: 'location-mismatch', senderUrl: frame.url }
+  }
+  return { allowed: true }
+}
+
+/**
+ * Accept an IPC only from the top frame of a known epona window, at one of our
+ * own locations. Exported for direct unit testing.
+ */
+export function isSenderAllowed(event) {
+  return senderVerdict(event).allowed
+}
+
+/** The locations currently trusted. For diagnostics — a mismatch needs both sides. */
+export function getTrustedLocations() {
+  return [...trustedLocations]
 }
 
 /**
@@ -154,17 +210,40 @@ export function isSenderAllowed(event) {
  * Returned as a Proxy so call sites read as ordinary `ipcMain` usage — the point
  * is that a handler added later is covered by construction rather than by
  * remembering to opt in.
+ *
+ * `onReject({ channel, reason, senderUrl, trusted })` is optional and injected,
+ * so this module stays free of an `electron` import and the logger it feeds is
+ * the caller's choice. It is the ONLY way a rejection becomes visible: the
+ * `.on` path drops silently by design, and the `.handle` path throws into the
+ * renderer, where a packaged build has no console to show it. A throwing
+ * `onReject` is swallowed — a diagnostic must never take the guard down with it.
  */
-export function guardIpc(ipcMain) {
+export function guardIpc(ipcMain, { onReject } = {}) {
   const wrappers = new WeakMap()
+
+  const report = (channel, verdict) => {
+    if (!onReject) return
+    try {
+      onReject({
+        channel,
+        reason: verdict.reason,
+        senderUrl: verdict.senderUrl,
+        trusted: getTrustedLocations()
+      })
+    } catch {
+      /* best effort — never let logging break IPC */
+    }
+  }
 
   return new Proxy(ipcMain, {
     get(target, prop, receiver) {
       if (prop === 'handle') {
         return (channel, listener) => {
           target.handle(channel, (event, ...args) => {
-            if (!isSenderAllowed(event)) {
-              throw new Error(`IPC "${channel}" rejected: untrusted sender`)
+            const verdict = senderVerdict(event)
+            if (!verdict.allowed) {
+              report(channel, verdict)
+              throw new Error(`IPC "${channel}" rejected: untrusted sender (${verdict.reason})`)
             }
             return listener(event, ...args)
           })
@@ -173,7 +252,8 @@ export function guardIpc(ipcMain) {
       if (prop === 'on') {
         return (channel, listener) => {
           const wrapped = (event, ...args) => {
-            if (!isSenderAllowed(event)) return
+            const verdict = senderVerdict(event)
+            if (!verdict.allowed) return report(channel, verdict)
             listener(event, ...args)
           }
           wrappers.set(listener, wrapped)

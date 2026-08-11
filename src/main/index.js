@@ -55,6 +55,7 @@ import { installGlobalErrorHandlers } from './errorHandlers.js'
 import { registerDiagnosticsHandlers } from './diagnostics.js'
 import { registerChangelogHandlers } from './changelog.js'
 import { checkForUpdates } from './updateCheck.js'
+import { detectRemoteSessionNative } from './remoteSessionNative.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
@@ -91,8 +92,14 @@ app.setPath('userData', dataDir)
 //
 // Detected rather than made a setting, on purpose. See src/shared/remoteSession.js
 // for why a persisted toggle cannot work this early.
+// Ask Win32 directly. %SESSIONNAME% is written at logon and never revised, so a
+// session that started at the console and was later RECONNECTED over RDP — which
+// is what Windows does when you connect to a machine you left logged in — still
+// reports 'Console' to every process in it. That made this whole branch inert for
+// exactly the users it was written for. See main/remoteSessionNative.js.
+const systemRemoteSession = detectRemoteSessionNative()
 const gpuOverride = resolveGpuOverride(process.env.EPONA_DISABLE_GPU)
-const softwareRendering = shouldDisableHardwareAcceleration()
+const softwareRendering = shouldDisableHardwareAcceleration(process, systemRemoteSession)
 if (softwareRendering) {
   app.disableHardwareAcceleration()
   console.log(
@@ -100,7 +107,7 @@ if (softwareRendering) {
       ? '[display] remote session detected — hardware acceleration disabled'
       : '[display] EPONA_DISABLE_GPU set — hardware acceleration disabled'
   )
-} else if (gpuOverride === false && detectRemoteSession()) {
+} else if (gpuOverride === false && detectRemoteSession(process, systemRemoteSession)) {
   // Say so. This is the recourse path for someone whose machine we read wrong,
   // and a silent one leaves them unable to tell the override took effect.
   console.log('[display] remote session detected, but EPONA_DISABLE_GPU=0 — acceleration left on')
@@ -333,7 +340,34 @@ app.whenReady().then(() => {
   // sender check applies by construction rather than by each handler remembering
   // to ask for it. A new handler added on the raw import silently opts out — that
   // is the one way to get this wrong, so keep the import unused past this point.
-  const ipc = guardIpc(ipcMain)
+  //
+  // onReject makes a lockout legible. The guard fails closed, so a trusted
+  // location that never matches rejects EVERY channel: the renderer cannot
+  // hydrate, never signals 'app:ready', and the window is revealed only by the
+  // backstop below — a 15-second boot into a UI whose every button is dead while
+  // checkboxes and text fields still work, because those are renderer-local. That
+  // was indistinguishable from a slow, broken app. It is now a log line naming
+  // both sides of the comparison.
+  //
+  // Deduplicated per (channel, reason): the instance-status poll runs every 3s,
+  // and a rejection loop must not bury the first occurrence under thousands of
+  // copies of itself.
+  const reportedRejections = new Set()
+  const ipc = guardIpc(ipcMain, {
+    onReject: ({ channel, reason, senderUrl, trusted }) => {
+      const key = `${channel} ${reason}`
+      if (reportedRejections.has(key)) return
+      reportedRejections.add(key)
+      captureError({
+        source: 'ipc-rejected',
+        message:
+          `IPC "${channel}" rejected: ${reason}` +
+          (reason === 'location-mismatch'
+            ? ` — sender ${senderUrl ?? '(none)'}; trusted ${trusted.join(', ') || '(none)'}`
+            : '')
+      })
+    }
+  })
 
   // userData is already pinned to Local at module load (see dataDir above).
   removeStrayRoamingData()
@@ -413,9 +447,26 @@ app.whenReady().then(() => {
   // Reveal the (hidden) main window and tear down the splash. Guarded so it
   // runs once, whether triggered by the renderer's 'app:ready' signal or the
   // safety timeout below.
-  function revealMainWindow() {
+  //
+  // `via` records WHICH of the two got here, because they are not equivalent.
+  // 'app:ready' is the healthy path. The backstop firing means the renderer never
+  // finished hydrating — settings:load rejected or threw — so the window that
+  // appears is showing DEFAULTS rather than the user's saved config, and every
+  // control that crosses IPC is dead. That is a fault, and it was previously
+  // silent: the only outward sign was that the app took exactly 15 seconds to
+  // appear, which reads as slowness rather than as breakage.
+  function revealMainWindow(via = 'app:ready') {
     if (mainWindowRevealed) return
     mainWindowRevealed = true
+    if (via === 'backstop') {
+      captureError({
+        source: 'boot',
+        message:
+          'Renderer never signalled app:ready; window revealed by the 15s backstop. ' +
+          'Settings are showing defaults and IPC-backed controls will not respond. ' +
+          'Look for an ipc-rejected entry above.'
+      })
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show()
       mainWindow.focus()
@@ -428,8 +479,10 @@ app.whenReady().then(() => {
   // on the renderer's 'app:ready' signal, with a safety timeout so a renderer
   // that throws before signalling can't leave the app permanently invisible.
   splashWindow = createSplashWindow()
-  ipc.on('app:ready', revealMainWindow)
-  setTimeout(revealMainWindow, 15000)
+  // Arrow wrappers, not bare references: ipc.on would otherwise hand the reveal
+  // an IpcMainEvent as `via`, and setTimeout would hand it nothing.
+  ipc.on('app:ready', () => revealMainWindow('app:ready'))
+  setTimeout(() => revealMainWindow('backstop'), 15000)
 
   createAndWireMainWindow()
 

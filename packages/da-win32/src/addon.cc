@@ -284,7 +284,27 @@ Napi::Value GetMainModuleBase(const Napi::CallbackInfo& info) {
   return Napi::BigInt::New(env, static_cast<uint64_t>(imageBase));
 }
 
+// Is this process running in a Remote Desktop session?
+//
+// The authoritative answer, and the ONLY one that survives a reconnect.
+// %SESSIONNAME% is written into a session's environment at logon and never
+// updated: RDP into a machine that already has your session open at the console
+// and Windows RECONNECTS that session rather than making a new one, so every
+// process still reports SESSIONNAME=Console while plainly running over RDP.
+// (Observed directly: SESSIONNAME=Console, CLIENTNAME unset, `query session`
+// reporting rdp-tcp#0 Active, and a 1280x960 virtual display.) CLIENTNAME goes
+// stale the same way, so it is no better.
+//
+// GetSystemMetrics queries the session live, needs no handle, and cannot go
+// stale. It is a plain user32 call, so it is also safe to make before Electron
+// is ready — which matters, because disableHardwareAcceleration() has to be
+// called before the 'ready' event to have any effect at all.
+Napi::Value IsRemoteSession(const Napi::CallbackInfo& info) {
+  return Napi::Boolean::New(info.Env(), GetSystemMetrics(SM_REMOTESESSION) != 0);
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  exports.Set("isRemoteSession",        Napi::Function::New(env, IsRemoteSession));
   exports.Set("createSuspendedProcess", Napi::Function::New(env, CreateSuspendedProcess));
   exports.Set("openProcess",            Napi::Function::New(env, OpenProcess_));
   exports.Set("writeProcessMemory",     Napi::Function::New(env, WriteProcessMemory_));
