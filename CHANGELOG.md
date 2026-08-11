@@ -33,6 +33,8 @@ the rules above.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-08-11
+
 ### Added
 
 - **Epona can unpack the Dark Ages client files on every platform.** The official client installer
