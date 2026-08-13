@@ -25,11 +25,29 @@
 
 name: CI
 
+# MANUAL ONLY (HTOO-390). GitHub bills windows runners at 2x and macOS at 10x,
+# and this workflow ran on every pull request and every push -- so a change was
+# checked twice, once on the PR and again on the merge commit. One day of that
+# across the house on 2026-08-12 exhausted the shared Actions allowance and the
+# account hit its spending limit mid-merge.
+#
+# What replaces it, because "run it locally" is only a plan if something makes
+# it happen: "npm run validate" via .githooks/pre-push, armed by the "prepare"
+# script setting core.hooksPath -- no husky, no new dependency. And
+# "npm run validate:linux" runs the same suite on real Linux through WSL, for
+# the platform a Windows dev box cannot cover.
+#
+# release.yml is untouched: it still validates at tag time and still builds the
+# macOS and Linux artifacts, which cannot be built on the dev box at all.
+#
+# WHAT IS LOST, rather than glossed: a hosted runner is a DIFFERENT machine from
+# the dev box, and on oghma it twice caught what the dev box could not -- the
+# runner ships core.autocrlf=true, and its file-time clock advances about every
+# 15 ms where a dev box's is finer. Fire this by hand before a release or a
+# platform-shaped change:
+#   gh workflow run ci.yml --ref <branch>
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read

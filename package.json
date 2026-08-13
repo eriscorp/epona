@@ -18,6 +18,9 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || exit 0",
+    "validate": "npm run lint:check && npm test",
+    "validate:linux": "node scripts/validate-linux.mjs",
     "format": "prettier --write .",
     "lint": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
