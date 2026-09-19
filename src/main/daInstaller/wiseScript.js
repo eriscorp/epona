@@ -57,9 +57,12 @@ const MAX_INFLATED_SIZE = 0x7fffffff
 // would mean scattering spurious empty files through the client tree on every
 // false positive, which is a worse outcome than omitting a genuine empty one.
 //
-// In the retail DarkAges741single.exe this costs exactly one file: `usa.nfo`, an
-// empty release-note placeholder the client never reads. Every file the client
-// loads has a non-zero length. Revisit only if a real, needed empty file appears.
+// In the retail DarkAges741single.exe this costs exactly one file: `usa.nfo`,
+// which is the client's region-1 marker: its existence is its content (see
+// comhaigne docs/protocol/CLIENT-REGIONS.md). Dropping it is harmless only because
+// the 7.41 client's region resolver is stubbed to a constant and nothing else in
+// that image reads the file. A zero-byte marker in any other installer would be
+// lost by this rule; revisit if one appears.
 
 // Destination paths are written with a Wise variable as the root: %MAINDIR% for
 // the install directory, %TEMP% for the installer's own scratch files,
