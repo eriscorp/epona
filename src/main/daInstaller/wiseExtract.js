@@ -38,6 +38,56 @@ function throwIfCancelled(signal) {
   if (signal?.aborted) throw new ExtractionCancelledError()
 }
 
+// The staging directory is `<destination>.epona-incomplete-<pid>`, a sibling of
+// the destination so promotion is a same-volume rename.
+const STAGING_INFIX = '.epona-incomplete-'
+
+function stagingDirFor(destinationDir, pid) {
+  return join(dirname(destinationDir), `${basename(destinationDir)}${STAGING_INFIX}${pid}`)
+}
+
+// Is `pid` a live process? `process.kill(pid, 0)` sends no signal — it only runs
+// the existence check and throws when there is nothing there. EPERM means it
+// exists and we may not signal it, which for this purpose is alive. A copy of
+// src/main/processAlive.js, kept here so this directory stays a self-contained
+// vendorable unit (Elatha carries it byte for byte).
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return err?.code === 'EPERM'
+  }
+}
+
+// Removes staging directories left behind by runs that never reached their own
+// cleanup — a crash, a kill, a quit that tore the process down mid-extraction.
+// The `catch` below only sees a failure inside this process, and the rm at the
+// start of extractClientFiles only reaches this pid's directory; every later run
+// has a different pid, so nothing ever found the old ones (HTOO-462).
+//
+// Only a directory whose pid is dead is removed. The destination is the user's
+// choice in Epona and fixed in Elatha, so the two can coincide, and a sweep that
+// ignored liveness could delete the other app's in-flight staging.
+async function sweepOrphanedStaging(destinationDir, isAlive = isProcessAlive) {
+  const parent = dirname(destinationDir)
+  const prefix = `${basename(destinationDir)}${STAGING_INFIX}`
+  let entries
+  try {
+    entries = await fs.readdir(parent, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue
+    const suffix = entry.name.slice(prefix.length)
+    if (!/^\d+$/.test(suffix)) continue
+    const pid = Number(suffix)
+    if (pid === process.pid || isAlive(pid)) continue
+    await fs.rm(join(parent, entry.name), { recursive: true, force: true }).catch(() => {})
+  }
+}
+
 // Inflates one entry's byte range into `outputPath`, returning the CRC32 and
 // byte count of what was written. Nothing is verified here — the caller compares
 // against the manifest, so this stays a plain transfer.
@@ -66,11 +116,15 @@ async function inflateEntryToFile(installerPath, start, compressedLength, output
 // casing is the installer's own. Nothing here normalises case: on Linux that
 // would be the difference between a working tree and one where Legend.dat cannot
 // be found. See HTOO-287.
+//
+// `isAlive` is the liveness check the orphan sweep uses, defaulting to the real
+// one. It is an option so a test can stand in a dead pid without depending on
+// the OS not having recycled a number in the meantime.
 export async function extractClientFiles(
   installerPath,
   { dataBase, clientFiles },
   destinationDir,
-  { onProgress, signal } = {}
+  { onProgress, signal, isAlive } = {}
 ) {
   if (!Array.isArray(clientFiles) || clientFiles.length === 0) {
     throw new ExtractionError('The installer lists no client files', 'no-client-files')
@@ -78,10 +132,8 @@ export async function extractClientFiles(
   throwIfCancelled(signal)
 
   const totalBytes = clientFiles.reduce((sum, file) => sum + file.inflatedSize, 0)
-  const staging = join(
-    dirname(destinationDir),
-    `${basename(destinationDir)}.epona-incomplete-${process.pid}`
-  )
+  const staging = stagingDirFor(destinationDir, process.pid)
+  await sweepOrphanedStaging(destinationDir, isAlive)
   await fs.rm(staging, { recursive: true, force: true })
   await fs.mkdir(staging, { recursive: true })
 

@@ -138,7 +138,11 @@ Output is **staged**, never written straight into the destination. Files land in
 sibling `.epona-incomplete-<pid>` directory and are promoted by rename only once
 every entry has passed. A failed or cancelled run removes the staging directory and
 leaves the destination untouched — otherwise a half-written tree with a few `.dat`
-files in it is exactly the shape `inspectAssetDir` accepts.
+files in it is exactly the shape `inspectAssetDir` accepts. A run that is killed
+cannot remove its own directory, so each run first removes any sibling
+`.epona-incomplete-<pid>` whose process is no longer alive (HTOO-462). The
+liveness check is what keeps a sweep from deleting another app's in-flight staging
+when two apps share a destination.
 
 ## The download
 
