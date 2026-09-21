@@ -138,16 +138,22 @@ export function createElectronDouble({
       this.webContents.mainFrame.url = url
       return Promise.resolve()
     }
+    // A list per event, as the real EventEmitter keeps. index.js registers
+    // 'closed' on the main window twice (splash teardown, screen listeners);
+    // a one-slot map would keep only the second and the splash would outlive
+    // the window in every test that closes it.
     on(event, handler) {
-      this.events.set(event, handler)
+      if (!this.events.has(event)) this.events.set(event, [])
+      this.events.get(event).push(handler)
       return this
     }
     once(event, handler) {
-      this.events.set(event, handler)
-      return this
+      return this.on(event, handler)
     }
     emit(event, ...args) {
-      return this.events.get(event)?.(...args)
+      let result
+      for (const handler of this.events.get(event) ?? []) result = handler(...args)
+      return result
     }
     show() {
       this.visible = true
@@ -170,8 +176,20 @@ export function createElectronDouble({
       this.destroyed = true
       this.emit('closed')
     }
+    // Like the real thing, `close` raises 'close' first and reads
+    // `defaultPrevented` the moment the listener's synchronous part returns. A
+    // listener that awaits before calling preventDefault has not cancelled
+    // anything — the window is already gone by the time it resumes. The close
+    // guard in index.js depends on that ordering, so the double has to keep it.
     close() {
-      this.destroy()
+      const event = {
+        defaultPrevented: false,
+        preventDefault() {
+          this.defaultPrevented = true
+        }
+      }
+      this.emit('close', event)
+      if (!event.defaultPrevented) this.destroy()
     }
     minimize() {}
     setSize() {}

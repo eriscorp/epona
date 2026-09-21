@@ -33,6 +33,16 @@ the rules above.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The window does not flash white when it closes.** The window has a white background behind
+  the page. That background showed for one or two frames when the window closed. Epona now hides
+  the window before it closes. This applies to the title-bar X, Alt+F4, and the taskbar close.
+- **The quit confirmation appears when a repo-mode launch is running.** Epona asked the question
+  after the window had already started to close, so the window closed before the question could
+  show. Epona now holds the window, asks the question, and closes the window only after you
+  select Quit. Cancel keeps the window open.
+
 ## [2.8.0] - 2026-08-11
 
 ### Added

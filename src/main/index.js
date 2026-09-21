@@ -122,6 +122,11 @@ if (softwareRendering) {
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
 
+// Set by before-quit, read by the close guard in createAndWireMainWindow to
+// tell a quit-driven close (Cmd+Q on macOS) from a window close. Module scope
+// because the guard lives inside whenReady and before-quit does not.
+let quitRequested = false
+
 // Report Issue / diagnostics: session logs live in a `logs/` subfolder of the local
 // app-data dir (a clean "Reveal logs folder" target, separate from settings.json).
 // Install the global error nets + open this run's session file at module load, before
@@ -399,30 +404,67 @@ app.whenReady().then(() => {
     // needs its own handler and a fresh closeConfirmed flag. Repo-mode launches
     // own a git worktree + dotnet child tree; bouncing them unintentionally
     // costs build/run state and can wedge worktree refcounts, so prompt first.
-    // Titlebar X and Alt+F4 both fire 'close'; on confirm we re-fire close so
-    // the before-quit cleanup runs on the second pass.
+    // Titlebar X, Alt+F4, the in-app X and app quit all fire 'close'; on confirm
+    // we re-fire close so the before-quit cleanup runs on the second pass.
+    //
+    // The first 'close' is ALWAYS cancelled, and the decision is made after.
+    // Electron reads `defaultPrevented` the moment the synchronous part of this
+    // listener returns, so a preventDefault that comes after an await cancels
+    // nothing — the window is gone before the question is asked. Deciding
+    // whether to ask needs `collectRepoRunning`, which awaits the settings
+    // file, so the only order that works is cancel first, decide, close again.
     let closeConfirmed = false
-    mainWindow.on('close', async (event) => {
-      if (closeConfirmed) return
-      const repoRunning = await collectRepoRunning()
-      if (repoRunning.length === 0) return
-      event.preventDefault()
-      const { response } = await dialog.showMessageBox(mainWindow, {
-        type: 'question',
-        buttons: ['Cancel', 'Quit'],
-        defaultId: 0,
-        cancelId: 0,
-        title: 'Confirm Quit',
-        message: 'Repo-mode launches are still running.',
-        detail:
-          repoRunning.map((r) => `• ${r}`).join('\n') +
-          '\n\nQuitting will stop them and release their git worktrees.'
-      })
-      if (response === 1) {
-        closeConfirmed = true
-        mainWindow.close()
+    mainWindow.on('close', (event) => {
+      if (closeConfirmed) {
+        // A BrowserWindow keeps a native background behind the renderer, and
+        // Chromium's default for it is opaque white — no one `backgroundColor`
+        // can be right for six themes of which two are light — while the
+        // renderer's compositor tears down. That background is what paints for
+        // the last frame or two before the window leaves the screen, which
+        // reads as a white flash on quit. Hiding the window takes it off screen
+        // first; `close` runs before the teardown, and the close itself
+        // proceeds as normal after this returns.
+        mainWindow.hide()
+        return
       }
+      event.preventDefault()
+      void decideClose()
     })
+
+    async function decideClose() {
+      const repoRunning = await collectRepoRunning()
+      if (repoRunning.length > 0) {
+        const { response } = await dialog.showMessageBox(mainWindow, {
+          type: 'question',
+          buttons: ['Cancel', 'Quit'],
+          defaultId: 0,
+          cancelId: 0,
+          title: 'Confirm Quit',
+          message: 'Repo-mode launches are still running.',
+          detail:
+            repoRunning.map((r) => `• ${r}`).join('\n') +
+            '\n\nQuitting will stop them and release their git worktrees.'
+        })
+        if (response !== 1) {
+          // Cancel keeps the window, and un-arms a quit that was in flight so
+          // the next plain close of this window stays a close.
+          quitRequested = false
+          return
+        }
+      }
+      if (mainWindow.isDestroyed()) return
+      closeConfirmed = true
+      // Hide here, synchronously, rather than only in the `close` above:
+      // between this call and that event the compositor can paint a frame of
+      // the default background, which is exactly the flash the hide prevents.
+      mainWindow.hide()
+      // A cancelled 'close' also cancels the app.quit() that raised it, so a
+      // quit-driven close (Cmd+Q on macOS) has to be re-issued as a quit —
+      // closing the window alone would leave the app running with no window
+      // there. Everywhere else, closing the window is the whole request.
+      if (quitRequested) app.quit()
+      else mainWindow.close()
+    }
 
     // The splash is alwaysOnTop + skipTaskbar. If the main window dies before
     // the reveal (a renderer crash, a close during boot), the splash outlives it
@@ -1257,6 +1299,7 @@ app.on('window-all-closed', () => {
 // directories on disk. Force-close via Task Manager won't run this; the next
 // launch's adoption path covers that case.
 app.on('before-quit', async (event) => {
+  quitRequested = true
   // The instance that lost the single-instance lock owns no children and no
   // worktree refcounts — let it exit immediately rather than preventDefault-ing
   // its own quit to run a no-op sweep.
