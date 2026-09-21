@@ -47,6 +47,14 @@ the rules above.
   crash or a forced quit left that folder behind, with up to 580 MB in it, and no later run
   removed it. Each run now removes the temporary folders of runs that are no longer alive.
 
+### Security
+
+- **Epona downloads the client installer only from KRU's own servers over HTTPS.** Epona reads the
+  installer link from the darkages.com download page. It accepted a link to any server, and it
+  accepted plain HTTP. Epona now follows the link only when it points to KRU's S3 bucket or to
+  darkages.com over HTTPS. If it does not, Epona uses the known installer address instead. Epona
+  also stops a download that a redirect sends to another server or to plain HTTP.
+
 ## [2.8.0] - 2026-08-11
 
 ### Added

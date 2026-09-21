@@ -33,6 +33,47 @@ export const FALLBACK_INSTALLER_URL =
 // which are not usable as a source tree.
 const INSTALLER_LINK = /https?:\/\/[^"'\s>]*DarkAges\d+single\.exe/i
 
+// Where an installer may come from. The page is scraped, so the link on it is
+// whatever the page says today — and whatever anyone able to change the page, or
+// sit on a plain-http hop, says. The unpacked tree becomes the client Epona
+// launches, so the link is held to https and to KRU's own hosts (HTOO-461):
+//
+//  * the S3 bucket, in path style (`s3.amazonaws.com/kru-downloads/…`, which is
+//    what the page links and FALLBACK_INSTALLER_URL pins) and in virtual-hosted
+//    style (`kru-downloads.s3.amazonaws.com/…`), with or without a region;
+//  * darkages.com itself, should KRU ever self-host.
+//
+// On s3.amazonaws.com the path prefix is the whole check — anyone can create a
+// bucket there, so the host alone trusts nothing.
+const S3_PATH_STYLE_HOST = /^s3([.-][a-z0-9-]+)?\.amazonaws\.com$/
+const S3_BUCKET_HOST = /^kru-downloads\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$/
+const KRU_HOST = /^(www\.)?darkages\.com$/
+
+export function isTrustedInstallerUrl(value) {
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:') return false
+  const host = url.hostname.toLowerCase()
+  if (S3_PATH_STYLE_HOST.test(host)) return url.pathname.startsWith('/kru-downloads/')
+  return S3_BUCKET_HOST.test(host) || KRU_HOST.test(host)
+}
+
+// Redirects are followed, and a redirect may land anywhere — including an http
+// URL, which fetch does not refuse. So the URL a response actually came from is
+// held to the same rule as the one that was asked for, whenever the two differ.
+function assertTrustedLanding(response, requestedUrl) {
+  const landed = response.url
+  if (!landed || landed === requestedUrl || isTrustedInstallerUrl(landed)) return
+  throw new DownloadError(
+    'The download was redirected to a server Epona does not trust for the installer.',
+    'untrusted-redirect'
+  )
+}
+
 // A floor for the reuse path, aimed at one specific thing: an HTML error page
 // saved under the installer's name and then reused forever. Those are kilobytes.
 //
@@ -97,6 +138,11 @@ export async function resolveInstallerUrl({ fetchImpl = fetch, signal } = {}) {
     const html = await response.text()
     const match = INSTALLER_LINK.exec(html)
     if (!match) return { url: FALLBACK_INSTALLER_URL, resolved: false }
+    // A link on the page that is not KRU's own is not followed. The pinned URL is
+    // the version we know about, which is a better answer than a stranger's file.
+    if (!isTrustedInstallerUrl(match[0])) {
+      return { url: FALLBACK_INSTALLER_URL, resolved: false, rejected: match[0] }
+    }
     return { url: match[0], resolved: true }
   } catch (error) {
     if (isAbort(error)) throw new DownloadCancelledError()
@@ -133,6 +179,7 @@ async function probe(url, fetchImpl, signal) {
   } catch (error) {
     throw networkError(error, url)
   }
+  assertTrustedLanding(response, url)
   if (!response.ok) {
     throw new DownloadError(
       `The download server answered ${response.status} for the installer.`,
@@ -230,6 +277,8 @@ export async function downloadInstaller({
   } catch (error) {
     throw networkError(error, remote.url)
   }
+
+  assertTrustedLanding(response, remote.url)
 
   if (resumeFrom > 0 && response.status !== 206) {
     // The server ignored the range. Start over rather than append to the middle

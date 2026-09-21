@@ -152,6 +152,17 @@ fallback. The `DarkAges\d+single\.exe` pattern deliberately excludes the
 incremental `patch` installers listed on the same page — a patch is not a usable
 source tree.
 
+The link is scraped, so it is only ever as trustworthy as the page — and the
+unpacked tree becomes the client Epona launches. `isTrustedInstallerUrl` holds the
+link to `https` and to KRU's own hosts: the S3 bucket in path style
+(`s3.amazonaws.com/kru-downloads/…`, with the path prefix doing the work, since
+anyone can create a bucket on that host) or virtual-hosted style
+(`kru-downloads.s3….amazonaws.com`), and `darkages.com` itself. A link that fails
+the rule is not followed; the pinned fallback is used instead. The same rule is
+applied to the URL a response actually came from after redirects, on both the
+HEAD and the GET, because a redirect can land on plain `http` and fetch does not
+refuse that (HTOO-461).
+
 KRU serve it from S3 with `ETag`, `Last-Modified` and range support, which is what
 makes the rest work:
 
