@@ -124,6 +124,67 @@ describe('extractClientFiles', () => {
     expect(await fs.readdir(dir)).toEqual(['setup.exe'])
   })
 
+  // HTOO-462. A run that is killed mid-extraction never reaches its own cleanup,
+  // and every later run has a different pid, so its staging directory used to
+  // stay behind forever.
+  describe('orphaned staging directories', () => {
+    async function plantStaging(name) {
+      const path = join(dir, name)
+      await fs.mkdir(path, { recursive: true })
+      await fs.writeFile(join(path, 'Legend.dat'), 'half-written')
+      return path
+    }
+
+    it('removes one left by a run whose process is gone', async () => {
+      const { installer, manifest, destination } = await prepare()
+      const orphan = await plantStaging('DarkAges.epona-incomplete-99999')
+
+      await extractClientFiles(installer, manifest, destination, { isAlive: () => false })
+
+      await expect(fs.stat(orphan)).rejects.toMatchObject({ code: 'ENOENT' })
+      // The extraction itself still went through.
+      expect(await fs.readdir(dir)).toEqual(['DarkAges', 'setup.exe'])
+    })
+
+    it('leaves one whose process is still running', async () => {
+      // Epona's destination is the user's choice and Elatha's is fixed, so the
+      // two can coincide — a sweep that ignored liveness would delete the other
+      // app's in-flight staging.
+      const { installer, manifest, destination } = await prepare()
+      const live = await plantStaging('DarkAges.epona-incomplete-4242')
+
+      await extractClientFiles(installer, manifest, destination, {
+        isAlive: (pid) => pid === 4242
+      })
+
+      expect((await fs.stat(live)).isDirectory()).toBe(true)
+    })
+
+    it('touches nothing that is not a staging directory of this destination', async () => {
+      const { installer, manifest, destination } = await prepare()
+      const otherApp = await plantStaging('OtherApp.epona-incomplete-1')
+      const notAPid = await plantStaging('DarkAges.epona-incomplete-notapid')
+      const plainFile = join(dir, 'DarkAges.epona-incomplete-7')
+      await fs.writeFile(plainFile, 'a file, not a directory')
+
+      await extractClientFiles(installer, manifest, destination, { isAlive: () => false })
+
+      expect((await fs.stat(otherApp)).isDirectory()).toBe(true)
+      expect((await fs.stat(notAPid)).isDirectory()).toBe(true)
+      expect((await fs.stat(plainFile)).isFile()).toBe(true)
+    })
+
+    it('uses the real liveness check by default', async () => {
+      // The parent of this test process is alive for as long as the test runs.
+      const { installer, manifest, destination } = await prepare()
+      const live = await plantStaging(`DarkAges.epona-incomplete-${process.ppid}`)
+
+      await extractClientFiles(installer, manifest, destination)
+
+      expect((await fs.stat(live)).isDirectory()).toBe(true)
+    })
+  })
+
   it('fails when an entry does not inflate at all', async () => {
     const { installer, manifest, destination } = await prepare()
     const broken = {

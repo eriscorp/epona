@@ -69,7 +69,8 @@ export function findOverlayOffset(head) {
     const rawPointer = entry + SECTION_RAW_PTR_AT
     const rawPointerValue = head.readUInt32LE(rawPointer)
     // A zero raw pointer means the section has no file backing (.bss and
-    // friends). Including it would drag the overlay offset down to 0.
+    // friends). Its end is just its raw size, which is not a file offset, so
+    // it must not compete for the maximum below.
     if (rawPointerValue === 0) continue
     const end = rawPointerValue + head.readUInt32LE(entry + SECTION_RAW_SIZE_AT)
     if (end > overlayOffset) overlayOffset = end
