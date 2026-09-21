@@ -33,6 +33,8 @@ the rules above.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-09-20
+
 ### Fixed
 
 - **The window does not flash white when it closes.** The window has a white background behind
