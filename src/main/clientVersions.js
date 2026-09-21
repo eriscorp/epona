@@ -46,6 +46,13 @@ const VERSIONS = [
     skipIntroPatchAddress: 0x42e61fn,
     multipleInstancesPatchAddress: 0x57a7cen,
     hideWallsPatchAddress: 0x5fd874n,
+    // The 7.41 appendix documents patches it also calls "skip intro"
+    // (0x004ACA85) and "hide walls" (0x005E47FF), at different addresses doing
+    // different things. Its bounded claims -- notably that hide-walls leaves
+    // ground, characters, items, effects and collision alone -- were derived
+    // 0x18F075 bytes from where we write and do not describe these two. Only
+    // multipleInstances is the same check in both, 11 bytes apart.
+    // Every byte compared: imbas projects/samhail/binary/runtime-patch-lineages.html
     // Hook-based runtime patches, which need whole stubs rather than a few
     // overwritten bytes. Their addresses come from the 7.41 reverse-engineering
     // appendix and were only ever derived for this build, so the option stays
