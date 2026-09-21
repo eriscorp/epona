@@ -195,7 +195,9 @@ describe('downloadAndInstall', () => {
       return {
         ok: true,
         status: 200,
-        url: 'https://host/DarkAges741single.exe',
+        // Echoed, not fixed: a response URL that differs from the request reads
+        // as a redirect, and a redirect off KRU's hosts is refused (HTOO-461).
+        url,
         headers: { get: (n) => headers.get(n.toLowerCase()) ?? null },
         text: async () => '',
         body:

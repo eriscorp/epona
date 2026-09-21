@@ -8,7 +8,8 @@ import {
   DownloadError,
   DownloadCancelledError,
   DOWNLOAD_PAGE_URL,
-  FALLBACK_INSTALLER_URL
+  FALLBACK_INSTALLER_URL,
+  isTrustedInstallerUrl
 } from './installerDownload.js'
 
 let dir
@@ -130,9 +131,67 @@ describe('resolveInstallerUrl', () => {
     await expect(resolveInstallerUrl({ fetchImpl })).resolves.toMatchObject({ resolved: false })
   })
 
+  it('falls back when the page links an installer on a host that is not KRU’s', async () => {
+    const link = 'https://cdn.evil.example/DarkAges999single.exe'
+    const fetchImpl = async () => response({ text: `<a href="${link}">Download</a>` })
+    await expect(resolveInstallerUrl({ fetchImpl })).resolves.toEqual({
+      url: FALLBACK_INSTALLER_URL,
+      resolved: false,
+      rejected: link
+    })
+  })
+
+  it('falls back when the page links the installer over plain http', async () => {
+    const link = 'http://s3.amazonaws.com/kru-downloads/da/DarkAges999single.exe'
+    const fetchImpl = async () => response({ text: `<a href="${link}">Download</a>` })
+    await expect(resolveInstallerUrl({ fetchImpl })).resolves.toMatchObject({
+      url: FALLBACK_INSTALLER_URL,
+      resolved: false
+    })
+  })
+
   it('falls back on an error status rather than treating the page as HTML', async () => {
     const fetchImpl = async () => response({ status: 403, text: 'Forbidden' })
     await expect(resolveInstallerUrl({ fetchImpl })).resolves.toMatchObject({ resolved: false })
+  })
+})
+
+// HTOO-461. The page is scraped, so the link on it is whatever the page says —
+// and the unpacked tree becomes the client Epona launches.
+describe('isTrustedInstallerUrl', () => {
+  it.each([
+    'https://s3.amazonaws.com/kru-downloads/da/DarkAges741single.exe',
+    'https://s3.us-east-1.amazonaws.com/kru-downloads/da/DarkAges741single.exe',
+    'https://kru-downloads.s3.amazonaws.com/da/DarkAges741single.exe',
+    'https://kru-downloads.s3.us-east-1.amazonaws.com/da/DarkAges741single.exe',
+    'https://kru-downloads.s3-us-east-1.amazonaws.com/da/DarkAges741single.exe',
+    'https://www.darkages.com/files/DarkAges741single.exe',
+    'https://darkages.com/files/DarkAges741single.exe'
+  ])('accepts %s', (url) => {
+    expect(isTrustedInstallerUrl(url)).toBe(true)
+  })
+
+  it.each([
+    // plain http, even on the right host
+    'http://s3.amazonaws.com/kru-downloads/da/DarkAges741single.exe',
+    'http://www.darkages.com/files/DarkAges741single.exe',
+    // someone else's bucket on the shared S3 host
+    'https://s3.amazonaws.com/not-kru/da/DarkAges741single.exe',
+    'https://s3.amazonaws.com/kru-downloads-evil/da/DarkAges741single.exe',
+    // look-alike hosts
+    'https://s3.amazonaws.com.evil.example/kru-downloads/da/DarkAges741single.exe',
+    'https://kru-downloads.s3.amazonaws.com.evil.example/da/DarkAges741single.exe',
+    'https://darkages.com.evil.example/DarkAges741single.exe',
+    'https://notdarkages.com/DarkAges741single.exe',
+    // not a URL at all
+    'u',
+    ''
+  ])('rejects %s', (url) => {
+    expect(isTrustedInstallerUrl(url)).toBe(false)
+  })
+
+  it('trusts the pinned fallback, or the fallback would be unusable', () => {
+    expect(isTrustedInstallerUrl(FALLBACK_INSTALLER_URL)).toBe(true)
   })
 })
 
@@ -295,7 +354,7 @@ describe('downloadInstaller', () => {
   })
 
   it('reports an HTTP error status', async () => {
-    const fetchImpl = async () => response({ status: 404 })
+    const fetchImpl = async (url) => response({ status: 404, url })
     await expect(
       downloadInstaller({ destinationPath: destination(), url: 'u', fetchImpl })
     ).rejects.toMatchObject({ reason: 'http-status' })
@@ -313,6 +372,47 @@ describe('downloadInstaller', () => {
         signal: controller.signal
       })
     ).rejects.toThrow(DownloadCancelledError)
+  })
+
+  it('refuses a HEAD that was redirected off KRU’s hosts, before reading its answer', async () => {
+    const { fetchImpl: upstream } = server()
+    const fetchImpl = async (url, options) => {
+      const res = await upstream(url, options)
+      return { ...res, url: 'https://mirror.evil.example/i.exe' }
+    }
+    await expect(
+      downloadInstaller({ destinationPath: destination(), url: FALLBACK_INSTALLER_URL, fetchImpl })
+    ).rejects.toMatchObject({ reason: 'untrusted-redirect' })
+    await expect(fs.stat(destination())).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('refuses a download that was redirected to plain http', async () => {
+    // A redirect can downgrade the scheme and fetch does not refuse it, so the
+    // GET's landing URL is checked as well as the HEAD's.
+    const { fetchImpl: upstream } = server()
+    const fetchImpl = async (url, options) => {
+      const res = await upstream(url, options)
+      if (options?.method === 'HEAD') return res
+      return { ...res, url: url.replace(/^https:/, 'http:') }
+    }
+    await expect(
+      downloadInstaller({ destinationPath: destination(), url: FALLBACK_INSTALLER_URL, fetchImpl })
+    ).rejects.toMatchObject({ reason: 'untrusted-redirect' })
+    await expect(fs.stat(destination())).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('follows a redirect that stays on KRU’s hosts', async () => {
+    const { fetchImpl: upstream } = server()
+    const fetchImpl = async (url, options) => {
+      const res = await upstream(url, options)
+      return { ...res, url: 'https://kru-downloads.s3.us-east-1.amazonaws.com/da/i.exe' }
+    }
+    const result = await downloadInstaller({
+      destinationPath: destination(),
+      url: FALLBACK_INSTALLER_URL,
+      fetchImpl
+    })
+    expect(result.url).toBe('https://kru-downloads.s3.us-east-1.amazonaws.com/da/i.exe')
   })
 
   it('refuses to run without a destination', async () => {
