@@ -31,11 +31,11 @@ name: CI
 # across the house on 2026-08-12 exhausted the shared Actions allowance and the
 # account hit its spending limit mid-merge.
 #
-# What replaces it, because "run it locally" is only a plan if something makes
-# it happen: "npm run validate" via .githooks/pre-push, armed by the "prepare"
-# script setting core.hooksPath -- no husky, no new dependency. And
-# "npm run validate:linux" runs the same suite on real Linux through WSL, for
-# the platform a Windows dev box cannot cover.
+# What replaces it: "npm run validate", run by hand before a push. A pre-push
+# hook ran it from 2026-08-12 to 2026-10-10; it was removed because GitHub
+# Desktop and Balor could not start npm from it. "npm run validate:linux" runs
+# the same suite on real Linux through WSL, for the platform a Windows dev box
+# cannot cover.
 #
 # release.yml is untouched: it still validates at tag time and still builds the
 # macOS and Linux artifacts, which cannot be built on the dev box at all.
