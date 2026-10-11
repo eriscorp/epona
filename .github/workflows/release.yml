@@ -104,15 +104,24 @@ jobs:
           # CodeSignTool reads conf/ from that folder, so scripts/sign.js runs
           # it there. A version bump that adds or renames a parent folder then
           # does not break the build.
-          $jar = Get-ChildItem -Path codesigntool -Filter 'code_sign_tool-*.jar' -Recurse | Select-Object -First 1
-          if (-not $jar) {
-            throw 'no code_sign_tool-*.jar after extraction. Did the archive layout change?'
+          # Stop here, not minutes into the packaging, if there is not exactly
+          # one jar or if its folder is not jar/ (scripts/sign.js reads jar/).
+          $jars = @(Get-ChildItem -Path codesigntool -Filter 'code_sign_tool-*.jar' -Recurse)
+          if ($jars.Count -ne 1 -or $jars[0].Directory.Name -ne 'jar') {
+            throw "expected one code_sign_tool-*.jar in a jar/ folder, found: $($jars.FullName -join ', '). Did the archive layout change?"
           }
+          $jar = $jars[0]
           $toolDir = $jar.Directory.Parent.FullName
           "CODE_SIGN_TOOL_PATH=$toolDir" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "CODE_SIGN_TOOL_PATH=$toolDir"
-          # Show the Java that scripts/sign.js runs, in the log.
-          & (Join-Path $env:JAVA_HOME 'bin/java.exe') -version
+          # Show the Java that scripts/sign.js runs, in the log. Stop here if
+          # JAVA_HOME has no java.exe: scripts/sign.js then runs the `java`
+          # on PATH, and no one has tested that Java with CodeSignTool.
+          $java = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin/java.exe' }
+          if (-not $java -or -not (Test-Path $java)) {
+            throw "no java.exe under JAVA_HOME ($env:JAVA_HOME). The Java 17 step must run first."
+          }
+          & $java -version
 
       # scripts/sign.js skips silently when the ES_* vars are absent, so a
       # fork without secrets still produces a release — just an unsigned

@@ -226,6 +226,13 @@ describe('Windows signing on a current JDK (HTOO-517)', () => {
     expect(download).toContain('$jar.Directory.Parent.FullName')
   })
 
+  it('stops the download step on a bad layout or a missing Java, before the packaging', () => {
+    // Without these stops, the fault shows minutes later inside electron-builder.
+    const download = step('Download CodeSignTool')
+    expect(download).toContain("$jars.Count -ne 1 -or $jars[0].Directory.Name -ne 'jar'")
+    expect(download).toContain('-not (Test-Path $java)')
+  })
+
   it('needs no Node 20 holdout', () => {
     // The env existed only for sslcom/esigner-codesign (`using: node20`).
     expect(workflow).not.toMatch(/^\s*FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:/m)
