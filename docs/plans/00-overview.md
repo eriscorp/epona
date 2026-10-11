@@ -80,7 +80,7 @@ What the round taught, again about **checks that pass for the wrong reason**:
 
 **Nothing is scheduled here.** Take work from the tracker; consult [`00a-backlog.md`](00a-backlog.md) before proposing a cleanup, because the thing you are about to propose may already have been declined with a reason.
 
-**One artifact check is owed** and is not in any card's done column yet: the Linux `.deb` payload for HTOO-38 and HTOO-63 — the `hicolor` size set, a full-bleed 256, and `usr/share/applications/epona.desktop` with a matching `StartupWMClass`. `fpm` does not run on Windows, so #36 verified at the `app-builder-lib` level instead. Do it on the next Linux release.
+**One artifact check is owed** and is not in any card's done column yet: the Linux `.deb` payload for HTOO-38 and HTOO-63 — the `hicolor` size set, a full-bleed 256, and `usr/share/applications/epona.desktop` with a matching `StartupWMClass`. `fpm` does not run on Windows, so #36 verified at the `app-builder-lib` level instead. It is check A6 (and B8) in [`../release-checks-mac-linux.md`](../release-checks-mac-linux.md), with the other checks only a Mac or a Linux box can make.
 
 ## Binding conventions
 
