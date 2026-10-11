@@ -54,9 +54,9 @@ The second efficiency review (`complete/efficiency-review-2026-07-12.md`) was au
 
 Instance-lifecycle test coverage (HTOO-99) and the `untrackPidInstance` merge it unblocked (`bd1e8d5`), which is the last conditional item the 2026-07-12 efficiency review left open.
 
-### Unreleased
+### 2.8.0 — 2026-08-11 / 2.8.1 — 2026-09-20
 
-The Legacy tab off Windows (HTOO-296), the cross-platform client unpacker, and the `EPONA_DISABLE_GPU` override. See `CHANGELOG.md` for the user-facing statement of each.
+The Legacy tab off Windows (HTOO-296), the cross-platform client unpacker, and the `EPONA_DISABLE_GPU` override. 2.8.1 hardened the unpacker (HTOO-461, HTOO-462) and the close path (HTOO-456). See `CHANGELOG.md` for the user-facing statement of each.
 
 **Plus a housekeeping pass on 2026-08-08** — this index and the register (PR #35, HTOO-330), the Linux icon set and window association (#36, HTOO-38 + HTOO-63), three dev-transitive advisories (#37), and the update-available banner (#38, HTOO-65).
 
@@ -64,6 +64,17 @@ Two of those four taught the build something the plan could not have known, and 
 
 - **#36 first generated the Linux icon set from `build/icon.png`, the star, and it passed everything HTOO-38 specifies** — 1024×1024, full-bleed, real alpha. The card's invariant is necessary and not sufficient: it answers _is this artwork usable_, not _is this the right artwork_. Taking the square tile instead then uncovered a defect nobody had filed — `build/epona-mac-icon.png` was vendored before its alpha was repaired, and `make-mac-icns.mjs` had been reconstructing the corners with a flood-fill ever since. **A repair that works hides the input that needed it.**
 - **#38's two UI defects were found by writing a test, not by reading two implementations.** `getByRole('button', { name: /close/i })` had nothing to match, because MUI's `Alert` drops its own close button when `action` is passed — and that in turn is what made a clickaway the only way to dismiss the banner it was ported from. **The two defects hid each other**, which is why reading the source found neither.
+
+### Unreleased
+
+**The house-row round of 2026-10-11** — nine PRs, #47 to #55, which close every open Epona coverage row on the house Electron cards except HTOO-382 (it waits for the next release's `publish:version`) and HTOO-355/572 (deferred to the template's canonical palette). Electron 44 and a clean `npm audit` (#47); release signing on Java 17 (#49); the Hybrasyl theme's primary colour (#48); the update-check module (#50); fuse verification and asar integrity (#52); the portable exe's lifecycle (#53); the renderer CSP header and the nav and Node-global checks (#54); the macOS title bar, menu and Command Line Tools message, and a quit that asks before it stops repo-mode launches (#55); the format pass (#51). The tracker cards hold the detail; the epic is HTOO-242.
+
+What the round taught, again about **checks that pass for the wrong reason**:
+
+- **The test double hid the quit order.** `app._eponaCleanupRan` auto-vivified truthy in the electron double, so no test ever ran the shutdown sweep, and a menu quit stopped repo-mode servers before anything asked. #55 replaced the flag with module state and pins the order by call sequence.
+- **A spec that reads source as text breaks when the source is refactored.** `nav-pages.spec.js` read `TAB_ORDER` out of `App.jsx` with a regex; #55 made `TAB_ORDER` derived, and the spec's own guard would have failed on the merged `main`. It imports `GO_TABS` from `src/shared/appMenu.js` now.
+- **A stale `dist/` fails `npm test`.** The packaged-artifact fuse test reads `dist/` when it exists, so a package from before #52 fails it. Rebuild with `npm run build:unpack`; the failure names the real fault.
+- **Only Epona meets the native-addon ABI step.** An Electron major bump needs a `node-abi` that knows it, or `install-app-deps` fails the `da-win32` rebuild. It is in CLAUDE.md's traps now.
 
 ## Build order (current — 2026-08-08)
 
