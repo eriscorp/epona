@@ -152,8 +152,12 @@ describe('the CSP call site (HTOO-467)', () => {
     // The two policies differ, and the dev one relaxes script-src. The built main
     // bundle reads NODE_ENV at run time, so a key on it lets a user's shell
     // relax a packaged app. The e2e helper also sets NODE_ENV=test.
+    // The ban covers the body of rendererDevUrl() only. Another use of NODE_ENV
+    // in index.js does not choose the CSP, and is not a fault.
     const src = sourceWithoutComments()
     expect(src).toMatch(/rendererDevUrl\(\) \? DEV_RENDERER_CSP : RENDERER_CSP/)
-    expect(src).not.toMatch(/NODE_ENV/)
+    const body = /function rendererDevUrl\(\) \{([\s\S]*?)\n\}/.exec(src)?.[1]
+    expect(body, 'function rendererDevUrl() is gone from index.js').toBeDefined()
+    expect(body).not.toMatch(/NODE_ENV|is\.dev/)
   })
 })
