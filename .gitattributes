@@ -7,11 +7,23 @@
 # tree to LF on every platform, so CI and a local Windows clone agree.
 * text=auto eol=lf
 
-# Binary assets — never normalize, never diff as text.
+# Binary assets — never normalize, never diff as text. The image and font
+# list is the house list (balor, HTOO-236); the last three are Epona's own.
 *.png binary
+*.bmp binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
 *.gif binary
 *.ico binary
 *.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.gz binary
+*.pdf binary
 *.node binary
 *.exe binary
 *.dll binary
