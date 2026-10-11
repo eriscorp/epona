@@ -30,6 +30,21 @@ electronFuses:
   enableNodeCliInspectArguments: false
   enableNodeOptionsEnvironmentVariable: false
   onlyLoadAppFromAsar: true
+  # Electron checks app.asar against the hash electron-builder embeds in the
+  # executable, file by file as it reads (HTOO-381; house decision, Sabrael,
+  # 2026-09-28). electron-builder writes the hashes whatever the fuse says;
+  # the fuse only makes Electron enforce them. Linux ignores it.
+  #
+  # A changed asar is then a DEAD app: exit code 1 and `ASAR Integrity
+  # Violation` on stderr only, no window. scripts/verify-fuses.mjs reads the
+  # fuse in each release build job, and docs/release-process.md starts a
+  # packaged build before the tag.
+  #
+  # The asarUnpack'd trees below are outside the check. The afterPack hook
+  # signs da_win32.node after the asar is built and relies on that. The
+  # threat model is in SECURITY.md. Cost (HTOO-399, measured in oghma):
+  # nothing warm, 10-25 ms on a launch from new files (every portable start).
+  enableEmbeddedAsarIntegrityValidation: true
   # Flipping fuses rewrites the Electron Framework binary and invalidates the
   # ad-hoc signature that is mandatory on Apple Silicon; re-apply it before the
   # real signing step runs.

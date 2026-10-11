@@ -187,6 +187,84 @@ describe('the Windows signing arrangement', () => {
   })
 })
 
+/** One build job's text, from its key to the next job's key. */
+const jobText = (job) => {
+  const start = workflow.indexOf(`\n  ${job}:\n`)
+  expect(start, `release.yml has no ${job} job`).toBeGreaterThan(-1)
+  const rest = workflow.slice(start + 1)
+  const next = rest.slice(1).search(/^ {2}[a-z][\w-]*:$/m)
+  return next === -1 ? rest : rest.slice(0, next + 1)
+}
+
+/** Where a step sits in a job, by its exact `name:`. -1 when it is absent. */
+const stepAt = (text, name) => text.indexOf(`      - name: ${name}\n`)
+
+describe('the Electron fuse check in each build job (HTOO-374)', () => {
+  // The paths come from electron-builder.yml and package.json, not from this
+  // file, because the failure to catch is a rename in one place only. A wrong
+  // path does not pass quietly — the reader exits 2 — but it fails on a tag,
+  // which is the most expensive moment to find it.
+  const productName = builder.match(/^productName: (\S+)$/m)?.[1]
+  // Inside the `win:` block only. Another platform can set its own
+  // executableName, and the first match in the file is then the wrong one.
+  const winBlock = builder.split(/^win:$/m)[1]?.split(/^\S/m)[0] ?? ''
+  const winExecutable = winBlock.match(/^ {2}executableName: (\S+)$/m)?.[1]
+  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
+
+  const CHECKS = [
+    {
+      job: 'build-windows',
+      path: `dist/win-unpacked/${winExecutable}.exe`,
+      after: 'Package installer + portable exe',
+      before: 'Upload Windows artifacts'
+    },
+    {
+      // electron-builder names the Linux executable after package.json `name`,
+      // lowercased, and ignores productName for it.
+      job: 'build-linux',
+      path: `dist/linux-unpacked/${pkg.name.toLowerCase()}`,
+      after: 'Package Linux deb + AppImage',
+      before: 'Upload Linux artifacts'
+    },
+    {
+      // Before the dmg step as well as the upload: signing a dmg whose app has
+      // the wrong fuses only makes a signed wrong dmg.
+      job: 'build-mac',
+      path: `dist/mac-universal/${productName}.app`,
+      after: 'Package, sign + notarize app',
+      before: 'Sign, notarize + staple the dmg'
+    }
+  ]
+
+  it.each(CHECKS)('$job reads the fuse wire off $path', ({ job, path }) => {
+    expect(jobText(job)).toContain(`run: npm run verify:fuses -- ${path}\n`)
+  })
+
+  it.each(CHECKS)('$job reads it after $after and before $before', ({ job, after, before }) => {
+    // Before packaging there is nothing to read. After upload the artifact is
+    // already on its way to the release.
+    const text = jobText(job)
+    const verify = stepAt(text, 'Verify Electron fuses')
+    const packaged = stepAt(text, after)
+    expect(verify).toBeGreaterThan(-1)
+    expect(packaged).toBeGreaterThan(-1)
+    expect(packaged).toBeLessThan(verify)
+    expect(stepAt(text, before)).toBeGreaterThan(verify)
+  })
+
+  it('reads a universal app on macOS, because the mac target is universal', () => {
+    // The mac path above is only `mac-universal` while the dmg target is
+    // `arch: universal`. That target is also the reason the reader scans every
+    // sentinel. If it narrows to one arch, the path and that reasoning both
+    // change, and this says so instead of the tag.
+    expect(builder).toMatch(/^ {4}- target: dmg\n {6}arch: universal$/m)
+  })
+
+  it('runs the reader the npm script names', () => {
+    expect(pkg.scripts['verify:fuses']).toBe('node scripts/verify-fuses.mjs')
+  })
+})
+
 describe('the installer decisions most expensive to revisit', () => {
   it('installs per-user, assisted, with a directory page', () => {
     // perMachine is the expensive one: an existing per-user installation is not
