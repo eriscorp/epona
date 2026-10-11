@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs'
+import { createRequire } from 'module'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
 
@@ -55,8 +56,10 @@ describe('the portable target', () => {
     // minor updates of electron-builder. If an update changes this branch, this
     // test fails, and somebody must examine `unpackDirName` again. The YAML
     // tests above cannot see that change.
+    // Resolve from electron-builder, so the test reads the copy that packages.
+    const fromBuilder = createRequire(createRequire(import.meta.url).resolve('electron-builder'))
     const nsisTarget = readFileSync(
-      join(REPO_ROOT, 'node_modules/app-builder-lib/out/targets/nsis/NsisTarget.js'),
+      fromBuilder.resolve('app-builder-lib/out/targets/nsis/NsisTarget.js'),
       'utf8'
     )
     expect(nsisTarget).toMatch(
