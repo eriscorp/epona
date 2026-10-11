@@ -314,8 +314,16 @@ function createWindow() {
     // (hiddenInset insets them into our custom title bar); trafficLightPosition
     // centers them in the 36px-tall bar. Windows/Linux stay fully frameless and
     // use the in-app minimize/close controls in TitleBar.
+    //
+    // fullscreenable: false on macOS, because the window has a fixed size (min ==
+    // max, maximizable: false). The green light would otherwise take it to full
+    // screen and show the fixed layout in the middle of an empty screen.
     ...(isMac
-      ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 10 } }
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 12, y: 10 },
+          fullscreenable: false
+        }
       : { frame: false }),
     // 256px, not the 1024px icon master. Windows takes the packaged app's icon
     // from the exe resource, so this mainly serves dev runs and Linux — but it

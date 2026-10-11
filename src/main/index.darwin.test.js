@@ -119,6 +119,16 @@ describe('booting on macOS', () => {
     expect(call[1]).toBe(join(sandbox, 'Erisco', 'Epona'))
   })
 
+  it('insets the native stoplights, and keeps the fixed-size window out of full screen', () => {
+    const main = harness.windows.at(-1)
+    expect(main.options).toMatchObject({
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 12, y: 10 },
+      fullscreenable: false
+    })
+    expect(main.options.frame).toBeUndefined()
+  })
+
   it('does not run the roaming settings migration', () => {
     // HTOO-543. Roaming is a Windows concept. Off Windows, a redirected
     // LOCALAPPDATA makes the roaming dir differ from the settings dir, and the

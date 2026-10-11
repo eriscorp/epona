@@ -16,6 +16,14 @@ const plainBtnSx = {
   '&:hover': { backgroundColor: 'action.hover' }
 }
 
+// On macOS the title bar is an empty drag region that holds the native stoplights
+// (main sets `titleBarStyle: 'hiddenInset'`): no logo, no name, no window buttons.
+// The left padding clears the lights, which end near x = 66 (three 14 px lights,
+// 6 px apart, from x = 12), so anything added to the bar later sits beside them.
+// `disableGutters` is what lets this padding take effect: the Toolbar's gutters
+// are a media query, and an sx padding with no breakpoint does not beat it.
+const MAC_LIGHTS_CLEARANCE = '78px'
+
 export default function TitleBar() {
   const isMac = window.sparkAPI.platform === 'darwin'
   const theme = useSettings((s) => s.settings?.theme)
@@ -42,43 +50,52 @@ export default function TitleBar() {
     <Toolbar
       variant="dense"
       disableGutters
+      data-testid="title-bar"
       sx={{
         bgcolor: 'secondary.main',
         minHeight: 36,
-        // macOS draws its native traffic lights over the top-left (titleBarStyle
-        // 'hiddenInset'), so pad the left so the logo/title clear them. Windows/
-        // Linux are frameless and keep the in-app controls on the right.
-        pl: isMac ? '76px' : 1.5,
+        // Windows/Linux are frameless and keep the in-app controls on the right.
+        pl: isMac ? MAC_LIGHTS_CLEARANCE : 1.5,
         pr: 1.5,
         gap: 1,
         WebkitAppRegion: 'drag',
         flexShrink: 0
       }}
     >
-      <Box
-        component="img"
-        src={eponaLogo}
-        alt=""
-        sx={{ width: 20, height: 20, borderRadius: 0.5, filter: logoFilter, pointerEvents: 'none' }}
-      />
-      <Typography
-        data-testid="app-title"
-        variant="h6"
-        sx={{
-          fontWeight: 'bold',
-          // responsiveFontSizes() attaches sm/md/lg font-size media queries to
-          // the h6 variant, so the title would grow when the window crosses a
-          // breakpoint — e.g. 480→840px when a side pane opens (18.4→20px). The
-          // doubled-class `&&` outranks those media-query rules, pinning the
-          // size at every width. (Kept variant="h6" for its Cinzel font.)
-          '&&': { fontSize: '1.15rem' },
-          color: 'secondary.contrastText',
-          textShadow: wordmarkShadow,
-          pointerEvents: 'none'
-        }}
-      >
-        Epona
-      </Typography>
+      {!isMac && (
+        <>
+          <Box
+            component="img"
+            src={eponaLogo}
+            alt=""
+            sx={{
+              width: 20,
+              height: 20,
+              borderRadius: 0.5,
+              filter: logoFilter,
+              pointerEvents: 'none'
+            }}
+          />
+          <Typography
+            data-testid="app-title"
+            variant="h6"
+            sx={{
+              fontWeight: 'bold',
+              // responsiveFontSizes() attaches sm/md/lg font-size media queries to
+              // the h6 variant, so the title would grow when the window crosses a
+              // breakpoint — e.g. 480→840px when a side pane opens (18.4→20px). The
+              // doubled-class `&&` outranks those media-query rules, pinning the
+              // size at every width. (Kept variant="h6" for its Cinzel font.)
+              '&&': { fontSize: '1.15rem' },
+              color: 'secondary.contrastText',
+              textShadow: wordmarkShadow,
+              pointerEvents: 'none'
+            }}
+          >
+            Epona
+          </Typography>
+        </>
+      )}
 
       <Box sx={{ flexGrow: 1 }} />
 

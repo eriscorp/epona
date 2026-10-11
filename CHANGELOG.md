@@ -36,6 +36,7 @@ the rules above.
 ### Added
 
 - **Settings has a Check for updates button.** It is in the About section, below the version. It tells you that Epona is up to date, that a newer version is available (with a link to the release), or why it could not check.
+- **On macOS, the title bar holds only the native window buttons.** Before, the bar also showed the Epona logo and name beside the buttons. Now the bar is empty on macOS, as in other Mac apps. The green button does not put the fixed-size window into full screen.
 
 ### Changed
 
