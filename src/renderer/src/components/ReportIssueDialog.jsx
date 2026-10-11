@@ -51,6 +51,15 @@ function ReportIssueDialog({ open, onClose }) {
         title: title.trim() || 'Issue report',
         body: composeBody(description, diagnostics)
       })
+      if (result && result.copied === false) {
+        setFeedback({
+          message: result.truncated
+            ? 'Issue opened in your browser, but the report is cut short and Epona could not copy it to your clipboard. Use Copy to clipboard, then paste it in.'
+            : 'Issue opened in your browser. Epona could not copy the report to your clipboard.',
+          severity: 'warning'
+        })
+        return
+      }
       setFeedback({
         message: result?.truncated
           ? 'Issue opened in your browser — the full report was copied to your clipboard (paste it in if truncated).'

@@ -33,6 +33,10 @@ the rules above.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Report an Issue tells you when the copy to the clipboard fails.** Before, the dialog said that the report was on the clipboard, also when the copy failed. Now Epona waits for the copy before it opens the issue page. If the copy fails, the issue page still opens, and the dialog tells you to use Copy to clipboard.
+
 ## [2.8.1] - 2026-09-20
 
 ### Fixed

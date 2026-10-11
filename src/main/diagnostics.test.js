@@ -62,11 +62,11 @@ describe('buildDiagnostics', () => {
 })
 
 describe('openIssue', () => {
-  it('copies the full body before opening the URL', () => {
+  it('copies the full body before opening the URL', async () => {
     // The URL is length-capped, so the clipboard is the only place the whole body
     // is guaranteed to exist. Copying first means a truncated URL is still
     // recoverable by pasting.
-    openIssue({ title: 'Something broke', body: 'the full body' })
+    await openIssue({ title: 'Something broke', body: 'the full body' })
     expect(writeText).toHaveBeenCalledWith('the full body')
     expect(openExternal).toHaveBeenCalled()
     expect(writeText.mock.invocationCallOrder[0]).toBeLessThan(
@@ -74,28 +74,53 @@ describe('openIssue', () => {
     )
   })
 
-  it('reports truncation when the body will not fit in a URL', () => {
-    const result = openIssue({ title: 'Big', body: 'x'.repeat(50_000) })
-    expect(result).toEqual({ ok: true, truncated: true })
+  it('reports truncation when the body will not fit in a URL', async () => {
+    const result = await openIssue({ title: 'Big', body: 'x'.repeat(50_000) })
+    expect(result).toEqual({ ok: true, truncated: true, copied: true })
     // The clipboard still has all of it.
     expect(writeText.mock.calls[0][0]).toHaveLength(50_000)
   })
 
-  it('does not truncate a small body', () => {
-    expect(openIssue({ title: 'Small', body: 'short' })).toEqual({ ok: true, truncated: false })
+  it('does not truncate a small body', async () => {
+    expect(await openIssue({ title: 'Small', body: 'short' })).toEqual({
+      ok: true,
+      truncated: false,
+      copied: true
+    })
   })
 
-  it('opens a URL under the length shell.openExternal can carry', () => {
-    openIssue({ title: 'Big', body: 'x'.repeat(50_000) })
+  it('waits for the clipboard write before it opens the browser', async () => {
+    // Electron 44's main-process clipboard returns a Promise. The issue page
+    // tells the user to paste, so the browser must not open before the write
+    // lands. Hold the write open and prove nothing opens meanwhile.
+    let finish
+    writeText.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    const pending = openIssue({ title: 'T', body: 'B' })
+    await Promise.resolve()
+    expect(openExternal).not.toHaveBeenCalled()
+    finish()
+    await pending
+    expect(openExternal).toHaveBeenCalledTimes(1)
+  })
+
+  it('still opens the issue when the clipboard write fails, and says so', async () => {
+    writeText.mockImplementationOnce(() => Promise.reject(new Error('clipboard busy')))
+    const result = await openIssue({ title: 'T', body: 'B' })
+    expect(result).toEqual({ ok: true, truncated: false, copied: false })
+    expect(openExternal).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a URL under the length shell.openExternal can carry', async () => {
+    await openIssue({ title: 'Big', body: 'x'.repeat(50_000) })
     const [url] = openExternal.mock.calls[0]
     expect(url.length).toBeLessThanOrEqual(1800)
   })
 
-  it('applies only the stable per-app label', () => {
+  it('applies only the stable per-app label', async () => {
     // GitHub applies `labels=` only for labels that already exist on the repo, so
     // an unbounded version label would silently no-op and lose the whole
     // parameter.
-    openIssue({ title: 'T', body: 'B' })
+    await openIssue({ title: 'T', body: 'B' })
     const [url] = openExternal.mock.calls[0]
     const labels = new URL(url).searchParams.get('labels')
     expect(labels).toBe('app:epona')
@@ -106,8 +131,8 @@ describe('openIssue', () => {
 })
 
 describe('copyReport', () => {
-  it('puts the body on the clipboard', () => {
-    expect(copyReport({ body: 'report text' })).toEqual({ ok: true })
+  it('puts the body on the clipboard', async () => {
+    expect(await copyReport({ body: 'report text' })).toEqual({ ok: true })
     expect(writeText).toHaveBeenCalledWith('report text')
   })
 })

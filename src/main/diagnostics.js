@@ -58,20 +58,30 @@ export function buildDiagnostics({ version } = {}) {
  * value only when that label already exists on the repo, so unbounded version labels
  * would silently no-op. The version already rides along in the diagnostics body.
  */
-export function openIssue({ title, body }) {
-  clipboard.writeText(body)
+export async function openIssue({ title, body }) {
+  // Electron 44's main-process clipboard returns a Promise. Wait for the write
+  // before the browser opens: the page tells the user to paste the report. A
+  // failed write does not block the report, because the URL still carries the
+  // body; the dialog then says the copy failed.
+  let copied = true
+  try {
+    await clipboard.writeText(body)
+  } catch (err) {
+    copied = false
+    captureError({ source: 'openIssue', message: `clipboard write failed: ${String(err)}` })
+  }
   const labels = [appIdentity.appLabel]
   const { url, truncated } = truncateBodyForUrl(
     { owner: appIdentity.intakeOwner, repo: appIdentity.intakeRepo, title, body, labels },
     MAX_URL_LEN
   )
   void shell.openExternal(url)
-  return { ok: true, truncated }
+  return { ok: true, truncated, copied }
 }
 
 /** Always-works fallback: put the full report on the clipboard. */
-export function copyReport({ body }) {
-  clipboard.writeText(body)
+export async function copyReport({ body }) {
+  await clipboard.writeText(body)
   return { ok: true }
 }
 
