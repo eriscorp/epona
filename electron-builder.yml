@@ -32,29 +32,18 @@ electronFuses:
   onlyLoadAppFromAsar: true
   # Electron checks app.asar against the hash electron-builder embeds in the
   # executable, file by file as it reads (HTOO-381; house decision, Sabrael,
-  # 2026-09-28). The build side already ran without it: electron-builder writes
-  # the per-file block hashes and the embedded hash whatever the fuse says, so
-  # this only makes Electron enforce them. Enforced on Windows and macOS; Linux
-  # ignores it.
+  # 2026-09-28). electron-builder writes the hashes whatever the fuse says;
+  # the fuse only makes Electron enforce them. Linux ignores it.
   #
   # A changed asar is then a DEAD app: exit code 1 and `ASAR Integrity
-  # Violation` on stderr only, no window and no message. That is why it lands
-  # WITH the reader: scripts/verify-fuses.mjs asserts index 4 in each release
-  # build job, and docs/release-process.md starts a packaged build before the
-  # tag.
+  # Violation` on stderr only, no window. scripts/verify-fuses.mjs reads the
+  # fuse in each release build job, and docs/release-process.md starts a
+  # packaged build before the tag.
   #
-  # What it does NOT cover: the asarUnpack'd trees below. That is resources/**
-  # (splash.html and the logo assets) and da-win32, the native addon, which
-  # loads from app.asar.unpacked and is outside the check. The addon is
-  # Authenticode-signed (see afterPack), which partly makes up for it. That
-  # signing changes the addon after the asar is built, and the app still
-  # starts, which is the measured proof that the check does not reach it.
-  # Epona.exe, which holds the hash, is signed too, but Windows starts an exe
-  # with a broken signature. So this catches a damaged or changed package, not
-  # a local attacker who can write to the install folder.
-  #
-  # Cost (HTOO-399, measured in oghma): nothing warm, 10-25 ms on a launch from
-  # new files, which is every portable start.
+  # The asarUnpack'd trees below are outside the check. The afterPack hook
+  # signs da_win32.node after the asar is built and relies on that. The
+  # threat model is in SECURITY.md. Cost (HTOO-399, measured in oghma):
+  # nothing warm, 10-25 ms on a launch from new files (every portable start).
   enableEmbeddedAsarIntegrityValidation: true
   # Flipping fuses rewrites the Electron Framework binary and invalidates the
   # ad-hoc signature that is mandatory on Apple Silicon; re-apply it before the

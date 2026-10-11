@@ -40,7 +40,7 @@ builds and drives the real app under Playwright (Windows only) and
 covers most of it: the IPC sender guard in both directions, the
 preload sandbox, What's New, and the window geometry.
 
-Two limits are worth knowing. A change to the trusted-location set or the IPC guard can reject every IPC and the app still opens a window — the reveal backstop fires at 15 s — so "it launched" proves nothing; `e2e/ipc-guard.spec.js` asserts the allow direction, which does. And e2e runs against `out/`, so the Electron fuses and the packaged renderer path are only provable on a real artifact. Each release build job reads the fuse wire off its own package (§5). The packaged renderer path needs a launch: start one of the release's own binaries once the build lands (§6).
+Two limits are worth knowing. A change to the trusted-location set or the IPC guard can reject every IPC and the app still opens a window — the reveal backstop fires at 15 s — so "it launched" proves nothing; `e2e/ipc-guard.spec.js` asserts the allow direction, which does. And e2e runs against `out/`, so the Electron fuses and the packaged renderer path are only provable on a real artifact. Each release build job reads the fuse wire off its own package (§5). The packaged renderer path needs a launch, which the next step covers.
 
 Then package Epona and start the packaged app, before you tag. A tag publishes the release with no further step, so this is the last check before the release is published:
 
