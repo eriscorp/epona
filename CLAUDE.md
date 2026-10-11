@@ -82,11 +82,7 @@ divergence from the skeleton, not an oversight. The full gate is
   packaged build, under `dev`, and under e2e alike.
 - **`resources/` has no vite `publicDir`.** Re-adding one double-ships every file in that tree; the
   comment in `electron.vite.config.mjs` explains why.
-- **An Electron major bump needs a `node-abi` that knows it.** The project's `postinstall` ends in
-  `electron-builder install-app-deps`, which rebuilds `da-win32` and asks `node-abi` for the new
-  major's ABI. A lockfile `node-abi` older than the major fails `npm install` with `Could not detect
-  abi for version X`. Run `npm update node-abi` with the bump. No other house app has a native addon,
-  so no sibling's upgrade notes mention it.
+- **An Electron major bump needs a `node-abi` that knows it.** The project's `postinstall` ends in `electron-builder install-app-deps`, which rebuilds `da-win32` and asks `node-abi` for the new major's ABI. A lockfile `node-abi` older than the major fails `npm install` with `Could not detect abi for version X`. Run `npm update node-abi` with the bump. No other house app has a native addon, so no sibling's upgrade notes mention it.
 - **CI pins `windows-2022`, not `windows-latest`.** node-gyp 11.5.0 cannot parse VS 18, which
   windows-latest now carries, and the `da-win32` rebuild dies on it.
 - **Renderer libraries belong in `devDependencies`.** Vite bundles them; anything in `dependencies`

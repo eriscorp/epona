@@ -103,7 +103,9 @@
     "electron is not listed: since Electron 42 it has no install script. The project's OWN",
     "postinstall runs install-electron first (a no-op when the binary is there), because",
     "electron-vite dev reads the binary path without require(), so a fresh clone could not run",
-    "npm run dev (HTOO-553). npm 12 does not gate the project's own scripts."
+    "npm run dev (HTOO-553). npm 12 does not gate the project's own scripts.",
+    "packages/da-win32 is not listed: npm 12 does not gate a workspace member (npm",
+    "install-scripts ls lists nothing), and postinstall rebuilds it in any case."
   ],
   "allowScripts": {
     "esbuild": true,

@@ -142,10 +142,11 @@ describe('every picker in main goes through withPickerStart', () => {
     // Downloads. index.test.js checks the same rule on the booted handlers;
     // this scan also catches a raw call on a channel that check does not name.
     const dir = import.meta.dirname
-    const raw = /(?<![\w.])dialog\.show(Open|Save)Dialog\(/
+    const raw = /\bdialog\.show(Open|Save)Dialog\(/
     const offenders = readdirSync(dir, { recursive: true })
       .map(String)
-      .filter((f) => f.endsWith('.js') && !f.endsWith('.test.js') && f !== 'pickerStart.js')
+      .filter((f) => /\.[cm]?js$/.test(f) && !/\.test\.[cm]?js$/.test(f))
+      .filter((f) => f !== 'pickerStart.js')
       .filter((f) => raw.test(readFileSync(join(dir, f), 'utf-8')))
     expect(offenders).toEqual([])
   })

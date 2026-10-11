@@ -14,6 +14,7 @@ vi.mock('electron', () => ({
 }))
 
 const {
+  CLIPBOARD_WAIT_MS,
   buildDiagnostics,
   openIssue,
   copyReport,
@@ -101,6 +102,20 @@ describe('openIssue', () => {
     finish()
     await pending
     expect(openExternal).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the issue anyway when the clipboard write never settles', async () => {
+    // Another process can hold the clipboard. The page must still open.
+    vi.useFakeTimers()
+    try {
+      writeText.mockImplementationOnce(() => new Promise(() => {}))
+      const pending = openIssue({ title: 'T', body: 'B' })
+      await vi.advanceTimersByTimeAsync(CLIPBOARD_WAIT_MS)
+      expect(await pending).toEqual({ ok: true, truncated: false, copied: false })
+      expect(openExternal).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('still opens the issue when the clipboard write fails, and says so', async () => {

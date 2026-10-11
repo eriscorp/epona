@@ -16,6 +16,9 @@ export { buildIssueUrl }
 // Conservative budget: shell.openExternal is reliable to ~2 KB; leave headroom.
 const MAX_URL_LEN = 1800
 
+// How long openIssue waits for the clipboard before it opens the page anyway.
+export const CLIPBOARD_WAIT_MS = 3000
+
 const rendererErrorSchema = z.object({
   source: z.string().max(40),
   message: z.string().max(10_000),
@@ -62,13 +65,22 @@ export async function openIssue({ title, body }) {
   // Electron 44's main-process clipboard returns a Promise. Wait for the write
   // before the browser opens: the page tells the user to paste the report. A
   // failed write does not block the report, because the URL still carries the
-  // body; the dialog then says the copy failed.
+  // body; the dialog then says the copy failed. The wait is bounded: a clipboard
+  // that another process holds must not stop the issue page from opening.
   let copied = true
+  let timer
   try {
-    await clipboard.writeText(body)
+    await Promise.race([
+      clipboard.writeText(body),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timed out')), CLIPBOARD_WAIT_MS)
+      })
+    ])
   } catch (err) {
     copied = false
     captureError({ source: 'openIssue', message: `clipboard write failed: ${String(err)}` })
+  } finally {
+    clearTimeout(timer)
   }
   const labels = [appIdentity.appLabel]
   const { url, truncated } = truncateBodyForUrl(
