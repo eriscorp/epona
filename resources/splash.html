@@ -27,7 +27,11 @@
         user-select: none;
         cursor: default;
       }
+      /* flex-shrink: 0 on the logo and the spinner: when Segoe UI is missing
+         (Linux) the fallback font makes the column overflow the window, and flex
+         takes the overflow out of the empty spinner, which then turns as an oval. */
       .logo {
+        flex-shrink: 0;
         width: 148px;
         height: auto;
         margin-bottom: 16px;
@@ -46,6 +50,7 @@
         color: #7f8fb0;
       }
       .spinner {
+        flex-shrink: 0;
         margin-top: 22px;
         width: 26px;
         height: 26px;

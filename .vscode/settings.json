@@ -1,5 +1,14 @@
 {
   "files.eol": "\n",
+  // From elatha (HTOO-553). The 4 GB default heap ran out on elatha's code.
+  "js/ts.tsserver.maxMemory": 8192,
+  // VS Code's package.json auto-import provider opens a file watcher for every
+  // package.json under node_modules: thousands of handles on Windows with MUI,
+  // Electron, Vite and Vitest installed, which crashed the TS server whatever its
+  // heap. The cost: an import from a package not yet imported anywhere is not
+  // suggested until it is typed once. Epona has no typescript dependency, so
+  // elatha's third setting (js/ts.tsdk.path) does not apply.
+  "typescript.preferences.includePackageJsonAutoImports": "off",
   "actionButtons": {
     "commands": [
       { "name": "> test", "command": "npm run test" },
