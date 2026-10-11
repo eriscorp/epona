@@ -126,6 +126,9 @@ which runs four jobs:
   the build if any binary comes out unsigned, so a half-signed release
   cannot ship. Both scripts self-skip when the `ES_*` secrets are
   absent, so forks still build.
+
+  `scripts/sign.js` runs the CodeSignTool jar on `$JAVA_HOME/bin/java.exe` (the Java 17 that the workflow installs), then on the `java` on PATH. It never runs `CodeSignTool.bat` or the JDK 11.0.2 in the CodeSignTool zip. That JDK cannot build the certificate chain that `login.ssl.com` sent from 2026-09-30, so each sign on it failed with `PKIX path building failed` (HTOO-517).
+
 - **`build-linux`** (ubuntu-latest): builds and packages `deb` +
   `AppImage` (the `beforeBuild` hook is overridden with
   `scripts/noop-before-build.cjs` to skip the Windows-only addon

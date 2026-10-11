@@ -42,13 +42,22 @@ jobs:
       - name: Build app
         run: npm run build
 
-      # CodeSignTool is a Java program, but it ships its own JDK 11 and
-      # scripts/sign.js prefers that. This is the fallback for a future
-      # CodeSignTool layout that drops the bundled runtime — without any JDK
-      # the resolver's `java` fallback would fail mid-package, several minutes
-      # into the job. Cheap insurance; don't remove it just because the happy
-      # path no longer reads it.
-      - name: Setup Java 17 (fallback for CodeSignTool)
+      # WINDOWS SIGNING: CodeSignTool on a CURRENT JDK, never its bundled one
+      # (HTOO-517).
+      #
+      # Every CodeSignTool release (v1.3.2 is the newest) bundles JDK 11.0.2 from
+      # 2019, and its CodeSignTool.bat always runs that JDK. On 2026-09-30 SSL.com
+      # renewed the certificate of login.ssl.com, the OAuth host CodeSignTool
+      # signs in at. The new chain ends at "SSL.com TLS RSA Root CA 2022" with no
+      # cross-signed copy, and the old trust store does not have that root: every
+      # sign fails with `PKIX path building failed`. Temurin 17 has the root.
+      #
+      # This Java is REQUIRED, not a fallback. setup-java sets JAVA_HOME, and
+      # scripts/sign.js runs the CodeSignTool jar on $JAVA_HOME/bin/java.exe
+      # (then the `java` on PATH). It never runs the bundled JDK. Do not remove
+      # this step. Without it, JAVA_HOME is the default Java of the runner
+      # image, and no one has tested that Java with CodeSignTool.
+      - name: Set up Java 17 for CodeSignTool
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -70,16 +79,20 @@ jobs:
           Write-Host "Downloading $url"
           Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
           Expand-Archive -Path $archive -DestinationPath codesigntool -Force
-          # The archive extracts to a versioned subdirectory; locate
-          # CodeSignTool.bat and pin CODE_SIGN_TOOL_PATH to whichever
-          # directory holds it, so a version bump that renames the parent
-          # folder doesn't break the build.
-          $bat = Get-ChildItem -Path codesigntool -Filter CodeSignTool.bat -Recurse | Select-Object -First 1
-          if (-not $bat) {
-            throw 'CodeSignTool.bat not found after extraction. Did the archive layout change?'
+          # Do not assume the folder layout of the archive. Find the jar in its
+          # jar/ folder, and set CODE_SIGN_TOOL_PATH to the folder above jar/.
+          # CodeSignTool reads conf/ from that folder, so scripts/sign.js runs
+          # it there. A version bump that adds or renames a parent folder then
+          # does not break the build.
+          $jar = Get-ChildItem -Path codesigntool -Filter 'code_sign_tool-*.jar' -Recurse | Select-Object -First 1
+          if (-not $jar) {
+            throw 'no code_sign_tool-*.jar after extraction. Did the archive layout change?'
           }
-          "CODE_SIGN_TOOL_PATH=$($bat.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          Write-Host "CODE_SIGN_TOOL_PATH=$($bat.Directory.FullName)"
+          $toolDir = $jar.Directory.Parent.FullName
+          "CODE_SIGN_TOOL_PATH=$toolDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "CODE_SIGN_TOOL_PATH=$toolDir"
+          # Show the Java that scripts/sign.js runs, in the log.
+          & (Join-Path $env:JAVA_HOME 'bin/java.exe') -version
 
       # scripts/sign.js skips silently when the ES_* vars are absent, so a
       # fork without secrets still produces a release — just an unsigned

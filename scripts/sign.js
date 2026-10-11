@@ -38,9 +38,30 @@ function signingConfigured() {
   return REQUIRED_VARS.every((v) => process.env[v])
 }
 
-// Resolve the java + jar that CodeSignTool.bat would have run.
+// Resolve the java that runs the CodeSignTool jar (HTOO-517).
 //
-// We do NOT run the .bat. Two reasons, both load-bearing:
+// Use $JAVA_HOME/bin/java first, then the `java` on PATH. NEVER use the
+// jdk-* folder in the CodeSignTool zip. Every CodeSignTool release, v1.3.2
+// included, bundles JDK 11.0.2 from 2019. On 2026-09-30 SSL.com renewed the
+// certificate of login.ssl.com, the OAuth host that CodeSignTool signs in at.
+// The new chain ends at "SSL.com TLS RSA Root CA 2022", and the trust store of
+// JDK 11.0.2 does not have that root. Thus each sign on that JDK fails with
+// `PKIX path building failed`. Temurin 17 has the root.
+//
+// The release workflow installs Temurin 17 with actions/setup-java, which sets
+// JAVA_HOME. If JAVA_HOME has no java in it, the `java` on PATH runs, and the
+// spawn error names the problem.
+function resolveJava(env = process.env, platform = process.platform) {
+  if (env.JAVA_HOME) {
+    const javaHomeJava = join(env.JAVA_HOME, 'bin', platform === 'win32' ? 'java.exe' : 'java')
+    if (existsSync(javaHomeJava)) return javaHomeJava
+  }
+  return 'java'
+}
+
+// Resolve the java and the jar that run CodeSignTool.
+//
+// We do NOT run the .bat. Three reasons, all load-bearing:
 //
 //  1. Node refuses to execFile a .bat/.cmd at all since the fix for
 //     CVE-2024-27980 — it throws EINVAL. That is what broke the v2.7.2
@@ -52,22 +73,18 @@ function signingConfigured() {
 //     would break the build in a way that leaks part of the secret into a
 //     log line as a "not recognized as an internal or external command"
 //     error. Not acceptable for a credential.
+//  3. The .bat always runs the JDK in the CodeSignTool zip (verified against
+//     v1.3.2):
+//       %CODE_SIGN_TOOL_PATH%\jdk-11.0.2\bin\java -jar %CODE_SIGN_TOOL_PATH%\jar\code_sign_tool-1.3.2.jar %*
+//     That JDK cannot sign any more. See resolveJava below.
 //
 // java.exe is a real executable, so execFileSync passes argv straight through
 // with no shell anywhere in the chain and any byte in a secret is safe.
 //
-// The .bat itself is a two-line wrapper (verified against v1.3.2):
-//   %CODE_SIGN_TOOL_PATH%\jdk-11.0.2\bin\java -jar %CODE_SIGN_TOOL_PATH%\jar\code_sign_tool-1.3.2.jar %*
-// so it ships its own JDK. Prefer that one; fall back to `java` on PATH if a
-// future layout drops it, which is why the workflow still installs a JDK.
-// Both the JDK directory and the jar carry version numbers, so glob rather
-// than hardcode — a CodeSignTool bump should not need a code change here.
-function resolveCodeSignTool(codeSignToolPath) {
-  const entries = existsSync(codeSignToolPath) ? readdirSync(codeSignToolPath) : []
-
-  const jdkDir = entries.find((e) => e.startsWith('jdk-'))
-  const bundledJava = jdkDir ? join(codeSignToolPath, jdkDir, 'bin', 'java.exe') : null
-  const java = bundledJava && existsSync(bundledJava) ? bundledJava : 'java'
+// The jar carries a version number, so glob rather than hardcode — a
+// CodeSignTool bump should not need a code change here.
+function resolveCodeSignTool(codeSignToolPath, env = process.env, platform = process.platform) {
+  const java = resolveJava(env, platform)
 
   const jarDir = join(codeSignToolPath, 'jar')
   const jarName = existsSync(jarDir)
@@ -103,7 +120,8 @@ function signFile(filePath) {
   const outputDir = join(dirname(filePath), '.esigner-output')
   mkdirSync(outputDir, { recursive: true })
 
-  console.log(`[sign] signing ${basename(filePath)} via ssl.com Cloud eSigner…`)
+  // The java path is in the log line, so a release log shows which JDK signed.
+  console.log(`[sign] signing ${basename(filePath)} via ssl.com Cloud eSigner (java: ${java})…`)
 
   try {
     execFileSync(
@@ -156,4 +174,6 @@ module.exports = async function sign(configuration) {
 
 module.exports.signFile = signFile
 module.exports.signingConfigured = signingConfigured
+module.exports.resolveJava = resolveJava
+module.exports.resolveCodeSignTool = resolveCodeSignTool
 module.exports.REQUIRED_VARS = REQUIRED_VARS
