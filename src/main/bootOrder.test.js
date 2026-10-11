@@ -137,13 +137,13 @@ describe('the CSP call site (HTOO-467)', () => {
     const src = sourceWithoutComments()
     const install = src.indexOf('installContentSecurityPolicy(')
     const splash = src.indexOf('createSplashWindow()')
-    // The CALL, not the declaration: `function createWindow()` sits above
-    // whenReady, so a plain indexOf measures the definition and fails on a
-    // correct file.
-    const main = src.search(/(?<!function )createWindow\(\)/)
+    // The boot CALL of the main window. `createWindow()` is wrong here: its first
+    // call is inside the body of `function createAndWireMainWindow()`, which is a
+    // definition, not the boot. The lookbehind skips that declaration.
+    const main = src.search(/(?<!function )createAndWireMainWindow\(\)/)
     expect(install, 'the CSP installer is gone from index.js').toBeGreaterThan(-1)
     expect(splash, 'createSplashWindow() is gone from index.js').toBeGreaterThan(-1)
-    expect(main, 'createWindow() is gone from index.js').toBeGreaterThan(-1)
+    expect(main, 'createAndWireMainWindow() is gone from index.js').toBeGreaterThan(-1)
     expect(install, 'the splash loads before the CSP is installed').toBeLessThan(splash)
     expect(install, 'the main window loads before the CSP is installed').toBeLessThan(main)
   })

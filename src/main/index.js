@@ -251,7 +251,7 @@ async function sweepAllOrphans(reason) {
   }
 }
 
-// The dev server URL when this run loads it, and undefined otherwise. One
+// The dev server URL when this run loads it, and a falsy value otherwise. One
 // answer for the three decisions that depend on it: the URL the main window
 // loads, the location the IPC guard trusts, and the CSP the session sends.
 //
@@ -260,7 +260,7 @@ async function sweepAllOrphans(reason) {
 // user's shell would otherwise relax the CSP of a packaged app. The e2e helper
 // sets NODE_ENV=test, and the e2e run must see the packaged policy.
 function rendererDevUrl() {
-  return app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'] || undefined
+  return app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL']
 }
 
 function createWindow() {

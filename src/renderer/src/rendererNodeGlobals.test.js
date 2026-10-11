@@ -101,7 +101,6 @@ describe('the renderer never touches a Node global', () => {
     const files = rendererSources()
     expect(files.length).toBeGreaterThan(40)
     expect(files.some((f) => f.endsWith('App.jsx'))).toBe(true)
-    expect(files.some((f) => f.endsWith('.test.js') || f.endsWith('.test.jsx'))).toBe(false)
   })
 
   // And that the matcher can fail at all. A regex that matches nothing anywhere

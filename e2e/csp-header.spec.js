@@ -28,6 +28,24 @@ function cspHeader(headers) {
   return name === undefined ? null : headers[name]
 }
 
+// Record, from now on, the CSP header of each document response on `page`, and
+// each CSP refusal on its console. Chromium writes every refusal to the console
+// ("Refused to load …"), for fonts, images and scripts alike, before any page
+// script can listen. Call it before the reload that loads the document.
+async function watchDocuments(page) {
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Network.enable')
+  const documents = []
+  cdp.on('Network.responseReceived', (e) => {
+    if (e.type === 'Document') documents.push(cspHeader(e.response.headers))
+  })
+  const refusals = []
+  page.on('console', (msg) => {
+    if (/Refused to|Content Security Policy/i.test(msg.text())) refusals.push(msg.text())
+  })
+  return { documents, refusals }
+}
+
 test.describe('content security policy', () => {
   let electronApp
 
@@ -38,19 +56,7 @@ test.describe('content security policy', () => {
   test('the main document has exactly one CSP header, and nothing is refused', async () => {
     ;({ electronApp } = await launchEpona())
     const page = await getMainWindow(electronApp)
-
-    const cdp = await page.context().newCDPSession(page)
-    await cdp.send('Network.enable')
-    const documents = []
-    cdp.on('Network.responseReceived', (e) => {
-      if (e.type === 'Document') documents.push(cspHeader(e.response.headers))
-    })
-    // Chromium writes every CSP refusal to the console ("Refused to load …"),
-    // for fonts, images and scripts alike, before any page script can listen.
-    const refusals = []
-    page.on('console', (msg) => {
-      if (/Refused to|Content Security Policy/i.test(msg.text())) refusals.push(msg.text())
-    })
+    const { documents, refusals } = await watchDocuments(page)
 
     // Reload, so the response and the whole boot are seen from the start.
     await page.reload()
@@ -106,16 +112,7 @@ test.describe('content security policy', () => {
     const splash = await opened
     await splash.waitForLoadState()
 
-    const cdp = await splash.context().newCDPSession(splash)
-    await cdp.send('Network.enable')
-    const documents = []
-    cdp.on('Network.responseReceived', (e) => {
-      if (e.type === 'Document') documents.push(e.response.headers)
-    })
-    const refusals = []
-    splash.on('console', (msg) => {
-      if (/Refused to|Content Security Policy/i.test(msg.text())) refusals.push(msg.text())
-    })
+    const { documents, refusals } = await watchDocuments(splash)
     await splash.reload()
 
     const logoWidth = await splash.evaluate(
@@ -131,7 +128,7 @@ test.describe('content security policy', () => {
     )
     await expect.poll(() => documents.length, { timeout: 10_000 }).toBeGreaterThan(0)
 
-    expect(cspHeader(documents[0]), 'the splash carries the wrong CSP header').toBe(SPLASH_CSP)
+    expect(documents[0], 'the splash carries the wrong CSP header').toBe(SPLASH_CSP)
     expect(logoWidth, 'the splash logo did not load under its policy').toBeGreaterThan(0)
     expect(refusals, 'the splash refused its own resources').toEqual([])
   })
