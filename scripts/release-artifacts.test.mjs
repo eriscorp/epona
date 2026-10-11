@@ -205,7 +205,10 @@ describe('the Electron fuse check in each build job (HTOO-374)', () => {
   // path does not pass quietly — the reader exits 2 — but it fails on a tag,
   // which is the most expensive moment to find it.
   const productName = builder.match(/^productName: (\S+)$/m)?.[1]
-  const winExecutable = builder.match(/^ {2}executableName: (\S+)$/m)?.[1]
+  // Inside the `win:` block only. Another platform can set its own
+  // executableName, and the first match in the file is then the wrong one.
+  const winBlock = builder.split(/^win:$/m)[1]?.split(/^\S/m)[0] ?? ''
+  const winExecutable = winBlock.match(/^ {2}executableName: (\S+)$/m)?.[1]
   const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
 
   const CHECKS = [

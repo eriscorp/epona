@@ -29,7 +29,7 @@ native addon. The renderer asks it to.
 | Git operations        | Arguments are passed as an argv array to `spawn` with no shell (`src/main/gitExec.js`), so a branch or path containing shell metacharacters is data rather than a command.                                                                                                               |
 | Renderer process      | Runs in the OS sandbox (`sandbox: true`), with context isolation on and Node integration off. The preload requires nothing beyond `electron`, which is what makes that possible; `e2e/preload-sandbox.spec.js` asserts it stays that way.                                                |
 | Renderer → main IPC   | Every handler registers through a guarded `ipcMain` (`src/main/windowSecurity.js`) that accepts a message only from the top frame of a window Epona itself created, at a location Epona itself loaded. Subframes, unregistered windows and a window that navigated away are all refused. |
-| Shipped binary        | Hardened with Electron fuses: `runAsNode`, `--inspect` arguments and `NODE_OPTIONS` are off, app code loads only from `app.asar`, and a changed archive does not start. Without the first, `ELECTRON_RUN_AS_NODE=1 Epona.exe -e "…"` makes the signed binary a full Node interpreter.    |
+| Shipped binary        | Electron fuses: `runAsNode`, `--inspect` arguments and `NODE_OPTIONS` are off, app code loads only from `app.asar`, and on Windows and macOS a changed archive does not start. Without the first, `ELECTRON_RUN_AS_NODE=1 Epona.exe -e "…"` makes the signed exe a Node interpreter.     |
 
 ### What is deliberately not guarded, and why
 
