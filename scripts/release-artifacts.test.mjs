@@ -197,12 +197,8 @@ const step = (name) => {
 /**
  * Windows signing on a current JDK (HTOO-517). A fault here shows only on a
  * tag, which is the most expensive moment to find it, so the shape is pinned.
- *
- * Every CodeSignTool release bundles JDK 11.0.2 from 2019. On 2026-09-30 SSL.com
- * renewed the certificate of login.ssl.com to a chain that the trust store of
- * that JDK cannot build, and each sign on it failed with `PKIX path building
- * failed`. scripts/sign.js preferred that JDK. It now runs the jar on
- * $JAVA_HOME/bin/java, then on the `java` on PATH, and never on the bundled JDK.
+ * The comment on resolveJava in scripts/sign.js tells why the bundled JDK
+ * cannot sign.
  *
  * This checks the request and the resolver, not a signed file. Only a tag run
  * with the ES_* secrets can sign.
@@ -217,8 +213,8 @@ describe('Windows signing on a current JDK (HTOO-517)', () => {
       '- name: Download CodeSignTool',
       '- name: Package installer + portable exe'
     ].map((name) => workflow.indexOf(name))
-    for (const at of order) expect(at).toBeGreaterThan(-1)
-    for (let i = 1; i < order.length; i++) expect(order[i - 1]).toBeLessThan(order[i])
+    expect(order).not.toContain(-1)
+    expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
   it('never names CodeSignTool.bat or the bundled JDK', () => {

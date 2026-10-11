@@ -49,8 +49,8 @@ function signingConfigured() {
 // `PKIX path building failed`. Temurin 17 has the root.
 //
 // The release workflow installs Temurin 17 with actions/setup-java, which sets
-// JAVA_HOME. If JAVA_HOME has no java in it, the `java` on PATH runs, and the
-// spawn error names the problem.
+// JAVA_HOME. If JAVA_HOME has no java in it, the `java` on PATH runs. The
+// "[sign] signing" log line names the java that runs.
 function resolveJava(env = process.env, platform = process.platform) {
   if (env.JAVA_HOME) {
     const javaHomeJava = join(env.JAVA_HOME, 'bin', platform === 'win32' ? 'java.exe' : 'java')
@@ -76,7 +76,7 @@ function resolveJava(env = process.env, platform = process.platform) {
 //  3. The .bat always runs the JDK in the CodeSignTool zip (verified against
 //     v1.3.2):
 //       %CODE_SIGN_TOOL_PATH%\jdk-11.0.2\bin\java -jar %CODE_SIGN_TOOL_PATH%\jar\code_sign_tool-1.3.2.jar %*
-//     That JDK cannot sign any more. See resolveJava below.
+//     That JDK cannot sign any more. See resolveJava above.
 //
 // java.exe is a real executable, so execFileSync passes argv straight through
 // with no shell anywhere in the chain and any byte in a secret is safe.
