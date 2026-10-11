@@ -136,6 +136,25 @@ describe('every configured target reaches the release', () => {
   })
 })
 
+describe('after the release is published', () => {
+  it('reminds the releaser to publish the version manifest, before Discord', () => {
+    // The workflow has no credential for the house version manifest, so a
+    // person runs `npm run publish:version` (update-check module v1, HTOO-382).
+    // Until they do, running copies of Epona do not see the release. The step
+    // comes before Discord, so a failed webhook cannot skip it.
+    const remind = workflow.indexOf('- name: Remind to publish the version manifest')
+    const release = workflow.indexOf('- name: Create GitHub Release')
+    const discord = workflow.indexOf('- name: Notify Discord')
+    expect(remind).toBeGreaterThan(release)
+    expect(remind).toBeLessThan(discord)
+    expect(workflow.slice(remind, discord)).toContain(
+      'npm run publish:version -- ${{ github.ref_name }}'
+    )
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
+    expect(pkg.scripts['publish:version']).toBe('node scripts/publish-version.mjs')
+  })
+})
+
 describe('the Windows signing arrangement', () => {
   it('signs during packaging, not over the finished artifacts', () => {
     // The portable exe is a self-extracting archive. Signing only the two

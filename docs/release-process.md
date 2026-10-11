@@ -14,6 +14,7 @@ The flow at a glance:
 3. Push a `v*` tag — **this fires the build and publishes the release**
 4. (Optional) Polish the auto-generated release notes in the GitHub UI
 5. Watch the Actions run go green, then verify artifacts + Discord
+6. Start the packaged app, then publish the version manifest (`npm run publish:version`)
 
 ---
 
@@ -139,8 +140,9 @@ which runs four jobs:
 - **`release`** (needs all three, only on a tag ref): downloads the
   artifacts and creates the GitHub Release via
   `softprops/action-gh-release@v3` with `generate_release_notes: true`,
-  attaching the portable exe, deb, AppImage, and dmg — then posts a
-  Discord announcement.
+  attaching the portable exe, deb, AppImage, and dmg — then prints a
+  reminder to publish the version manifest (§6) and posts a Discord
+  announcement.
 
 Watch the Actions tab to confirm all four jobs go green. Typical
 runtime is several minutes (native rebuild, electron-builder packaging,
@@ -164,6 +166,7 @@ and macOS notarization are the slow steps).
   submitting ahead of the first user report is much cheaper than
   handling it afterwards. Always do this when the signing certificate
   or the NSIS stub changes. Background in [`antivirus.md`](antivirus.md).
+- **Publish the version manifest.** When the smoke test passes, run `npm run publish:version -- vX.Y.Z` in this checkout. The script writes this version to `versions.json` in a sibling `../cernunnos` checkout, then commits and pushes that one file with your own git access. It needs `gh` and a clean `../cernunnos` on `main`. It refuses a release that is not published as stable, a tag that does not match `package.json`, and a version that is not newer than the one in the file. Add `--dry-run` to see the change and write nothing. Running copies of Epona do not see the release until you do this step. The release job's summary reminds you. Design: the document repo, `docs/architecture/update-check-module.md`.
 - If anything's wrong, delete the release, delete the tag
   (`git push --delete origin vX.Y.Z`), fix forward, re-tag, re-push.
   Tags are cheap; don't be precious about them.

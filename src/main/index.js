@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, screen, net } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
@@ -54,7 +54,8 @@ import { initSessionLog, captureError } from './sessionLog.js'
 import { installGlobalErrorHandlers } from './errorHandlers.js'
 import { registerDiagnosticsHandlers } from './diagnostics.js'
 import { registerChangelogHandlers } from './changelog.js'
-import { checkForUpdates } from './updateCheck.js'
+import { checkForUpdate } from './updateCheck.js'
+import { appIdentity } from '../shared/appIdentity.js'
 import { withPickerStart } from './pickerStart.js'
 import { detectRemoteSessionNative } from './remoteSessionNative.js'
 import { createStatusMonitor } from './statusMonitor.js'
@@ -549,10 +550,19 @@ app.whenReady().then(() => {
   // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs;
   // registerChangelogHandlers backs the What's New dialog.
   ipc.handle('app:revealSettings', () => shell.openPath(dataDir))
-  // Update notification (HTOO-65). No payload to validate — the renderer sends
-  // nothing and the running version is read here rather than accepted from it,
-  // so the renderer cannot ask "is <arbitrary version> out of date".
-  ipc.handle('app:checkForUpdates', () => checkForUpdates(app.getVersion()))
+  // Update check (house module update-check v1, HTOO-382). No payload to
+  // validate: the renderer sends nothing, and main reads the running version
+  // itself. It never throws: "up to date" and "could not tell" come back as
+  // different values. `net.fetch` uses the system proxy and the OS certificate
+  // store.
+  ipc.handle('app:checkForUpdate', () =>
+    checkForUpdate({
+      currentVersion: app.getVersion(),
+      updateKey: appIdentity.updateKey,
+      releaseUrlPrefix: appIdentity.releaseUrlPrefix,
+      fetchImpl: (url, init) => net.fetch(url, init)
+    })
+  )
   registerDiagnosticsHandlers(ipc, () => app.getVersion())
   registerChangelogHandlers(ipc)
 

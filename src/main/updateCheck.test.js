@@ -1,145 +1,89 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { checkForUpdates, __testing } from './updateCheck.js'
+// house module: update-check v1 — change it in the template, then port
+import { describe, it, expect, vi } from 'vitest'
+import { checkForUpdate } from './updateCheck.js'
+import { MANIFEST_URL } from '../shared/updateVersion.js'
 
-const { parseVersion, isNewer } = __testing
+// `fetch` is injected, so every branch runs without a network. The interesting
+// cases are the failures, and a test that must reach GitHub reaches none of them.
+// The manifest rules themselves are in src/shared/updateVersion.test.js.
 
-afterEach(() => {
-  vi.restoreAllMocks()
-  vi.unstubAllGlobals()
-})
-
-function stubFetch(impl) {
-  const fn = vi.fn(impl)
-  vi.stubGlobal('fetch', fn)
-  return fn
+const PREFIX = 'https://github.com/eriscorp/oghma/releases/'
+const OPTS = { currentVersion: '1.6.0', updateKey: 'oghma', releaseUrlPrefix: PREFIX }
+const MANIFEST = {
+  schema: 1,
+  apps: { oghma: { version: '1.7.0', url: `${PREFIX}tag/v1.7.0`, released: 'x' } }
 }
 
-function release(body) {
-  return { status: 200, ok: true, json: async () => body }
+function respond(body, ok = true) {
+  return vi.fn(async () => ({ ok, json: async () => body }))
 }
 
-describe('parseVersion', () => {
-  it('strips a v prefix and pads to three components', () => {
-    expect(parseVersion('v2.7')).toEqual([2, 7, 0])
-    expect(parseVersion('2.7.2')).toEqual([2, 7, 2])
+describe('checkForUpdate', () => {
+  it('reads the house manifest, unauthenticated', async () => {
+    const fetchImpl = respond(MANIFEST)
+    await checkForUpdate({ ...OPTS, fetchImpl })
+    const [url, init] = fetchImpl.mock.calls[0]
+    expect(url).toBe(MANIFEST_URL)
+    expect(init.headers).not.toHaveProperty('Authorization')
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('drops a pre-release suffix', () => {
-    // Only the suffix goes; the numeric part in front of it still counts.
-    expect(parseVersion('3.0.0-rc.1')).toEqual([3, 0, 0])
+  it('reports a newer version', async () => {
+    const r = await checkForUpdate({ ...OPTS, fetchImpl: respond(MANIFEST) })
+    expect(r).toEqual({ ok: true, update: { version: '1.7.0', url: `${PREFIX}tag/v1.7.0` } })
   })
 
-  it('returns null rather than a partial parse for junk', () => {
-    // A partial parse is the dangerous outcome: [NaN] would compare as 0 and
-    // could report a downgrade as an update.
-    expect(parseVersion('latest')).toBeNull()
-    expect(parseVersion('2.x.1')).toBeNull()
-    expect(parseVersion('')).toBeNull()
-    expect(parseVersion(null)).toBeNull()
-  })
-})
-
-describe('isNewer', () => {
-  it('compares component by component, not lexically', () => {
-    // The case a string compare gets wrong: "2.10.0" < "2.9.0" as text.
-    expect(isNewer('2.10.0', '2.9.0')).toBe(true)
-    expect(isNewer('2.9.0', '2.10.0')).toBe(false)
+  it('reports up to date', async () => {
+    const r = await checkForUpdate({
+      ...OPTS,
+      currentVersion: '1.7.0',
+      fetchImpl: respond(MANIFEST)
+    })
+    expect(r).toEqual({ ok: true, update: null })
   })
 
-  it('is false for the same version', () => {
-    expect(isNewer('2.7.2', '2.7.2')).toBe(false)
-    expect(isNewer('v2.7.2', '2.7.2')).toBe(false)
+  it('names an HTTP failure', async () => {
+    expect(await checkForUpdate({ ...OPTS, fetchImpl: respond({}, false) })).toEqual({
+      ok: false,
+      reason: 'http'
+    })
   })
 
-  it('is false for an older remote', () => {
-    expect(isNewer('2.7.1', '2.7.2')).toBe(false)
+  it('names a body that is not JSON as malformed', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <')
+      }
+    }))
+    expect(await checkForUpdate({ ...OPTS, fetchImpl })).toEqual({ ok: false, reason: 'malformed' })
   })
 
-  it('is false — never true — when either side will not parse', () => {
-    // Unparseable input must fail closed. Nagging every launch about an update
-    // that does not exist is worse than missing one.
-    expect(isNewer('nightly', '2.7.2')).toBe(false)
-    expect(isNewer('2.8.0', 'unknown')).toBe(false)
+  it('names a network error as offline', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError('fetch failed')
+    })
+    expect(await checkForUpdate({ ...OPTS, fetchImpl })).toEqual({ ok: false, reason: 'offline' })
   })
-})
 
-describe('checkForUpdates', () => {
-  it('reports an available update with the release metadata', async () => {
-    stubFetch(async () =>
-      release({
-        tag_name: 'v2.8.0',
-        html_url: 'https://github.com/eriscorp/epona/releases/tag/v2.8.0',
-        name: 'Epona 2.8.0',
-        body: 'notes'
-      })
+  it('aborts a hung request and names it a timeout', async () => {
+    // A fetch that settles only when its signal aborts, as a real one does.
+    const fetchImpl = vi.fn(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError'))
+          )
+        })
     )
-    await expect(checkForUpdates('2.7.2')).resolves.toEqual({
-      ok: true,
-      updateAvailable: true,
-      currentVersion: '2.7.2',
-      latestVersion: 'v2.8.0',
-      releaseUrl: 'https://github.com/eriscorp/epona/releases/tag/v2.8.0',
-      releaseName: 'Epona 2.8.0',
-      releaseNotes: 'notes'
-    })
-  })
-
-  it('sends the headers the GitHub API expects', async () => {
-    const fetchMock = stubFetch(async () => release({ tag_name: 'v2.7.2' }))
-    await checkForUpdates('2.7.2')
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('https://api.github.com/repos/eriscorp/epona/releases/latest')
-    // GitHub rejects an API request with no User-Agent outright.
-    expect(init.headers['User-Agent']).toBe('epona-update-check')
-    expect(init.headers.Accept).toBe('application/vnd.github+json')
-  })
-
-  it('treats 404 as "no releases yet", not as a failure', async () => {
-    stubFetch(async () => ({ status: 404, ok: false, json: async () => ({}) }))
-    await expect(checkForUpdates('2.7.2')).resolves.toEqual({
-      ok: true,
-      updateAvailable: false,
-      currentVersion: '2.7.2',
-      latestVersion: null,
-      reason: 'no-releases'
-    })
-  })
-
-  it('ignores a draft or prerelease latest', async () => {
-    stubFetch(async () => release({ tag_name: 'v3.0.0', prerelease: true }))
-    await expect(checkForUpdates('2.7.2')).resolves.toMatchObject({
-      ok: true,
-      updateAvailable: false,
-      reason: 'prerelease-only'
-    })
-  })
-
-  it('returns ok:false on a rate-limit or other error status', async () => {
-    stubFetch(async () => ({ status: 403, ok: false, json: async () => ({}) }))
-    await expect(checkForUpdates('2.7.2')).resolves.toEqual({
+    expect(await checkForUpdate({ ...OPTS, fetchImpl, timeoutMs: 20 })).toEqual({
       ok: false,
-      error: 'GitHub responded with 403'
+      reason: 'timeout'
     })
   })
 
-  it('never throws when the network is unreachable', async () => {
-    // The whole point of the module: a launch on an offline machine must not
-    // surface an error, and must not reject into the handler.
-    stubFetch(async () => {
-      throw new Error('getaddrinfo ENOTFOUND api.github.com')
-    })
-    await expect(checkForUpdates('2.7.2')).resolves.toEqual({
-      ok: false,
-      error: 'getaddrinfo ENOTFOUND api.github.com'
-    })
-  })
-
-  it('reports an abort as a timeout', async () => {
-    stubFetch(async () => {
-      const err = new Error('aborted')
-      err.name = 'AbortError'
-      throw err
-    })
-    await expect(checkForUpdates('2.7.2')).resolves.toEqual({ ok: false, error: 'timeout' })
+  it('names an app with no entry, rather than calling it up to date', async () => {
+    const r = await checkForUpdate({ ...OPTS, updateKey: 'balor', fetchImpl: respond(MANIFEST) })
+    expect(r).toEqual({ ok: false, reason: 'no-entry' })
   })
 })

@@ -33,6 +33,7 @@
     "build": "electron-vite build",
     "postinstall": "install-electron && electron-builder install-app-deps",
     "rebuild": "npx @electron/rebuild -f -w da-win32",
+    "publish:version": "node scripts/publish-version.mjs",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:portable": "npm run build && electron-builder --win",
