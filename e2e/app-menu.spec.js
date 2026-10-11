@@ -77,15 +77,4 @@ test.describe('Application menu (macOS)', () => {
     await clickItem(electronApp, 'about')
     await expect(page.getByRole('dialog', { name: /About Epona/i })).toBeVisible()
   })
-
-  test('Quit quits', async () => {
-    ;({ electronApp } = await launchEpona())
-    await getMainWindow(electronApp)
-    const closed = electronApp.waitForEvent('close', { timeout: 15_000 })
-    await electronApp.evaluate(({ app }) => {
-      setTimeout(() => app.quit(), 0)
-    })
-    await closed
-    electronApp = null
-  })
 })

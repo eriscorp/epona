@@ -1517,24 +1517,16 @@ app.on('before-quit', (event) => {
 
 async function confirmAndQuit() {
   try {
-    if (!stopApproved) {
-      let approved
-      try {
-        approved = await confirmStopRepoLaunches()
-      } catch (err) {
+    const approved =
+      stopApproved ||
+      (await confirmStopRepoLaunches().catch((err) => {
         // A question that cannot be shown must not trap the user in the app.
         console.warn('quit confirmation failed:', err.message)
-        approved = true
-      }
-      // Cancel: nothing is stopped, and the app keeps running.
-      if (!approved) return
-    }
-    stopApproved = true
-    try {
-      await shutdownSweep()
-    } catch (err) {
-      console.warn('shutdown sweep failed:', err.message)
-    }
+        return true
+      }))
+    // Cancel: nothing is stopped, and the app keeps running.
+    if (!approved) return
+    await shutdownSweep().catch((err) => console.warn('shutdown sweep failed:', err.message))
     quitCleanupDone = true
     app.quit()
   } finally {

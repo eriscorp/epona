@@ -110,6 +110,15 @@ async function settle() {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r))
 }
 
+// The template the last setApplicationMenu was built from, and the Go items it
+// marks.
+const lastTemplate = () => Menu.buildFromTemplate.mock.calls.at(-1)[0]
+const goChecked = () =>
+  lastTemplate()
+    .find((m) => m.label === 'Go')
+    .submenu.filter((i) => i.checked)
+    .map((i) => i.id)
+
 beforeAll(async () => {
   process.env.LOCALAPPDATA = sandbox
   await import('./index.js')
@@ -152,14 +161,6 @@ describe('booting on macOS', () => {
 })
 
 describe('the application menu on macOS', () => {
-  // The template the last setApplicationMenu was built from.
-  const lastTemplate = () => Menu.buildFromTemplate.mock.calls.at(-1)[0]
-  const goChecked = () =>
-    lastTemplate()
-      .find((m) => m.label === 'Go')
-      .submenu.filter((i) => i.checked)
-      .map((i) => i.id)
-
   it('installs the Epona menu before any window exists', () => {
     expect(windowsAtMenu[0]).toBe(0)
     expect(lastTemplate()[0].label).toBe('Epona')
@@ -267,12 +268,7 @@ describe('⌘W and the Dock on macOS, with a repo-mode server running', () => {
 
   it('resets the menu for the re-created window, before its renderer reports', () => {
     // The closed window's tab must not stay marked.
-    const go = Menu.buildFromTemplate.mock.calls
-      .at(-1)[0]
-      .find((m) => m.label === 'Go')
-      .submenu.filter((i) => i.checked)
-      .map((i) => i.id)
-    expect(go).toEqual(['go:legacy'])
+    expect(goChecked()).toEqual(['go:legacy'])
   })
 
   it('stops the server on a confirmed Dock Quit, after the question', async () => {

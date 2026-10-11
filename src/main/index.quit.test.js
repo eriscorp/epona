@@ -94,6 +94,11 @@ beforeAll(async () => {
   expect(started.success).toBe(true)
 })
 
+// Let the pending promise chain run (the question, then the sweep).
+async function settle() {
+  for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r))
+}
+
 beforeEach(() => {
   dialog.showMessageBox.mockClear()
   killProcessTree.mockClear()
@@ -120,7 +125,7 @@ describe('a quit with a repo-mode server running', () => {
     expect(options.detail).toContain('Server "Repo server" (repo mode)')
 
     // Let the Cancel settle, then check that nothing was stopped.
-    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r))
+    await settle()
     expect(killProcessTree).not.toHaveBeenCalled()
     expect(releaseAll).not.toHaveBeenCalled()
     expect(harness.app.quit).not.toHaveBeenCalled()
@@ -130,7 +135,7 @@ describe('a quit with a repo-mode server running', () => {
     dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
     harness.emitAppEvent('before-quit', beforeQuitEvent())
     await vi.waitFor(() => expect(dialog.showMessageBox).toHaveBeenCalledTimes(1))
-    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r))
+    await settle()
     expect(killProcessTree).not.toHaveBeenCalled()
   })
 
@@ -141,7 +146,7 @@ describe('a quit with a repo-mode server running', () => {
     main.close()
 
     await vi.waitFor(() => expect(dialog.showMessageBox).toHaveBeenCalledTimes(1))
-    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r))
+    await settle()
     expect(main.destroyed).toBe(false)
     expect(killProcessTree).not.toHaveBeenCalled()
   })

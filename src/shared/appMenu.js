@@ -17,9 +17,8 @@ export const MENU_COMMAND_CHANNEL = 'menu:command'
 export const MENU_STATE_CHANNEL = 'app:setMenuState'
 
 /**
- * The tabs the Go menu lists, in the order of App.jsx's tabs. ⌘1 to ⌘3.
- * macosSources.test.js compares this list with App.jsx, so a tab that is in one
- * and not the other fails the suite.
+ * The tabs, in order. App.jsx builds its tab bar from this list and the Go menu
+ * lists the same tabs, ⌘1 to ⌘3.
  */
 export const GO_TABS = [
   { tab: 'legacy', label: 'Legacy Client' },

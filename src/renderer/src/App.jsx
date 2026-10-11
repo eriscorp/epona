@@ -26,8 +26,10 @@ import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
 import { useRuntime } from './store/runtimeStore.js'
 import { useAppMenu } from './appMenu.js'
+import { GO_TABS } from '../../shared/appMenu.js'
 
-const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
+// The tab bar and the macOS Go menu read the same list, so they cannot disagree.
+const TAB_ORDER = GO_TABS.map((t) => t.tab)
 const kindToIndex = (k) => {
   const i = TAB_ORDER.indexOf(k)
   return i >= 0 ? i : 0
@@ -280,12 +282,13 @@ export default function App() {
             variant="fullWidth"
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >
-            {/* Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
-                TAB_ORDER key. e2e/nav-pages.spec.js reads TAB_ORDER and clicks
+            {/* Literal values, not a .map: see A2 in docs/plans/00a-backlog.md.
+                Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
+                TAB_ORDER key. e2e/nav-pages.spec.js reads the tab list and clicks
                 each one, so a tab added here needs both ids. */}
-            <Tab value={0} label="Legacy Client" data-testid="tab-legacy" />
-            <Tab value={1} label="Hybrasyl Client" data-testid="tab-hybrasyl" />
-            <Tab value={2} label="Hybrasyl Server" data-testid="tab-server" />
+            <Tab value={0} label={GO_TABS[0].label} data-testid="tab-legacy" />
+            <Tab value={1} label={GO_TABS[1].label} data-testid="tab-hybrasyl" />
+            <Tab value={2} label={GO_TABS[2].label} data-testid="tab-server" />
           </Tabs>
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 

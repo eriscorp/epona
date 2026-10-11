@@ -47,7 +47,7 @@ export async function launchEpona({ seedSettings, localAppData: reuseDir } = {})
 // has already made its profile folder wherever userData points. It stops a SPEC
 // from saving into the real settings. localAppDataDir() in src/main/index.js is
 // what keeps the launch itself off the real profile.
-export async function assertIsolated(electronApp, localAppData) {
+async function assertIsolated(electronApp, localAppData) {
   const userData = await electronApp.evaluate(({ app }) => app.getPath('userData'))
   const expected = join(localAppData, 'Erisco', 'Epona')
   if (resolve(userData).toLowerCase() !== resolve(expected).toLowerCase()) {
