@@ -145,10 +145,25 @@ if (softwareRendering) {
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.exit(0)
 
-// Set by before-quit, read by the close guard in createAndWireMainWindow to
-// tell a quit-driven close (Cmd+Q on macOS) from a window close. Module scope
-// because the guard lives inside whenReady and before-quit does not.
-let quitRequested = false
+// Quit state, shared by the before-quit handler and the window close guard.
+// Module scope because the guard lives inside whenReady and before-quit does not.
+//
+// stopApproved: the user agreed to stop the running repo-mode launches (or none
+//   ran), in either the close guard's question or the quit's. The quit then does
+//   not ask a second time.
+// quitInFlight: a before-quit is asking or cleaning up. A second ⌘Q in that time
+//   is dropped.
+// quitCleanupDone: the shutdown sweep ran. The next quit goes through, and the
+//   close guard lets each window close without a question.
+let stopApproved = false
+let quitInFlight = false
+let quitCleanupDone = false
+
+// Asks whether to stop the running repo-mode launches. Resolves true when
+// nothing runs or the user picks Quit. whenReady replaces it, because the
+// question needs the main window and the tracked children; before that there is
+// nothing to stop.
+let confirmStopRepoLaunches = async () => true
 
 // Report Issue / diagnostics: session logs live in a `logs/` subfolder of the local
 // app-data dir (a clean "Reveal logs folder" target, separate from settings.json).
@@ -455,8 +470,13 @@ app.whenReady().then(() => {
     // needs its own handler and a fresh closeConfirmed flag. Repo-mode launches
     // own a git worktree + dotnet child tree; bouncing them unintentionally
     // costs build/run state and can wedge worktree refcounts, so prompt first.
-    // Titlebar X, Alt+F4, the in-app X and app quit all fire 'close'; on confirm
-    // we re-fire close so the before-quit cleanup runs on the second pass.
+    // Titlebar X, Alt+F4 and the in-app X fire 'close'; on confirm we re-fire
+    // close, window-all-closed quits, and the before-quit cleanup runs then.
+    //
+    // A quit does not ask here. before-quit asks BEFORE it stops anything, and
+    // it closes the windows only after the cleanup (quitCleanupDone). On macOS a
+    // window close is not a quit either: window-all-closed does not quit there,
+    // so ⌘W and the red light close the window and the launches keep running.
     //
     // The first 'close' is ALWAYS cancelled, and the decision is made after.
     // Electron reads `defaultPrevented` the moment the synchronous part of this
@@ -466,7 +486,7 @@ app.whenReady().then(() => {
     // file, so the only order that works is cancel first, decide, close again.
     let closeConfirmed = false
     mainWindow.on('close', (event) => {
-      if (closeConfirmed) {
+      if (closeConfirmed || quitCleanupDone || process.platform === 'darwin') {
         // A BrowserWindow keeps a native background behind the renderer, and
         // Chromium's default for it is opaque white — no one `backgroundColor`
         // can be right for six themes of which two are light — while the
@@ -483,39 +503,33 @@ app.whenReady().then(() => {
     })
 
     async function decideClose() {
-      const repoRunning = await collectRepoRunning()
-      if (repoRunning.length > 0) {
-        const { response } = await dialog.showMessageBox(mainWindow, {
-          type: 'question',
-          buttons: ['Cancel', 'Quit'],
-          defaultId: 0,
-          cancelId: 0,
-          title: 'Confirm Quit',
-          message: 'Repo-mode launches are still running.',
-          detail:
-            repoRunning.map((r) => `• ${r}`).join('\n') +
-            '\n\nQuitting will stop them and release their git worktrees.'
-        })
-        if (response !== 1) {
-          // Cancel keeps the window, and un-arms a quit that was in flight so
-          // the next plain close of this window stays a close.
-          quitRequested = false
-          return
-        }
-      }
+      // Cancel keeps the window.
+      if (!(await confirmStopRepoLaunches())) return
       if (mainWindow.isDestroyed()) return
+      // Closing the last window quits here (not on macOS, which never gets
+      // this far), so the quit that follows must not ask again.
+      stopApproved = true
       closeConfirmed = true
       // Hide here, synchronously, rather than only in the `close` above:
       // between this call and that event the compositor can paint a frame of
       // the default background, which is exactly the flash the hide prevents.
       mainWindow.hide()
-      // A cancelled 'close' also cancels the app.quit() that raised it, so a
-      // quit-driven close (Cmd+Q on macOS) has to be re-issued as a quit —
-      // closing the window alone would leave the app running with no window
-      // there. Everywhere else, closing the window is the whole request.
-      if (quitRequested) app.quit()
-      else mainWindow.close()
+      mainWindow.close()
     }
+
+    // The display listeners belong to this window. A window re-created by the
+    // Dock's `activate` registers them again, or it loses the resize replay
+    // that an RDP reconnect or a DPI change needs.
+    screen.on('display-metrics-changed', onDisplayChange)
+    screen.on('display-added', onDisplayChange)
+    screen.on('display-removed', onDisplayChange)
+    // screen listeners outlive the window; drop them with it or a second window
+    // (the activate path on macOS) accumulates another set.
+    mainWindow.on('closed', () => {
+      screen.removeListener('display-metrics-changed', onDisplayChange)
+      screen.removeListener('display-added', onDisplayChange)
+      screen.removeListener('display-removed', onDisplayChange)
+    })
 
     // The splash is alwaysOnTop + skipTaskbar. If the main window dies before
     // the reveal (a renderer crash, a close during boot), the splash outlives it
@@ -1276,8 +1290,8 @@ app.whenReady().then(() => {
   })
 
   // Collect human-readable labels for any repo-mode launches still running, so
-  // the close handler (in createAndWireMainWindow) can list them in the quit
-  // confirmation. Binary launches are detached and self-managed — not listed.
+  // confirmStopRepoLaunches can list them in the quit confirmation. Binary
+  // launches are detached and self-managed — not listed.
   async function collectRepoRunning() {
     const result = []
     if (activeHybrasylChild && activeHybrasylChild.exitCode === null) {
@@ -1294,6 +1308,30 @@ app.whenReady().then(() => {
       console.warn('quit-confirm settings load failed:', err.message)
     }
     return result
+  }
+
+  // The one question both the close guard and before-quit ask. Parented to the
+  // main window when there is one; app-modal otherwise (macOS: Quit from the
+  // Dock after ⌘W closed the window).
+  confirmStopRepoLaunches = async () => {
+    const repoRunning = await collectRepoRunning()
+    if (repoRunning.length === 0) return true
+    const options = {
+      type: 'question',
+      buttons: ['Cancel', 'Quit'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Confirm Quit',
+      message: 'Repo-mode launches are still running.',
+      detail:
+        repoRunning.map((r) => `• ${r}`).join('\n') +
+        '\n\nQuitting will stop them and release their git worktrees.'
+    }
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+    const { response } = parent
+      ? await dialog.showMessageBox(parent, options)
+      : await dialog.showMessageBox(options)
+    return response === 1
   }
 
   // Window controls
@@ -1365,20 +1403,13 @@ app.whenReady().then(() => {
   //
   // Replays the size the RENDERER asked for, not the clamped result — re-running
   // the clamp against the new work area is the entire point.
-  const onDisplayChange = () => {
+  //
+  // A function declaration, not a const: createAndWireMainWindow registers it,
+  // and runs before this line.
+  function onDisplayChange() {
     if (!lastRequestedSize) return
     applyWindowSize(lastRequestedSize.width, lastRequestedSize.height)
   }
-  screen.on('display-metrics-changed', onDisplayChange)
-  screen.on('display-added', onDisplayChange)
-  screen.on('display-removed', onDisplayChange)
-  // screen listeners outlive the window; drop them with it or a second window
-  // (the activate path on macOS) accumulates another set.
-  mainWindow.on('closed', () => {
-    screen.removeListener('display-metrics-changed', onDisplayChange)
-    screen.removeListener('display-added', onDisplayChange)
-    screen.removeListener('display-removed', onDisplayChange)
-  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createAndWireMainWindow()
@@ -1389,22 +1420,60 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// Best-effort cleanup on clean shutdown. Order matters: kill any tracked
-// server instances first so they release their open file handles inside the
-// worktree dirs, otherwise `git worktree remove` fails silently and orphans
-// directories on disk. Force-close via Task Manager won't run this; the next
-// launch's adoption path covers that case.
-app.on('before-quit', async (event) => {
-  quitRequested = true
+// Every quit comes here first: ⌘Q, the menu's and the Dock's Quit, and the
+// app.quit() that window-all-closed calls. The first pass cancels the quit,
+// ASKS, and only then stops the launches. Asking after the kill (the old order)
+// meant the close guard found nothing running, so a ⌘Q never showed the
+// question, and a Cancel could not undo the kill. Once the sweep is done, the
+// quit is issued again and goes through.
+//
+// Force-close via Task Manager won't run this; the next launch's adoption path
+// covers that case.
+app.on('before-quit', (event) => {
   // The instance that lost the single-instance lock owns no children and no
   // worktree refcounts. app.exit(0) does not emit before-quit, so this guard is
   // a second line only: it must never preventDefault its own quit to run a no-op
   // sweep.
   if (!gotSingleInstanceLock) return
-  if (app._eponaCleanupRan) return
-  app._eponaCleanupRan = true
+  if (quitCleanupDone) return
   event.preventDefault()
+  if (quitInFlight) return
+  quitInFlight = true
+  void confirmAndQuit()
+})
 
+async function confirmAndQuit() {
+  try {
+    if (!stopApproved) {
+      let approved
+      try {
+        approved = await confirmStopRepoLaunches()
+      } catch (err) {
+        // A question that cannot be shown must not trap the user in the app.
+        console.warn('quit confirmation failed:', err.message)
+        approved = true
+      }
+      // Cancel: nothing is stopped, and the app keeps running.
+      if (!approved) return
+    }
+    stopApproved = true
+    try {
+      await shutdownSweep()
+    } catch (err) {
+      console.warn('shutdown sweep failed:', err.message)
+    }
+    quitCleanupDone = true
+    app.quit()
+  } finally {
+    quitInFlight = false
+  }
+}
+
+// Best-effort cleanup on clean shutdown. Order matters: kill any tracked
+// server instances first so they release their open file handles inside the
+// worktree dirs, otherwise `git worktree remove` fails silently and orphans
+// directories on disk.
+async function shutdownSweep() {
   // Stop polling first: a tick landing mid-teardown would reap entries this
   // sweep is about to kill, and race their worktree cleanup.
   statusMonitor?.stop()
@@ -1432,6 +1501,4 @@ app.on('before-quit', async (event) => {
   // releaseAll only knows about worktrees this run refcounted. Sweep the rest —
   // ones adopted from a previous run, or left by a branch switch.
   await sweepAllOrphans('quit')
-
-  app.quit()
-})
+}
