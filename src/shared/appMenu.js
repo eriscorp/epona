@@ -31,7 +31,7 @@ export const GO_TABS = [
  *
  * - `tab`: the tab on screen. The Go menu marks it.
  * - `canToggleLogPane`: the Hybrasyl Client tab is on screen in repo mode, where
- *   its console button is enabled.
+ *   its console button is enabled, or the log pane is open (the item closes it).
  * - `logPaneOpen`: the log pane is open. The View item shows it.
  */
 export const INITIAL_MENU_STATE = {

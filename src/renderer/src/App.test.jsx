@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, cleanup, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { defaultSettings } from '../../shared/defaultSettings.js'
 
 // The regression this file exists for: the Legacy Client tab used to be
 // disabled off Windows behind a tooltip, and a persisted `targetKind: legacy`
@@ -191,6 +192,38 @@ describe('the macOS application menu', () => {
       'true'
     )
     expect(menu.setMenuState).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'server' }))
+  })
+
+  it('keeps Log Pane enabled on another tab while the pane is open, so it can close it', async () => {
+    savedSettings.targets = {
+      ...defaultSettings.targets,
+      hybrasyl: { ...defaultSettings.targets.hybrasyl, mode: 'repo' }
+    }
+    try {
+      const { menu, send } = await renderWithMenu()
+      send('go:hybrasyl')
+      send('toggleLogPane')
+      expect(menu.setMenuState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ canToggleLogPane: true, logPaneOpen: true })
+      )
+
+      // The pane stays open on the Legacy tab. A greyed-out, ticked item could
+      // not close it.
+      send('go:legacy')
+      expect(menu.setMenuState).toHaveBeenLastCalledWith({
+        tab: 'legacy',
+        canToggleLogPane: true,
+        logPaneOpen: true
+      })
+      send('toggleLogPane')
+      expect(menu.setMenuState).toHaveBeenLastCalledWith({
+        tab: 'legacy',
+        canToggleLogPane: false,
+        logPaneOpen: false
+      })
+    } finally {
+      delete savedSettings.targets
+    }
   })
 
   it('About opens the Settings pane and its About dialog', async () => {

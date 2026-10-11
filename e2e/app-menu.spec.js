@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { launchEpona, getMainWindow } from './helpers.js'
 
 // The macOS application menu, read from main and clicked there. macOS only: on
-// Windows and Linux the window is frameless and Epona installs no menu.
+// Windows and Linux the window is frameless and Epona installs no menu of its own.
 // src/main/appMenu.test.js covers the template on every OS; this checks what is
 // installed, and the round trip through the renderer.
 

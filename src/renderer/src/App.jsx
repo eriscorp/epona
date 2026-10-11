@@ -166,8 +166,10 @@ export default function App() {
   }
 
   // The console button on the Hybrasyl Client tab is enabled in repo mode only,
-  // and the menu's Log Pane item follows it.
-  const canToggleLogPane = activeTab === 1 && settings.targets.hybrasyl.mode === 'repo'
+  // and the menu's Log Pane item follows it. An open pane stays open on the other
+  // tabs, so the item is also enabled while the pane is open, to close it.
+  const canToggleLogPane =
+    logPaneOpen || (activeTab === 1 && settings.targets.hybrasyl.mode === 'repo')
 
   // The macOS application menu (src/main/appMenu.js). Each command runs the same
   // handler as its button. Inert off macOS.

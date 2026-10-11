@@ -556,9 +556,9 @@ app.whenReady().then(() => {
   // ── The macOS application menu ────────────────────────────────────────────
   // An Epona item sends `menu:command` to the main window. The renderer reports
   // what to grey out and mark (`app:setMenuState`), and the menu is rebuilt when
-  // that changes. Windows and Linux keep no menu: the window is frameless there,
-  // and a menu would register its accelerators even while hidden. See
-  // src/main/appMenu.js.
+  // that changes. Windows and Linux get no Epona menu. They keep Electron's
+  // default menu, as before; the window is frameless there, so it does not show.
+  // See src/main/appMenu.js.
   let menuState = INITIAL_MENU_STATE
 
   function sendMenuCommand(msg) {

@@ -80,9 +80,9 @@ describe('booting the main process', () => {
     expect(call[1]).toContain(join('Erisco', 'Epona'))
   })
 
-  it('installs no application menu off macOS', () => {
-    // Windows and Linux are frameless; a menu there would register its
-    // accelerators even while hidden. index.darwin.test.js covers macOS.
+  it('installs no Epona menu off macOS', () => {
+    // Windows and Linux are frameless and keep Electron's default menu, as
+    // before. index.darwin.test.js covers macOS.
     expect(harness.electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
   })
 
