@@ -59,6 +59,23 @@ describe('electron-builder.yml electronFuses', () => {
     })
   })
 
+  it('makes the reader assert every fuse the block sets, in the same state', () => {
+    // The fuses are written in three places: the block, the map above and
+    // EXPECTED. A fuse added to the first two and not to EXPECTED passes every
+    // gate, and the release reader never reads it. This ties EXPECTED to the
+    // block. A config key is the FuseV1Options name with a lowercase first letter.
+    const block = yml.split(/^electronFuses:$/m)[1].split(/^\S/m)[0]
+    const byName = (a, b) => a.name.localeCompare(b.name)
+    const asked = Array.from(block.matchAll(/^ {2}([a-zA-Z]+): (true|false)$/gm))
+      .filter(([, key]) => key !== 'resetAdHocDarwinSignature')
+      .map(([, key, value]) => ({
+        name: key[0].toUpperCase() + key.slice(1),
+        state: value === 'true' ? FUSE_STATE.ENABLE : FUSE_STATE.DISABLE
+      }))
+    const read = EXPECTED.map(({ name, state }) => ({ name, state }))
+    expect(read.sort(byName)).toEqual(asked.sort(byName))
+  })
+
   it('is the only place resetAdHocDarwinSignature can be checked', () => {
     // It is NOT a fuse: absent from FuseV1Options, never written to the wire. It
     // tells electron-builder to re-sign after flipping, which leaves no trace in

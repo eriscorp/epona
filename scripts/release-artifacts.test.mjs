@@ -242,9 +242,10 @@ describe('the Electron fuse check in each build job (HTOO-374)', () => {
     // already on its way to the release.
     const text = jobText(job)
     const verify = stepAt(text, 'Verify Electron fuses')
+    const packaged = stepAt(text, after)
     expect(verify).toBeGreaterThan(-1)
-    expect(stepAt(text, after)).toBeGreaterThan(-1)
-    expect(stepAt(text, after)).toBeLessThan(verify)
+    expect(packaged).toBeGreaterThan(-1)
+    expect(packaged).toBeLessThan(verify)
     expect(stepAt(text, before)).toBeGreaterThan(verify)
   })
 
