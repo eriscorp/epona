@@ -2,3 +2,9 @@ singleQuote: true
 semi: false
 printWidth: 100
 trailingComma: none
+# Markdown prose is one line per paragraph or list item, never wrapped at a
+# column (the house docs rule). Tables and code fences keep their own layout.
+overrides:
+  - files: '*.md'
+    options:
+      proseWrap: never

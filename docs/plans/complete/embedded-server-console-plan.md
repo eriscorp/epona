@@ -19,8 +19,7 @@ That makes Option 1 (coordinated upstream change) cheap: a two-line guard server
 
 ## Part A — Server change (hybrasyl repo)
 
-**Branch:** `feature/skip-readkey-when-redirected` (or fold into the next server PR)
-**File:** [hybrasyl/Game.cs](e:/Dark Ages Dev/Repos/server/hybrasyl/Game.cs)
+**Branch:** `feature/skip-readkey-when-redirected` (or fold into the next server PR) **File:** [hybrasyl/Game.cs](e:/Dark Ages Dev/Repos/server/hybrasyl/Game.cs)
 
 Replace the unconditional `ReadKey()` at line 619 with a redirected-stdin guard:
 
@@ -40,6 +39,7 @@ if (!World.Init())
 ```
 
 Behavioral effect:
+
 - Standalone console launch (operator running `dotnet Hybrasyl.dll` in a terminal): unchanged — still pauses on keypress so the fatal line is readable
 - Launcher-managed launch (Epona, CI, any wrapper that pipes stdio): no pause, exit immediately with code 1; the launcher already shows the fatal line in its log surface
 
@@ -55,18 +55,18 @@ Done. No new dependencies, no API changes, no config knobs.
 
 ## Part B — Epona change (this repo)
 
-**Branch:** `stage/3.0a-embedded-console`
-**Goal:** A per-instance "Show external console window" toggle. Default off — server output streams into the existing LogPane. When on, fall back to the current PowerShell wrapper unchanged.
+**Branch:** `stage/3.0a-embedded-console` **Goal:** A per-instance "Show external console window" toggle. Default off — server output streams into the existing LogPane. When on, fall back to the current PowerShell wrapper unchanged.
 
 ### Modified files
 
 **[src/main/targets/serverTarget.js](e:/Dark Ages Dev/Repos/epona/src/main/targets/serverTarget.js)**
+
 - Split the spawn path. Today `launch(instance)` always builds the PS-wrapper command. Replace with:
   ```js
   if (instance.showExternalConsole) {
-    return launchExternalConsole(instance)  // current PS-wrapper logic, renamed
+    return launchExternalConsole(instance) // current PS-wrapper logic, renamed
   }
-  return launchEmbedded(instance)            // new
+  return launchEmbedded(instance) // new
   ```
 - `launchEmbedded(instance)`:
   - Use `child_process.spawn(spec.command, spec.args, { cwd: instance.worldDataDir, env: { ...process.env, ...spec.env }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })`
@@ -76,18 +76,22 @@ Done. No new dependencies, no API changes, no config knobs.
 - Keep `buildBinarySpawn`, `resolveConfigFile`, `validateForLaunch`, `resolveRedisTarget` exactly as they are — they're already the right shape for both paths
 
 **[src/main/index.js](e:/Dark Ages Dev/Repos/epona/src/main/index.js)**
+
 - Update the `instance:stop` handler to handle `kind === 'child'`: call `tracked.value.kill()` directly. Leaves the existing `kind === 'pid'` taskkill path alone for external-console instances.
 - No new IPC needed — `onInstanceLog` and `onInstanceChildExit` already exist in preload and renderer
 
 **[src/main/settingsManager.js](e:/Dark Ages Dev/Repos/epona/src/main/settingsManager.js)**
+
 - Add `showExternalConsole: false` to `DEFAULT_INSTANCE`
 - Update `coerceInstance` to fill the field (defaulting to `false`) when migrating older saved instances
 
 **[src/renderer/src/components/ServerInstancePanel.jsx](e:/Dark Ages Dev/Repos/epona/src/renderer/src/components/ServerInstancePanel.jsx)**
+
 - Add a `FormControlLabel` + `Checkbox` row labeled "Show external console window" bound to `selected.showExternalConsole`. Place it near the bottom of the detail form, just above Start/Stop, with helper text: `"Off: server output appears in the log pane. On: server runs in its own console window."`
 - No other UI changes — the LogPane toggle button stays where it is and now actually shows useful content for binary-mode instances by default
 
 **Tests:**
+
 - [src/main/targets/serverTarget.test.js](e:/Dark Ages Dev/Repos/epona/src/main/targets/serverTarget.test.js) — `buildBinarySpawn` / `validateForLaunch` cases unchanged. Add no spawn-mode tests here; the spawn behavior is exercised end-to-end manually since both paths shell out to `child_process.spawn` and there's nothing meaningfully testable in the spawn options without mocking the world.
 - [src/main/settingsManager.test.js](e:/Dark Ages Dev/Repos/epona/src/main/settingsManager.test.js) — extend the "fills missing fields on each instance with defaults" test to assert `showExternalConsole === false` after coercion of a pre-existing instance that lacks the field
 

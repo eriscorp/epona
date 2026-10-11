@@ -17,7 +17,7 @@ Each stage is its own branch off `main`, merged when complete. End state: a tabb
 ## Stage decisions
 
 - **No Stage 0 refactor.** Land Chaos.Client as a parallel code path in Stage 2 with minimal sharing; extract a `targets/*` abstraction in Stage 3 once we have three concrete data points (legacy + Chaos + server). Avoids designing the abstraction against a sample of one.
-- **No bundling of binaries.** Epona ships only the launcher. For Chaos.Client and the server, the user supplies either a prebuilt artifact path *or* a path to the local source repo — Epona handles both.
+- **No bundling of binaries.** Epona ships only the launcher. For Chaos.Client and the server, the user supplies either a prebuilt artifact path _or_ a path to the local source repo — Epona handles both.
 - **Chaos.Client endpoint**: Stage 2 templates `Darkages.cfg` to drive the endpoint per profile. Requires a small paired upstream change in `chaos.client` so `GlobalSettings` reads `LobbyHost`/`LobbyPort` from the cfg. Track that as a coordinated dependency.
 - **Server v1**: Manual config — user provides a world data dir; `config.xml` is resolved automatically as `<worldDataDir>/world/xml/serverconfig` (creation/maintenance of those XML files is owned by the sibling `creidhne` tool, not Epona). Epona starts/stops, sets `HYB_*` env vars, tails Serilog output, adopts running PIDs on relaunch. No XML templating in v1.
 - **Redis**: User prerequisite. Epona detects local Memurai/Valkey installs and offers to start them when stopped (service start, or spawn the binary as a managed child). If no install is discovered, TCP-probe the configured remote host:port and fail fast with a clear install link if unreachable.
@@ -26,8 +26,7 @@ Each stage is its own branch off `main`, merged when complete. End state: a tabb
 
 ## Stage 1 — Legacy baseline + multi-target seam
 
-**Branch:** `stage/1-legacy-seam`
-**Goal:** No behavior change for existing users. Introduce the seam Stage 2 plugs into.
+**Branch:** `stage/1-legacy-seam` **Goal:** No behavior change for existing users. Introduce the seam Stage 2 plugs into.
 
 **Changes:**
 
@@ -44,8 +43,7 @@ Each stage is its own branch off `main`, merged when complete. End state: a tabb
 
 ## Stage 2 — Chaos.Client launching
 
-**Branch:** `stage/2-chaos-client`
-**Goal:** A "Hybrasyl Client" tab. User points it at either a prebuilt `Chaos.Client.exe` or the local `chaos.client` repo, picks a profile, hits Launch. Profile hostname/port is templated into `Darkages.cfg` before spawn.
+**Branch:** `stage/2-chaos-client` **Goal:** A "Hybrasyl Client" tab. User points it at either a prebuilt `Chaos.Client.exe` or the local `chaos.client` repo, picks a profile, hits Launch. Profile hostname/port is templated into `Darkages.cfg` before spawn.
 
 **New files:**
 
@@ -83,8 +81,7 @@ Each stage is its own branch off `main`, merged when complete. End state: a tabb
 
 ### Stage 3.0 — Foundations (binary mode + refactor)
 
-**Branch:** `stage/3.0-server-instances-binary`
-**Goal:** "Hybrasyl Server" tab with multi-instance CRUD and **binary-mode launches only**. User points each instance at a prebuilt `Hybrasyl.dll` (or self-contained `.exe`), configures Redis + ports + dirs, clicks Start, watches logs in the shared LogPane. Repo-mode fields exist in the schema but are gated off (`validateForLaunch` rejects them) so 3.1 can layer in without settings churn.
+**Branch:** `stage/3.0-server-instances-binary` **Goal:** "Hybrasyl Server" tab with multi-instance CRUD and **binary-mode launches only**. User points each instance at a prebuilt `Hybrasyl.dll` (or self-contained `.exe`), configures Redis + ports + dirs, clicks Start, watches logs in the shared LogPane. Repo-mode fields exist in the schema but are gated off (`validateForLaunch` rejects them) so 3.1 can layer in without settings churn.
 
 **Now the target-file reorg pays off** — three real targets means the folder layout is grounded rather than speculative. The plan-original `TargetBase.js` common interface is dropped; the three launch functions already share a close-enough shape (`launch(config, ...) → { success, pid?, error?, child? }`) that a formal interface adds more ceremony than value.
 
@@ -131,8 +128,7 @@ Each stage is its own branch off `main`, merged when complete. End state: a tabb
 
 ### Stage 3.1 — Branch-aware repo mode
 
-**Branch:** `stage/3.1-server-worktrees`
-**Goal:** Repo-mode launches. User picks a server branch (+ optionally an XML branch); Epona creates git worktrees on demand, generates a gitignored `Directory.Build.props` in the server worktree when local XML is requested, runs `dotnet run --project`, and cleans up worktrees on instance stop/delete.
+**Branch:** `stage/3.1-server-worktrees` **Goal:** Repo-mode launches. User picks a server branch (+ optionally an XML branch); Epona creates git worktrees on demand, generates a gitignored `Directory.Build.props` in the server worktree when local XML is requested, runs `dotnet run --project`, and cleans up worktrees on instance stop/delete.
 
 **New files:**
 
