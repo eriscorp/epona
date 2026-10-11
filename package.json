@@ -73,6 +73,11 @@
     "hides. @electron/asar and dir-compare run during packaging, where a passing build",
     "proves nothing unless the globs happened to carry braces.",
     "",
+    "GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p (2026-10) then cover",
+    "<=1.1.20 || 2.0.0 - 2.1.6 || 4.0.0 - 5.0.11. The floor here is 1.1.21, and the 2.x and",
+    "5.x copies move inside their own ranges (2.1.7, 5.0.12) with npm update; no selector for",
+    "them is needed while their consumers' ranges reach the fixed versions.",
+    "",
     "Nothing to unwind later: the selector stops matching once the last minimatch 3.x",
     "consumer is gone.",
     "",
@@ -86,7 +91,7 @@
     "when electron-builder 27, on @electron/get@5, is stable. (creidhne and taliesin, HTOO-570.)"
   ],
   "overrides": {
-    "brace-expansion@1": "^1.1.18",
+    "brace-expansion@1": "^1.1.21",
     "global-agent@3": "^4.1.3"
   },
   "_allowScriptsNote": [
