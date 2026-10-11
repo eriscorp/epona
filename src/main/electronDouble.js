@@ -231,6 +231,14 @@ export function createElectronDouble({
       })),
       getAllDisplays: vi.fn(() => [])
     }),
+    // index.js installs the CSP on the default session's webRequest at boot. The
+    // hook returns the window count at the time of the call, so a test can see
+    // that the policy went in before the first window.
+    session: {
+      defaultSession: autoStub({
+        webRequest: autoStub({ onHeadersReceived: vi.fn(() => windows.length) })
+      })
+    },
     nativeImage: autoStub({ createFromPath: vi.fn(() => autoStub({})) }),
     Menu: autoStub({ setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn(() => autoStub({})) })
   }

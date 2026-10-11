@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { pathToFileURL, fileURLToPath } from 'url'
+import { readFileSync } from 'fs'
+import { join, dirname } from 'path'
 import {
   initWindowSecurity,
   registerTrustedWindow,
@@ -8,6 +10,11 @@ import {
   getTrustedLocations,
   hardenWindow,
   guardIpc,
+  installContentSecurityPolicy,
+  withContentSecurityPolicy,
+  RENDERER_CSP,
+  DEV_RENDERER_CSP,
+  SPLASH_CSP,
   __resetWindowSecurityForTests
 } from './windowSecurity.js'
 
@@ -509,5 +516,142 @@ describe('hardenWindow', () => {
 
     expect(event.preventDefault).toHaveBeenCalled()
     expect(openExternal).not.toHaveBeenCalled() // not a safe scheme either
+  })
+})
+
+// ── Content-Security-Policy (HTOO-467) ──────────────────────────────────────
+
+describe('content security policy', () => {
+  // The two HTML files carry a copy of the policy as a meta tag, because a static
+  // file cannot import a constant. A copy drifts, and a drifted CSP is invisible:
+  // the header still applies, so the app works and the tag quietly stops
+  // describing it. These read the files.
+  const readRepoFile = (rel) =>
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', rel), 'utf8')
+
+  const metaContent = (html) => {
+    const m = /http-equiv="Content-Security-Policy"\s*content="([^"]+)"/.exec(html)
+    return m?.[1]
+  }
+
+  it('finds a meta policy in both documents', () => {
+    // Guards the regex. If the tag is reformatted so this stops matching, the two
+    // comparisons below compare undefined to undefined and pass.
+    expect(metaContent(readRepoFile('src/renderer/index.html')), 'renderer meta').toBeTruthy()
+    expect(metaContent(readRepoFile('resources/splash.html')), 'splash meta').toBeTruthy()
+  })
+
+  it('keeps the renderer meta tag in step with RENDERER_CSP', () => {
+    expect(metaContent(readRepoFile('src/renderer/index.html'))).toBe(RENDERER_CSP)
+  })
+
+  it('keeps the splash meta tag in step with SPLASH_CSP', () => {
+    expect(metaContent(readRepoFile('resources/splash.html'))).toBe(SPLASH_CSP)
+  })
+
+  it('allows no remote image', () => {
+    expect(RENDERER_CSP).not.toMatch(/img-src[^;]*https?:/)
+    expect(SPLASH_CSP).not.toMatch(/img-src[^;]*https?:/)
+  })
+
+  it('denies scripts entirely on the splash', () => {
+    expect(SPLASH_CSP).toContain("default-src 'none'")
+    expect(SPLASH_CSP).not.toContain('script-src')
+    expect(SPLASH_CSP).not.toContain('unsafe-eval')
+  })
+
+  it('relaxes script-src in the dev policy only', () => {
+    // Vite's react plugin injects its refresh preamble as an inline script, ahead
+    // of the meta tag. The relaxation is real and is why the two strings differ;
+    // this pins that it stays in dev.
+    expect(DEV_RENDERER_CSP).toContain("'unsafe-inline'")
+    expect(RENDERER_CSP).not.toMatch(/script-src[^;]*unsafe-inline/)
+    expect(RENDERER_CSP).not.toContain('unsafe-eval')
+  })
+
+  it('carries no directive that Chromium ignores in a meta tag', () => {
+    // Both strings are also meta tags. Chromium ignores frame-ancestors, sandbox
+    // and report-uri there and logs a console error for each one.
+    for (const policy of [RENDERER_CSP, SPLASH_CSP]) {
+      expect(policy).not.toMatch(/frame-ancestors|sandbox|report-uri/)
+    }
+  })
+
+  it('sets the policy on a policed response', () => {
+    const out = withContentSecurityPolicy(PROD_URL, { 'X-Other': ['keep'] })
+    expect(out['Content-Security-Policy']).toEqual([RENDERER_CSP])
+    expect(out['X-Other']).toEqual(['keep'])
+  })
+
+  it('replaces any policy already on the response, whatever its case', () => {
+    // Two CSP headers INTERSECT rather than override, so leaving one would make
+    // the effective policy depend on whatever else set it.
+    const out = withContentSecurityPolicy(PROD_URL, {
+      'content-security-policy': ["default-src 'unsafe-inline'"],
+      'Content-Security-Policy-Report-Only': ['whatever']
+    })
+    expect(Object.keys(out)).toEqual(['Content-Security-Policy'])
+    expect(out['Content-Security-Policy']).toEqual([RENDERER_CSP])
+  })
+
+  it('gives the splash its own policy, not the renderer’s', () => {
+    // A literal file URL, NOT pathToFileURL. On POSIX a Windows path handed to
+    // pathToFileURL is a relative path whose backslashes are filename
+    // characters, so the pathname ends `\splash.html` and the check does not
+    // match: the test would fail on Linux and macOS and pass on Windows.
+    const splashUrl = 'file:///C:/a%20b/resources/splash.html'
+    expect(new URL(splashUrl).pathname.endsWith('/splash.html')).toBe(true)
+    expect(withContentSecurityPolicy(splashUrl, {})['Content-Security-Policy']).toEqual([
+      SPLASH_CSP
+    ])
+  })
+
+  it('gives a posix-installed splash its own policy too', () => {
+    // The deb and AppImage targets install under /opt, so the packaged splash URL
+    // has no drive letter.
+    const posix = 'file:///opt/Epona/resources/splash.html'
+    expect(withContentSecurityPolicy(posix, {})['Content-Security-Policy']).toEqual([SPLASH_CSP])
+  })
+
+  it('does not mistake a file merely named like the splash for it', () => {
+    // `endsWith('/splash.html')` and not `includes`: a file called
+    // `not-splash.html` keeps the renderer policy and does not inherit one with
+    // no script-src.
+    const near = 'file:///opt/Epona/resources/not-splash.html'
+    expect(withContentSecurityPolicy(near, {})['Content-Security-Policy']).toEqual([RENDERER_CSP])
+  })
+
+  it('leaves non-app schemes alone', () => {
+    // devtools: most of all — a default-src 'self' breaks the inspector, and that
+    // content is not ours to police.
+    expect(withContentSecurityPolicy('devtools://devtools/bundled/x.js', {})).toBeUndefined()
+    expect(withContentSecurityPolicy('chrome-extension://abc/y.js', {})).toBeUndefined()
+  })
+
+  it('polices a URL it cannot parse rather than letting it through', () => {
+    // Fails closed, like the rest of this file. The header can only restrict.
+    const out = withContentSecurityPolicy('not a url', {})
+    expect(out['Content-Security-Policy']).toEqual([RENDERER_CSP])
+  })
+
+  it('installs one headers hook on the session', () => {
+    const calls = []
+    const fakeSession = { webRequest: { onHeadersReceived: (fn) => calls.push(fn) } }
+    installContentSecurityPolicy(fakeSession, DEV_RENDERER_CSP)
+    expect(calls).toHaveLength(1)
+
+    let got
+    calls[0]({ url: DEV_URL, responseHeaders: {} }, (r) => (got = r))
+    expect(got.responseHeaders['Content-Security-Policy']).toEqual([DEV_RENDERER_CSP])
+  })
+
+  it('passes an empty object through when it declines to police', () => {
+    // callback({}) leaves the response untouched; callback({ responseHeaders })
+    // replaces the headers. The wrong one strips every header on a devtools load.
+    const calls = []
+    installContentSecurityPolicy({ webRequest: { onHeadersReceived: (fn) => calls.push(fn) } })
+    let got
+    calls[0]({ url: 'devtools://devtools/x.js', responseHeaders: { A: ['b'] } }, (r) => (got = r))
+    expect(got).toEqual({})
   })
 })

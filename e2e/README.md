@@ -65,6 +65,16 @@ not meant to be: the specs need the native addon and a built app.
 - **`worktree-sweep.spec.js`** — the startup sweep collects worktrees stranded by
   a branch switch or a deleted instance, and must never take one with
   uncommitted work in it.
+- **`csp-header.spec.js`** — the CSP is a response header from main, not only a meta tag (HTOO-467). It reads the header off the main document and the splash document through the DevTools protocol, and asserts exactly one `Content-Security-Policy` header with the value of `RENDERER_CSP` or `SPLASH_CSP`. It asserts that the renderer boot and the splash write no `Refused to …` CSP message to the console, that the splash logo loads, and that a remote image is refused. It never hooks `onHeadersReceived`: that hook keeps one listener per session, so a spec that hooked it would remove the app's own CSP.
+- **`nav-pages.spec.js`** — opens every tab and the Settings drawer in the built app, and asserts each panel marker, no `error-boundary-fallback` and no `pageerror`, named per page (HTOO-393). The tab list is `TAB_ORDER`, read as text from `App.jsx`, so a new tab needs only its `tab-<kind>` and `page-<kind>` ids. It waits 250 ms after each click, so a fault that comes shortly after mount shows on its own page and not on the next one. `src/renderer/src/rendererNodeGlobals.test.js` is its source-level partner: it fails on a `process`, `Buffer`, `require`, `__dirname` or `__filename` read in renderer code, and names the file.
+
+## What automation cannot reach
+
+Each item below is a check that a person does by hand, and the reason the suite cannot do it.
+
+- **The CSP in `npm run dev`, and DevTools under it (HTOO-467).** Every spec runs the built app with no `ELECTRON_RENDERER_URL`, so it sees the packaged policy only. The dev server gets `DEV_RENDERER_CSP`, because `@vitejs/plugin-react` injects an inline script. To check it: run `npm run dev`, confirm the window renders with no `Refused to` message in its console, and open DevTools. DevTools must render, because the header hook does not police `devtools:`.
+- **A Node global read on a path that the e2e profile does not render (HTOO-393).** The main window runs `sandbox: true`, so `process`, `Buffer`, `require`, `__dirname` and `__filename` do not exist in the renderer, and a read of one throws `ReferenceError`. vitest runs in Node and supplies all five, so no unit or jsdom test can see the fault. `nav-pages.spec.js` sees it only on a path that renders: the e2e profile is empty, so a read inside a server instance's sub-tabs (Server, Xml, Config, Network), a launch result or an error branch does not run. `rendererNodeGlobals.test.js` reads the source and covers those paths. A platform fact the renderer needs comes from main through `window.sparkAPI`; do not read a global in the preload to answer it a second way.
+- **The CSP in the packaged exe (HTOO-467).** The suite runs `out/` under a plain Electron, not the asar in the portable exe. The document is a `file:` URL in both, so the policy is the same. To check it: start the portable exe, and confirm the splash logo, the fonts and the app all show.
 
 ## Gotchas (learned the hard way)
 

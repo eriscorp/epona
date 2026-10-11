@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { readFileSync, rmSync, mkdtempSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
+import { RENDERER_CSP, SPLASH_CSP } from './windowSecurity.js'
 
 // The main process, booted.
 //
@@ -72,6 +73,32 @@ describe('booting the main process', () => {
     const call = harness.app.setPath.mock.calls.find(([key]) => key === 'userData')
     expect(call).toBeTruthy()
     expect(call[1]).toContain(join('Erisco', 'Epona'))
+  })
+})
+
+describe('the response-header CSP (HTOO-467)', () => {
+  // bootOrder.test.js pins the call site from the source side. This one observes
+  // the booted process: one hook, on the default session, before any window, and
+  // the right policy for each of the two documents that boot loads.
+  const hook = () => harness.electron.session.defaultSession.webRequest.onHeadersReceived
+
+  it('installs one headers hook before the first window', () => {
+    expect(hook()).toHaveBeenCalledTimes(1)
+    // The double's hook returns the window count at the time of the call.
+    expect(hook().mock.results[0].value, 'a window existed before the CSP').toBe(0)
+  })
+
+  it('sends the splash its policy and the main window the packaged one', () => {
+    const [handler] = hook().mock.calls[0]
+    const policyFor = (url) => {
+      let got
+      handler({ url, responseHeaders: {} }, (r) => (got = r))
+      return got.responseHeaders['Content-Security-Policy']
+    }
+    const splash = harness.windows[0]
+    const main = harness.windows.at(-1)
+    expect(policyFor(pathToFileURL(splash.loadedFile).href)).toEqual([SPLASH_CSP])
+    expect(policyFor(main.webContents.mainFrame.url)).toEqual([RENDERER_CSP])
   })
 })
 

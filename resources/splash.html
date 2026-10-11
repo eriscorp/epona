@@ -2,6 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- Pinned equal to SPLASH_CSP in src/main/windowSecurity.js by its test. The
+         header carries the same policy; this tag is the second layer. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src file: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';"
+    />
     <title>Epona</title>
     <style>
       /* Shown in a frameless BrowserWindow before the renderer bundle loads.
