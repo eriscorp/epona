@@ -40,6 +40,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined'
 import AboutDialog from './AboutDialog'
 import WhatsNewDialog from './WhatsNewDialog'
+import UpdateCheckButton from './UpdateCheckButton'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { DEPTH } from './titleChrome'
@@ -569,6 +570,9 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
                 >
                   GitHub
                 </Link>
+              </Box>
+              <Box sx={{ mt: 1 }}>
+                <UpdateCheckButton currentVersion={version} />
               </Box>
             </Box>
           </Stack>

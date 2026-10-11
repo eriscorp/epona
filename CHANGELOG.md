@@ -14,6 +14,10 @@ Release process (the notes are authored HERE, not edited on GitHub after the fac
   3. Tag vX.Y.Z and push. The release workflow runs scripts/changelog-extract.mjs
      to pull THIS version's section into the GitHub release body, then appends the
      auto-generated PR list below it.
+  4. When the release job has published the GitHub Release, start the packaged app from it, then
+     run `npm run publish:version -- vX.Y.Z` (needs `gh` and a clean ../cernunnos checkout on main).
+     It writes this version to the house version manifest. Running copies of Epona do not see
+     the release until you do. The job summary reminds you.
 Keep entries user-facing — internal refactors/tests show up in the appended auto list.
 
 Write entries in ASD-STE100 Simplified Technical English (asd-ste100.org), like the rest of the
@@ -32,6 +36,14 @@ the rules above.
 -->
 
 ## [Unreleased]
+
+### Added
+
+- **Settings has a Check for updates button.** It is in the About section, below the version. It tells you that Epona is up to date, that a newer version is available (with a link to the release), or why it could not check.
+
+### Changed
+
+- **Epona reads its version list from the house version manifest.** The update notice read GitHub's releases API before. Now Epona reads one public file that lists the latest version of every house app. The notice now appears 10 seconds after start, not 3 seconds. The close (X) button still hides that version until a newer one is released, and a click elsewhere in the window still does not close the notice.
 
 ### Fixed
 

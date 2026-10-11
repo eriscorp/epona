@@ -14,5 +14,13 @@ export const appIdentity = {
   intakeOwner: 'hybrasyl',
   intakeRepo: 'cernunnos',
   appLabel: 'app:epona',
-  homepage: 'https://github.com/eriscorp/epona'
+  homepage: 'https://github.com/eriscorp/epona',
+  // Update check (house module update-check v1, HTOO-382). The key of this app's
+  // entry in cernunnos versions.json; scripts/publish-version.mjs reads it from
+  // this line. Set here, not taken from package.json, so a package rename cannot
+  // move the app to a key that nothing writes.
+  updateKey: 'epona',
+  // The only place the update notice may send the user. Main refuses a manifest
+  // `url` outside it, so an edit to the manifest cannot point at another site.
+  releaseUrlPrefix: 'https://github.com/eriscorp/epona/releases/'
 }
