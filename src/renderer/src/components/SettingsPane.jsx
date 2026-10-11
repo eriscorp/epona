@@ -553,8 +553,9 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, mt: 0.25 }}>
                 {/* color="inherit" + always-underline keeps links readable on every
-                    theme — the fantasy themes use a dark primary.main (MUI Link's
-                    default), which is nearly invisible on their dark paper. */}
+                    theme. MUI Link uses primary.main. On chadul, danaan, grinneal
+                    and spark, primary.main is below 4.5:1 against paper (HTOO-355).
+                    After HTOO-341, hybrasyl is at 5.18:1. */}
                 <Link
                   href="https://www.hybrasyl.com"
                   target="_blank"
