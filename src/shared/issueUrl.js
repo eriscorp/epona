@@ -3,8 +3,13 @@
 // long diagnostics body must be trimmed for the URL — the caller always copies the
 // FULL body to the clipboard first, so a truncated URL can be completed by paste.
 
-const TRUNCATION_NOTE =
+export const TRUNCATION_NOTE =
   '\n\n_(diagnostics truncated — full report copied to your clipboard; paste it here)_'
+
+// For a URL opened after the copy to the clipboard failed: the note must not
+// claim a copy that is not there.
+export const TRUNCATION_NOTE_NOT_COPIED =
+  '\n\n_(diagnostics truncated — use Copy to clipboard in the app, then paste the full report here)_'
 
 /** Build a github.com/<owner>/<repo>/issues/new prefill URL. */
 export function buildIssueUrl({ owner, repo, title = '', body = '', labels = [] }) {
@@ -17,9 +22,10 @@ export function buildIssueUrl({ owner, repo, title = '', body = '', labels = [] 
 
 /**
  * Build the issue URL, trimming `body` so the whole URL stays within `maxUrlLen`.
- * When trimming happens a note is appended pointing the user at the clipboard copy.
+ * When trimming happens `note` is appended; by default it points the user at the
+ * clipboard copy.
  */
-export function truncateBodyForUrl(p, maxUrlLen) {
+export function truncateBodyForUrl(p, maxUrlLen, note = TRUNCATION_NOTE) {
   const full = buildIssueUrl(p)
   if (full.length <= maxUrlLen) return { url: full, truncated: false }
 
@@ -31,7 +37,7 @@ export function truncateBodyForUrl(p, maxUrlLen) {
   let best = ''
   while (lo <= hi) {
     const mid = (lo + hi) >> 1
-    const candidate = body.slice(0, mid) + TRUNCATION_NOTE
+    const candidate = body.slice(0, mid) + note
     if (buildIssueUrl({ ...p, body: candidate }).length <= maxUrlLen) {
       best = candidate
       lo = mid + 1

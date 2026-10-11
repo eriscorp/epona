@@ -25,6 +25,9 @@ function composeBody(description, diagnostics) {
 function ReportIssueDialog({ open, onClose }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  // Main waits up to 3 s for the clipboard. Without this, a second click in that
+  // time opens a second issue page.
+  const [busy, setBusy] = useState(false)
   const [diagnostics, setDiagnostics] = useState('')
   const [feedback, setFeedback] = useState(null)
 
@@ -46,6 +49,7 @@ function ReportIssueDialog({ open, onClose }) {
   }, [open])
 
   const handleOpenIssue = async () => {
+    setBusy(true)
     try {
       const result = await bridge().openIssue({
         title: title.trim() || 'Issue report',
@@ -64,15 +68,20 @@ function ReportIssueDialog({ open, onClose }) {
       })
     } catch {
       setFeedback({ message: 'Could not open the issue page.', severity: 'error' })
+    } finally {
+      setBusy(false)
     }
   }
 
   const handleCopy = async () => {
+    setBusy(true)
     try {
       await bridge().copyReport({ body: composeBody(description, diagnostics) })
       setFeedback({ message: 'Report copied to clipboard.', severity: 'success' })
     } catch {
       setFeedback({ message: 'Could not copy the report.', severity: 'error' })
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -135,7 +144,7 @@ function ReportIssueDialog({ open, onClose }) {
           <Button onClick={onClose} size="small">
             Close
           </Button>
-          <Button size="small" startIcon={<ContentCopyIcon />} onClick={handleCopy}>
+          <Button size="small" startIcon={<ContentCopyIcon />} onClick={handleCopy} disabled={busy}>
             Copy to clipboard
           </Button>
           <Button
@@ -143,6 +152,7 @@ function ReportIssueDialog({ open, onClose }) {
             size="small"
             startIcon={<BugReportOutlinedIcon />}
             onClick={handleOpenIssue}
+            disabled={busy}
           >
             Open GitHub issue
           </Button>

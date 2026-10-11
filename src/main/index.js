@@ -562,7 +562,16 @@ app.whenReady().then(() => {
   // the OS default is Downloads. Every open and save dialog goes through
   // `pickerDialog`; index.test.js and pickerStart.test.js pin that.
   const pickerDialog = withPickerStart(dialog, {
-    fallbacks: () => [app.getPath('documents'), app.getPath('home')]
+    // getPath throws when the OS cannot name a folder (a Linux box with no XDG
+    // Documents entry). Skip that fallback rather than reject the IPC call.
+    fallbacks: () =>
+      ['documents', 'home'].flatMap((key) => {
+        try {
+          return [app.getPath(key)]
+        } catch {
+          return []
+        }
+      })
   })
 
   ipc.handle('dialog:openFile', async (_, title, filters, defaultPath) => {

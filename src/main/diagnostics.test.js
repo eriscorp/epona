@@ -118,6 +118,14 @@ describe('openIssue', () => {
     }
   })
 
+  it('does not claim a copy in the truncated URL when the copy failed', async () => {
+    writeText.mockImplementationOnce(() => Promise.reject(new Error('clipboard busy')))
+    await openIssue({ title: 'Big', body: 'x'.repeat(50_000) })
+    const body = new URL(openExternal.mock.calls[0][0]).searchParams.get('body')
+    expect(body).toContain('use Copy to clipboard')
+    expect(body).not.toContain('copied to your clipboard')
+  })
+
   it('still opens the issue when the clipboard write fails, and says so', async () => {
     writeText.mockImplementationOnce(() => Promise.reject(new Error('clipboard busy')))
     const result = await openIssue({ title: 'T', body: 'B' })
@@ -146,6 +154,11 @@ describe('openIssue', () => {
 })
 
 describe('copyReport', () => {
+  it('rejects when the clipboard write fails, so the dialog says so', async () => {
+    writeText.mockImplementationOnce(() => Promise.reject(new Error('clipboard busy')))
+    await expect(copyReport({ body: 'report text' })).rejects.toThrow()
+  })
+
   it('puts the body on the clipboard', async () => {
     expect(await copyReport({ body: 'report text' })).toEqual({ ok: true })
     expect(writeText).toHaveBeenCalledWith('report text')
