@@ -62,6 +62,11 @@ import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
 import { findPortOwner } from './portOwner.js'
+import originalFs from 'original-fs'
+import { sweepPortableLeftovers } from './portableSweep.js'
+
+// The time after boot that the portable sweep waits (see portableSweep.js).
+const PORTABLE_SWEEP_DELAY_MS = 30_000
 
 let settingsManager
 
@@ -547,6 +552,24 @@ app.whenReady().then(() => {
   // Clear worktrees no config references any more, before any launch can take a
   // refcount on one. Fire-and-forget: this is housekeeping, not a boot step.
   void sweepAllOrphans('startup')
+
+  // Portable exe only: delete the %TEMP% unpack folders that killed launches
+  // left (HTOO-494). The delay keeps the sweep off the disk during boot, and
+  // unref() stops the timer from keeping the process alive. portableSweep.js
+  // gives the reason for each of its rules.
+  //
+  // Only a failure goes to the session log. A removed or skipped folder is not
+  // an error, and a packaged app has no console to show it.
+  setTimeout(() => {
+    sweepPortableLeftovers({
+      // original-fs, not fs: the patched fs opens the app.asar of a leftover and
+      // keeps it open, so Windows refuses each rename.
+      fs: originalFs.promises,
+      execPath: process.execPath,
+      isPortable: app.isPackaged && Boolean(process.env['PORTABLE_EXECUTABLE_DIR']),
+      onError: (message) => captureError({ source: 'portable-sweep', message })
+    }).catch((err) => captureError({ source: 'portable-sweep', message: String(err) }))
+  }, PORTABLE_SWEEP_DELAY_MS).unref()
 
   // Settings
   ipc.handle('settings:load', () => settingsManager.load())
