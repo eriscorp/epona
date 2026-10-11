@@ -1401,6 +1401,11 @@ app.whenReady().then(() => {
         '\n\nQuitting will stop them and release their git worktrees.'
     }
     const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+    // A question on a minimized window, or in an app that ⌘H hid, does not show.
+    // The quit then seems to do nothing, and a second ⌘Q is dropped while the
+    // question is open. So bring the window and the app forward first.
+    if (parent?.isMinimized()) parent.restore()
+    if (process.platform === 'darwin') app.focus({ steal: true })
     const { response } = parent
       ? await dialog.showMessageBox(parent, options)
       : await dialog.showMessageBox(options)

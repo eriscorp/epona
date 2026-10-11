@@ -265,6 +265,12 @@ describe('⌘W and the Dock on macOS, with a repo-mode server running', () => {
     // No window to hang a sheet on, so the options come first.
     const [first] = dialog.showMessageBox.mock.calls[0]
     expect(first.message).toBe('Repo-mode launches are still running.')
+    // A Dock Quit can come while another app is in front, or after ⌘H. The
+    // app comes forward first, or the question does not show.
+    expect(harness.app.focus).toHaveBeenCalledWith({ steal: true })
+    expect(harness.app.focus.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      dialog.showMessageBox.mock.invocationCallOrder[0]
+    )
     await settle()
     expect(killProcessTree).not.toHaveBeenCalled()
     expect(harness.app.quit).not.toHaveBeenCalled()

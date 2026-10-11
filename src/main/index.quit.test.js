@@ -151,6 +151,25 @@ describe('a quit with a repo-mode server running', () => {
     expect(killProcessTree).not.toHaveBeenCalled()
   })
 
+  it('restores a minimized window before it asks, so the question shows', async () => {
+    dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
+    const main = harness.windows.at(-1)
+    main.isMinimized = () => true
+    main.restore = vi.fn()
+    try {
+      harness.emitAppEvent('before-quit', beforeQuitEvent())
+      await vi.waitFor(() => expect(dialog.showMessageBox).toHaveBeenCalledTimes(1))
+      expect(main.restore).toHaveBeenCalled()
+      expect(main.restore.mock.invocationCallOrder[0]).toBeLessThan(
+        dialog.showMessageBox.mock.invocationCallOrder[0]
+      )
+      await settle()
+    } finally {
+      delete main.isMinimized
+      delete main.restore
+    }
+  })
+
   it('stops the server only after the user picks Quit, then quits once', async () => {
     dialog.showMessageBox.mockResolvedValueOnce({ response: 1 })
 
