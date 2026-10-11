@@ -14,10 +14,7 @@ Release process (the notes are authored HERE, not edited on GitHub after the fac
   3. Tag vX.Y.Z and push. The release workflow runs scripts/changelog-extract.mjs
      to pull THIS version's section into the GitHub release body, then appends the
      auto-generated PR list below it.
-  4. When the release job has published the GitHub Release, start the packaged app from it, then
-     run `npm run publish:version -- vX.Y.Z` (needs `gh` and a clean ../cernunnos checkout on main).
-     It writes this version to the house version manifest. Running copies of Epona do not see
-     the release until you do. The job summary reminds you.
+  4. When the release job has published the GitHub Release, start the packaged app from it, then run `npm run publish:version -- vX.Y.Z` (needs `gh` and a clean ../cernunnos checkout on main). It writes this version to the house version manifest. Running copies of Epona do not see the release until you do. The job summary reminds you.
 Keep entries user-facing — internal refactors/tests show up in the appended auto list.
 
 Write entries in ASD-STE100 Simplified Technical English (asd-ste100.org), like the rest of the
