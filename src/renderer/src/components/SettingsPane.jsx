@@ -43,7 +43,7 @@ import WhatsNewDialog from './WhatsNewDialog'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { DEPTH } from './titleChrome'
-import { THEME_LABELS } from '../themes/index.js'
+import { THEME_LABELS } from '../themes'
 import eponaLogo from '../assets/epona.webp'
 import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
@@ -548,7 +548,7 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               <Box sx={{ display: 'flex', gap: 2, mt: 0.25 }}>
                 {/* color="inherit" + always-underline keeps links readable on every
                     theme. MUI Link uses primary.main, which is below 4.5:1 against
-                    paper on four themes (HTOO-355; palette.test.js has the numbers). */}
+                    paper on chadul, danaan, grinneal and spark (HTOO-355). */}
                 <Link
                   href="https://www.hybrasyl.com"
                   target="_blank"
