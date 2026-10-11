@@ -43,19 +43,13 @@ import WhatsNewDialog from './WhatsNewDialog'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { DEPTH } from './titleChrome'
+import { THEME_LABELS } from '../themes/index.js'
 import eponaLogo from '../assets/epona.webp'
 import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 import { detectProtectedLocation } from '../../../shared/protectedPaths.js'
 
-const THEMES = [
-  { key: 'hybrasyl', label: 'Hybrasyl' },
-  { key: 'chadul', label: 'Chadul' },
-  { key: 'danaan', label: 'Danaan' },
-  { key: 'grinneal', label: 'Grinneal' },
-  { key: 'spark', label: 'Spark' },
-  { key: 'mundanes', label: 'Mundanes' }
-]
+const THEMES = Object.entries(THEME_LABELS).map(([key, label]) => ({ key, label }))
 
 const emptyProfile = { name: '', hostname: '', port: 2610, redirect: true }
 const emptyWorldDir = { name: '', path: '' }
@@ -553,9 +547,8 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, mt: 0.25 }}>
                 {/* color="inherit" + always-underline keeps links readable on every
-                    theme. MUI Link uses primary.main. On chadul, danaan, grinneal
-                    and spark, primary.main is below 4.5:1 against paper (HTOO-355).
-                    After HTOO-341, hybrasyl is at 5.18:1. */}
+                    theme. MUI Link uses primary.main, which is below 4.5:1 against
+                    paper on four themes (HTOO-355; palette.test.js has the numbers). */}
                 <Link
                   href="https://www.hybrasyl.com"
                   target="_blank"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { themesByName } from './index'
+import { themesByName, THEME_LABELS } from './index'
 
 // Derived from the registry rather than a hand-kept list, so a theme added to
 // `themesByName` is covered without anyone remembering to add it here.
@@ -43,6 +43,12 @@ function contrast(a, b) {
 }
 
 describe('theme palettes', () => {
+  it('offers exactly the registered themes in the Settings picker', () => {
+    // A theme only in the registry cannot be picked; a theme only in the
+    // picker falls back to Hybrasyl without a word.
+    expect(Object.keys(THEME_LABELS).sort()).toEqual(THEME_NAMES.slice().sort())
+  })
+
   it('registers all six themes', () => {
     expect(THEME_NAMES).toHaveLength(6)
     for (const name of THEME_NAMES) expect(themesByName[name]).toBeDefined()
