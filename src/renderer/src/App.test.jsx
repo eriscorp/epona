@@ -59,7 +59,11 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe.each(['win32', 'darwin', 'linux'])('App on %s', (platform) => {
+// Each test re-imports App.jsx after vi.resetModules(), so the first one pays the
+// cold MUI module load. On a loaded machine that passes the 5 s default, and the
+// import that the timeout abandons then renders into the next test, which fails
+// with "multiple elements with the role tab". A longer limit removes both.
+describe.each(['win32', 'darwin', 'linux'])('App on %s', { timeout: 30_000 }, (platform) => {
   it('shows all three tabs, none disabled', async () => {
     await renderApp(platform)
     for (const name of ['Legacy Client', 'Hybrasyl Client', 'Hybrasyl Server']) {
