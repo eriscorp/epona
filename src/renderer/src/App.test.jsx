@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
@@ -50,6 +50,14 @@ async function renderApp(platform) {
   return result
 }
 
+// Pay the cold transform of App.jsx and MUI once, before any test's clock runs.
+// vi.resetModules() clears the registry, not the transform cache, so each test's
+// re-import is then fast.
+beforeAll(async () => {
+  global.window.sparkAPI = makeSparkAPI('win32')
+  await import('./App.jsx')
+}, 60_000)
+
 beforeEach(() => {
   savedSettings.targetKind = undefined
 })
@@ -59,7 +67,11 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe.each(['win32', 'darwin', 'linux'])('App on %s', (platform) => {
+// Each test re-imports App.jsx after vi.resetModules(). Before the warm-up above,
+// the first one paid the cold MUI module load, which passed the 5 s default on a
+// loaded machine; the import that the timeout abandoned then rendered into the
+// next test ("multiple elements with the role tab"). The longer limit is margin.
+describe.each(['win32', 'darwin', 'linux'])('App on %s', { timeout: 30_000 }, (platform) => {
   it('shows all three tabs, none disabled', async () => {
     await renderApp(platform)
     for (const name of ['Legacy Client', 'Hybrasyl Client', 'Hybrasyl Server']) {

@@ -4,7 +4,12 @@ import { z } from 'zod'
 import { appIdentity } from '../shared/appIdentity.js'
 import { simplifyPlatform } from '../shared/osName.js'
 import { buildDiagnosticsBlock } from '../shared/diagnostics.js'
-import { buildIssueUrl, truncateBodyForUrl } from '../shared/issueUrl.js'
+import {
+  buildIssueUrl,
+  truncateBodyForUrl,
+  TRUNCATION_NOTE,
+  TRUNCATION_NOTE_NOT_COPIED
+} from '../shared/issueUrl.js'
 import { scrubText } from '../shared/scrub.js'
 import { captureError, getRecentErrors, getLogsDir } from './sessionLog.js'
 
@@ -15,6 +20,9 @@ export { buildIssueUrl }
 
 // Conservative budget: shell.openExternal is reliable to ~2 KB; leave headroom.
 const MAX_URL_LEN = 1800
+
+// How long the report flow waits for the clipboard before it gives up on it.
+export const CLIPBOARD_WAIT_MS = 3000
 
 const rendererErrorSchema = z.object({
   source: z.string().max(40),
@@ -58,21 +66,48 @@ export function buildDiagnostics({ version } = {}) {
  * value only when that label already exists on the repo, so unbounded version labels
  * would silently no-op. The version already rides along in the diagnostics body.
  */
-export function openIssue({ title, body }) {
-  clipboard.writeText(body)
+export async function openIssue({ title, body }) {
+  // Wait for the copy before the browser opens: the page tells the user to paste
+  // the report. A failed copy does not block the report, because the URL still
+  // carries the body; the dialog and the truncation note then say so.
+  const copied = await writeClipboard(body, 'openIssue')
   const labels = [appIdentity.appLabel]
   const { url, truncated } = truncateBodyForUrl(
     { owner: appIdentity.intakeOwner, repo: appIdentity.intakeRepo, title, body, labels },
-    MAX_URL_LEN
+    MAX_URL_LEN,
+    copied ? TRUNCATION_NOTE : TRUNCATION_NOTE_NOT_COPIED
   )
   void shell.openExternal(url)
-  return { ok: true, truncated }
+  return { ok: true, truncated, copied }
 }
 
 /** Always-works fallback: put the full report on the clipboard. */
-export function copyReport({ body }) {
-  clipboard.writeText(body)
+export async function copyReport({ body }) {
+  if (!(await writeClipboard(body, 'copyReport'))) throw new Error('clipboard write failed')
   return { ok: true }
+}
+
+/**
+ * Electron 44's main-process clipboard returns a Promise. The wait is bounded: a
+ * clipboard that another process holds must not hang the report flow. Returns
+ * whether the write finished; a failure goes to the session log.
+ */
+async function writeClipboard(text, source) {
+  let timer
+  try {
+    await Promise.race([
+      clipboard.writeText(text),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timed out')), CLIPBOARD_WAIT_MS)
+      })
+    ])
+    return true
+  } catch (err) {
+    captureError({ source, message: `clipboard write failed: ${String(err)}` })
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** Forward a scrubbed renderer error into the shared session log + ring buffer. */

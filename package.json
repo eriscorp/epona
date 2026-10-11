@@ -31,7 +31,7 @@
     "start": "electron-vite preview -- --trace-warnings",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "install-electron && electron-builder install-app-deps",
     "rebuild": "npx @electron/rebuild -f -w da-win32",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
@@ -73,11 +73,44 @@
     "hides. @electron/asar and dir-compare run during packaging, where a passing build",
     "proves nothing unless the globs happened to carry braces.",
     "",
+    "GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p (2026-10) then cover",
+    "<=1.1.20 || 2.0.0 - 2.1.6 || 4.0.0 - 5.0.11. The floor here is 1.1.21, and the 2.x and",
+    "5.x copies move inside their own ranges (2.1.7, 5.0.12) with npm update; no selector for",
+    "them is needed while their consumers' ranges reach the fixed versions.",
+    "",
     "Nothing to unwind later: the selector stops matching once the last minimatch 3.x",
-    "consumer is gone."
+    "consumer is gone.",
+    "",
+    "global-agent@3 -> ^4.1.3 (GHSA-hp3w-g68c-fv3c, 8 moderate findings in one chain). The",
+    "advisory is on sprintf-js, and its range is every version, so no sprintf-js release fixes",
+    "it. The path is app-builder-lib -> @electron/get@3 -> global-agent@3 -> roarr -> sprintf-js.",
+    "electron-builder 26.17 and the 27 alpha still pin @electron/get@3. global-agent 4 removes",
+    "roarr and keeps the same CommonJS entry and the same `bootstrap` export, which is the one",
+    "call @electron/get makes (dist/cjs/proxy.js), and only when ELECTRON_GET_USE_PROXY is set.",
+    "Build time only: Electron itself uses @electron/get@5, so nothing here ships. Remove it",
+    "when electron-builder 27, on @electron/get@5, is stable. (creidhne and taliesin, HTOO-570.)"
   ],
   "overrides": {
-    "brace-expansion@1": "^1.1.18"
+    "brace-expansion@1": "^1.1.21",
+    "global-agent@3": "^4.1.3"
+  },
+  "_allowScriptsNote": [
+    "npm 12 skips every dependency install script that this block does not approve, with only",
+    "a warning and exit 0. Approvals are by name, not by version (HTOO-542). esbuild selects its",
+    "platform binary. fsevents is the macOS file watcher behind vite and rollup; it is optional",
+    "and absent off macOS, so a Windows npm ci never lists it. electron-winstaller is listed as",
+    "false only to mark it reviewed: it serves Squirrel installers, which Epona does not ship.",
+    "electron is not listed: since Electron 42 it has no install script. The project's OWN",
+    "postinstall runs install-electron first (a no-op when the binary is there), because",
+    "electron-vite dev reads the binary path without require(), so a fresh clone could not run",
+    "npm run dev (HTOO-553). npm 12 does not gate the project's own scripts.",
+    "packages/da-win32 is not listed: npm 12 does not gate a workspace member (npm",
+    "install-scripts ls lists nothing), and postinstall rebuilds it in any case."
+  ],
+  "allowScripts": {
+    "esbuild": true,
+    "electron-winstaller": false,
+    "fsevents": true
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.1.0",
@@ -97,8 +130,8 @@
     "@testing-library/user-event": "^14.6.3",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.11",
-    "electron": "^41.1.0",
-    "electron-builder": "^26.8.1",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.17.0",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",

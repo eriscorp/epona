@@ -213,6 +213,7 @@ export function createElectronDouble({
     },
     dialog: autoStub({
       showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })),
+      showSaveDialog: vi.fn(async () => ({ canceled: true, filePath: undefined })),
       showMessageBox: vi.fn(async () => ({ response: 0 })),
       showErrorBox: vi.fn()
     }),
@@ -220,7 +221,9 @@ export function createElectronDouble({
       openPath: vi.fn(async () => ''),
       openExternal: vi.fn(async () => {})
     }),
-    clipboard: autoStub({ writeText: vi.fn(), readText: vi.fn(() => '') }),
+    // Electron 44's main-process clipboard returns Promises. A call that forgets
+    // the await then still fails a test that checks the order.
+    clipboard: autoStub({ writeText: vi.fn(async () => {}), readText: vi.fn(async () => '') }),
     screen: autoStub({
       getPrimaryDisplay: vi.fn(() => ({
         workAreaSize: { width: 1920, height: 1080 },
