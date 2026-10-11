@@ -25,6 +25,8 @@ export async function gitToplevel(path) {
 //   { ok: true }                       — git present, path is inside a repo
 //   { ok: false, reason: 'no_path' }   — empty/non-string input, or path doesn't exist
 //   { ok: false, reason: 'no_git' }    — `git` binary not on PATH (spawn ENOENT)
+//   { ok: false, reason: 'no_clt', message } — macOS: the Command Line Tools are
+//                                        missing, so the git shim cannot run
 //   { ok: false, reason: 'not_repo' }  — git ran but the path isn't a working tree
 //   { ok: false, reason: 'git_error', message } — anything else (rare)
 // `no_git` is the case that historically masqueraded as `not_repo` and sent
@@ -53,6 +55,10 @@ export async function diagnoseGitRepo(repoPath) {
     // distinct from "ran but not a repo" so the snackbar can recommend an
     // install one-liner instead of nagging about the user's checkout.
     if (err && err.code === 'ENOENT') return { ok: false, reason: 'no_git' }
+    // Not 'not_repo': git could not run, so it said nothing about the folder.
+    if (err && err.code === 'CLT_MISSING') {
+      return { ok: false, reason: 'no_clt', message: err.message }
+    }
     return { ok: false, reason: 'git_error', message: String(err?.message || err) }
   }
 }
@@ -87,7 +93,9 @@ export async function listBranches(repoPath) {
   let stdout
   try {
     ;({ stdout } = await runGit(dir, ['branch', '-a']))
-  } catch {
+  } catch (err) {
+    // The missing tools are not the repo's fault; say what to install.
+    if (err?.code === 'CLT_MISSING') throw err
     throw new Error(`Not a git repository: ${repoPath}`)
   }
   const locals = []

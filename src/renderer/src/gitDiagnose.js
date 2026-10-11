@@ -8,9 +8,25 @@ import { gitInstallHint } from './installHints'
 // `notRepoNoun` is the trailing phrase for the not_repo warning — the two
 // panels differ only in whether they say "…the picked folder." (server) or
 // "…the picked .csproj." (client).
+//
+// Only a folder pick calls this, so it is a manual action: main may ask git
+// again after a cached "Command Line Tools missing" (macOS).
 export async function diagnoseAndExplain(p, { notRepoNoun }) {
-  const diag = await window.sparkAPI.diagnoseGitRepo(p)
+  const diag = await window.sparkAPI.diagnoseGitRepo(p, { manual: true })
   if (diag.ok) return { accept: true, noGit: false, snack: null }
+  // macOS without the Command Line Tools: git cannot run, as with no git at all.
+  // The message names the command to run (xcode-select --install).
+  if (diag.reason === 'no_clt') {
+    return {
+      accept: true,
+      noGit: true,
+      snack: {
+        severity: 'warning',
+        duration: 10000,
+        message: `${diag.message}. Branch switching disabled. Pick the folder again after the install.`
+      }
+    }
+  }
   if (diag.reason === 'no_git') {
     return {
       accept: true,

@@ -28,6 +28,7 @@ import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverCon
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
+import { reprobeGit } from './gitExec.js'
 import {
   releaseAll as releaseAllWorktrees,
   flushWorktrees,
@@ -1123,7 +1124,16 @@ app.whenReady().then(() => {
   // Git ops for the repo-mode picker — list branches in a chosen repo, and
   // an inline-validation check so the path picker can flag "not a git repo"
   // before the user tries to launch.
-  ipc.handle('git:listBranches', async (_, repoPath) => {
+  //
+  // `manual` is set by a user action (a folder pick, a branch Refresh button).
+  // It asks git again after a cached "Command Line Tools missing" (macOS), so
+  // installing the tools and clicking Refresh recovers without a restart. An
+  // automatic refresh never sets it, or it raises the install dialog each time.
+  const reprobeIfManual = (opts) => {
+    if (opts?.manual === true) reprobeGit()
+  }
+  ipc.handle('git:listBranches', async (_, repoPath, opts) => {
+    reprobeIfManual(opts)
     try {
       return { ok: true, branches: await listBranches(repoPath) }
     } catch (err) {
@@ -1131,7 +1141,10 @@ app.whenReady().then(() => {
     }
   })
   ipc.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
-  ipc.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
+  ipc.handle('git:diagnoseGitRepo', async (_, repoPath, opts) => {
+    reprobeIfManual(opts)
+    return diagnoseGitRepo(repoPath)
+  })
 
   // Force-clear managed worktrees for every configured repo — the Settings
   // "Flush Worktrees" escape hatch for the occasional "already exists" wedge.

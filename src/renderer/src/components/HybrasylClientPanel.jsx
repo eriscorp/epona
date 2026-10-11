@@ -218,7 +218,7 @@ export default function HybrasylClientPanel({
             onOpen={() =>
               !hybrasyl.noGit && hybrasyl.clientRepoPath && refreshBranches(hybrasyl.clientRepoPath)
             }
-            onRefresh={() => refreshBranches(hybrasyl.clientRepoPath)}
+            onRefresh={() => refreshBranches(hybrasyl.clientRepoPath, { manual: true })}
             allowCurrentCheckout
             noGitText="Git not available — client runs directly from the picked .csproj."
           />

@@ -56,12 +56,13 @@ const setup = await vi.hoisted(async () => {
     windowsAtMenu,
     realPlatform,
     killProcessTree: vitest.fn(async () => ({ ok: true })),
+    reprobeGit: vitest.fn(),
     launchServer: vitest.fn(),
     cleanup: vitest.fn(async () => {})
   }
 })
 
-const { harness, windowsAtMenu, killProcessTree, launchServer, cleanup } = setup
+const { harness, windowsAtMenu, killProcessTree, launchServer, cleanup, reprobeGit } = setup
 const { dialog, screen, Menu } = harness.electron
 
 vi.mock('electron', () => harness.electron)
@@ -70,6 +71,10 @@ vi.mock('./targets/serverTarget.js', () => ({ launch: launchServer }))
 vi.mock('./portProbe.js', () => ({ isPortInUse: async () => false }))
 vi.mock('./portOwner.js', () => ({ findPortOwner: async () => null }))
 vi.mock('./processAlive.js', () => ({ isProcessAlive: () => true }))
+vi.mock('./gitExec.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  reprobeGit
+}))
 // A stub, not the real manager: the cases need a repo-mode instance that is
 // resolvable by id. The roaming migration is index.js's own code and still runs.
 vi.mock('./settingsManager.js', () => ({
@@ -196,6 +201,22 @@ describe('the application menu on macOS', () => {
     expect(Menu.setApplicationMenu.mock.calls.length).toBe(before + 1)
     expect(goChecked()).toEqual(['go:server'])
   })
+})
+
+describe('re-asking git after missing Command Line Tools (HTOO-512)', () => {
+  // A cached "tools missing" is cleared only by a manual action, or each
+  // automatic refresh would raise the system install dialog again.
+  it.each(['git:listBranches', 'git:diagnoseGitRepo'])(
+    '%s re-probes only when the renderer marks it manual',
+    async (channel) => {
+      reprobeGit.mockClear()
+      await harness.invoke(channel, sandbox)
+      await harness.invoke(channel, sandbox, { manual: false })
+      expect(reprobeGit).not.toHaveBeenCalled()
+      await harness.invoke(channel, sandbox, { manual: true })
+      expect(reprobeGit).toHaveBeenCalledTimes(1)
+    }
+  )
 })
 
 describe('⌘W and the Dock on macOS, with a repo-mode server running', () => {

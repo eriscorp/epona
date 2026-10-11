@@ -10,7 +10,8 @@ vi.mock('child_process', async (importActual) => ({
   spawn: (...args) => spawn(...args)
 }))
 
-const { runGit, ensureDir } = await import('./gitExec.js')
+const { runGit, ensureDir, reprobeGit } = await import('./gitExec.js')
+const { diagnoseGitRepo, listBranches } = await import('./gitOps.js')
 
 // A stand-in for the ChildProcess runGit wires itself to. Returned synchronously
 // so the caller can attach handlers, then driven by the test.
@@ -140,5 +141,89 @@ describe('ensureDir', () => {
   it('returns a non-existent path as-is rather than guessing', async () => {
     const missing = join(workDir, 'nope', 'gone')
     await expect(ensureDir(missing)).resolves.toBe(missing)
+  })
+})
+
+describe('macOS without the Command Line Tools (HTOO-512)', () => {
+  // The real text of the /usr/bin/git shim on a Mac without the tools (Balor, a
+  // fresh Mac mini, 2026-09-30). Exit code 1.
+  const NO_CLT = 'xcode-select: note: No developer tools were found, requesting install.\n'
+  const realPlatform = process.platform
+  let workDir
+
+  // The shim answers every spawn with the xcode-select text.
+  function shimWithoutTools() {
+    spawn.mockImplementation(() => {
+      const child = fakeChild()
+      setImmediate(() => child.finish({ code: 1, err: NO_CLT }))
+      return child
+    })
+  }
+
+  beforeEach(async () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+    workDir = await fs.mkdtemp(join(tmpdir(), 'epona-clt-'))
+    shimWithoutTools()
+  })
+
+  afterEach(async () => {
+    Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true })
+    // The answer is module state; leave the next test a module that asks again.
+    reprobeGit()
+    await fs.rm(workDir, { recursive: true, force: true })
+  })
+
+  it('rejects with the CLT message, also under allowFail', async () => {
+    const err = await runGit(workDir, ['rev-parse'], { allowFail: true }).catch((e) => e)
+    expect(err.code).toBe('CLT_MISSING')
+    expect(err.message).toContain('xcode-select --install')
+  })
+
+  it('keeps the answer: the second call does not spawn the shim', async () => {
+    await runGit(workDir, ['status']).catch(() => {})
+    expect(spawn).toHaveBeenCalledTimes(1)
+
+    const err = await runGit(workDir, ['branch', '-a']).catch((e) => e)
+
+    expect(err.code).toBe('CLT_MISSING')
+    // Each spawn of the shim can raise the system install dialog again.
+    expect(spawn).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks git again after reprobeGit, and recovers once the tools are there', async () => {
+    await runGit(workDir, ['status']).catch(() => {})
+    reprobeGit()
+    spawn.mockImplementation(() => {
+      const child = fakeChild()
+      setImmediate(() => child.finish({ out: 'true' }))
+      return child
+    })
+
+    await expect(runGit(workDir, ['rev-parse', '--is-inside-work-tree'])).resolves.toMatchObject({
+      code: 0,
+      stdout: 'true'
+    })
+    expect(spawn).toHaveBeenCalledTimes(2)
+  })
+
+  it('diagnoseGitRepo reports no_clt, not not_repo', async () => {
+    await expect(diagnoseGitRepo(workDir)).resolves.toEqual({
+      ok: false,
+      reason: 'no_clt',
+      message: expect.stringContaining('xcode-select --install')
+    })
+  })
+
+  it('listBranches passes the CLT message through, not "Not a git repository"', async () => {
+    await expect(listBranches(workDir)).rejects.toThrow(/xcode-select --install/)
+  })
+
+  it('is not a CLT failure off macOS: the same text stays a plain git error', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+    const err = await runGit(workDir, ['status']).catch((e) => e)
+    expect(err.code).toBeUndefined()
+    expect(err.message).toMatch(/failed \(exit 1\)/)
+    await runGit(workDir, ['status']).catch(() => {})
+    expect(spawn).toHaveBeenCalledTimes(2)
   })
 })

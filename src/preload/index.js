@@ -96,9 +96,11 @@ contextBridge.exposeInMainWorld('sparkAPI', {
   listServerConfigs: (dataDir) => ipcRenderer.invoke('instance:listServerConfigs', dataDir),
   readDataStore: (dataDir, configFileName) =>
     ipcRenderer.invoke('instance:readDataStore', dataDir, configFileName),
-  listGitBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
+  // `opts.manual` marks a user action, which may re-ask git after a cached
+  // "Command Line Tools missing" (macOS). See src/main/gitExec.js.
+  listGitBranches: (repoPath, opts) => ipcRenderer.invoke('git:listBranches', repoPath, opts),
   isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath),
-  diagnoseGitRepo: (repoPath) => ipcRenderer.invoke('git:diagnoseGitRepo', repoPath),
+  diagnoseGitRepo: (repoPath, opts) => ipcRenderer.invoke('git:diagnoseGitRepo', repoPath, opts),
   flushWorktrees: () => ipcRenderer.invoke('worktrees:flush'),
   listManagedWorktrees: () => ipcRenderer.invoke('worktrees:listManaged'),
   removeWorktree: (repoPath, branch, force) =>
