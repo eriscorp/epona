@@ -125,6 +125,8 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
   // collapses all (clicking the open section closes it). Defaults to Theme.
   const [expanded, setExpanded] = useState('theme')
   const handleAccordion = (panel) => (_, isExpanded) => setExpanded(isExpanded ? panel : false)
+  // The macOS menu's Check for Updates: show the About section, with its button.
+  useMenuRequest('checkForUpdates', () => setExpanded('about'))
   // App version for the About section — resolved from the main process on mount.
   const [version, setVersion] = useState('')
   useEffect(() => {

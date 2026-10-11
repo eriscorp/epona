@@ -45,6 +45,9 @@ export function buildMenuTemplate(state, { appName, isDev, send }) {
       label: appName,
       submenu: [
         item(`About ${appName}`, 'about'),
+        // Opens Settings at the About section, where the update check button is
+        // (the update-check module, HTOO-382). The button runs the check.
+        item('Check for Updates…', 'checkForUpdates'),
         sep,
         item('Settings…', 'settings', { accelerator: 'Cmd+,' }),
         sep,

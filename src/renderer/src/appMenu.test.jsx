@@ -72,12 +72,15 @@ describe('runMenuCommand', () => {
     expect(isModalOpen()).toBe(false)
   })
 
-  it.each(['about', 'whatsNew'])('%s leaves a request and opens Settings', (command) => {
-    const a = actions()
-    runMenuCommand({ command }, a)
-    expect(a.openSettings).toHaveBeenCalled()
-    expect(useMenuStore.getState().pending[command]).toBeDefined()
-  })
+  it.each(['about', 'whatsNew', 'checkForUpdates'])(
+    '%s leaves a request and opens Settings',
+    (command) => {
+      const a = actions()
+      runMenuCommand({ command }, a)
+      expect(a.openSettings).toHaveBeenCalled()
+      expect(useMenuStore.getState().pending[command]).toBeDefined()
+    }
+  )
 
   it.each([
     ['settings', 'openSettings'],

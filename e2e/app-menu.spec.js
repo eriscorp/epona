@@ -77,4 +77,12 @@ test.describe('Application menu (macOS)', () => {
     await clickItem(electronApp, 'about')
     await expect(page.getByRole('dialog', { name: /About Epona/i })).toBeVisible()
   })
+
+  test('Check for Updates opens Settings at the update check button', async () => {
+    ;({ electronApp } = await launchEpona())
+    const page = await getMainWindow(electronApp)
+    await expect(page.getByTestId('settings-pane')).toHaveCount(0)
+    await clickItem(electronApp, 'checkForUpdates')
+    await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
+  })
 })

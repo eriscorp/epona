@@ -37,7 +37,7 @@ the rules above.
 
 - **Settings has a Check for updates button.** It is in the About section, below the version. It tells you that Epona is up to date, that a newer version is available (with a link to the release), or why it could not check.
 - **On macOS, the title bar holds only the native window buttons.** Before, the bar also showed the Epona logo and name beside the buttons. Now the bar is empty on macOS, as in other Mac apps. The green button does not put the fixed-size window into full screen.
-- **On macOS, Epona has its own menu bar.** Before, macOS showed the default Electron menu, with Reload and no Epona commands. Now the menus hold Settings (⌘,), Locate Assets (⌘O), the folders to reveal, the Log Pane, the three tabs (⌘1 to ⌘3), Recommended Installs, Report an Issue and What's New. A menu command does nothing while a dialog is open.
+- **On macOS, Epona has its own menu bar.** Before, macOS showed the default Electron menu, with Reload and no Epona commands. Now the menus hold Settings (⌘,), Check for Updates, Locate Assets (⌘O), the folders to reveal, the Log Pane, the three tabs (⌘1 to ⌘3), Recommended Installs, Report an Issue and What's New. A menu command does nothing while a dialog is open.
 - **On macOS, Epona tells you when the Xcode Command Line Tools are missing.** Before, a Mac without the tools showed a repo folder as "not a git repository", and each git call could open the system install dialog again. Now Epona shows "Run: xcode-select --install", and it stops calling git until you pick a folder again, click a branch Refresh button, or start a launch.
 
 ### Changed

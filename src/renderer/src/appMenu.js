@@ -29,7 +29,9 @@ export function runMenuCommand(msg, actions) {
       return
     case 'about':
     case 'whatsNew':
-      // Both dialogs belong to SettingsPane, which takes the request when it mounts.
+    case 'checkForUpdates':
+      // SettingsPane takes the request when it mounts: it opens the About or What's
+      // New dialog, or expands the About section, where the update check button is.
       useMenuStore.getState().request(command)
       actions.openSettings()
       return

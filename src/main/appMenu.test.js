@@ -66,8 +66,10 @@ describe('buildMenuTemplate', () => {
     expect(byId(build(), 'settings').accelerator).toBe('Cmd+,')
   })
 
-  it('has no Check for Updates, because there is no manual check to run', () => {
-    expect(byId(build(), 'checkForUpdates')).toBeUndefined()
+  it('has Check for Updates under About, where the house menu puts it', () => {
+    const app = build()[0].submenu
+    const ids = app.map((i) => i.id)
+    expect(ids.indexOf('checkForUpdates')).toBe(ids.indexOf('about') + 1)
   })
 
   it('keeps the Edit menu, without which ⌘C, ⌘V and ⌘A stop working in text fields', () => {
@@ -115,7 +117,7 @@ describe('buildMenuTemplate', () => {
 
   it('gives every Epona item an id, so e2e can find it', () => {
     const appItems = flatten(build()).filter((i) => typeof i.click === 'function')
-    expect(appItems.length).toBe(12)
+    expect(appItems.length).toBe(13)
     for (const i of appItems) expect(typeof i.id).toBe('string')
   })
 })
