@@ -1,6 +1,8 @@
-import { readFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { createRequire } from 'module'
+import { tmpdir } from 'os'
 import { join } from 'path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
  * Every packaging target `electron-builder.yml` declares must reach the
@@ -181,5 +183,92 @@ describe('the installer decisions most expensive to revisit', () => {
     // The default is "Epona Setup <version>.exe", with spaces. Both halves of
     // the contract above are written against the dashed form.
     expect(builder).toMatch(/^ {2}artifactName: \$\{name\}-\$\{version\}-setup\.\$\{ext\}$/m)
+  })
+})
+
+/** The text of one step of release.yml, from its `- name:` to the next step. */
+const step = (name) => {
+  const start = workflow.indexOf(`- name: ${name}`)
+  expect(start).toBeGreaterThan(-1)
+  const next = workflow.indexOf('\n      - ', start + 1)
+  return workflow.slice(start, next === -1 ? undefined : next)
+}
+
+/**
+ * Windows signing on a current JDK (HTOO-517). A fault here shows only on a
+ * tag, which is the most expensive moment to find it, so the shape is pinned.
+ * The comment on resolveJava in scripts/sign.js tells why the bundled JDK
+ * cannot sign.
+ *
+ * This checks the request and the resolver, not a signed file. Only a tag run
+ * with the ES_* secrets can sign.
+ */
+describe('Windows signing on a current JDK (HTOO-517)', () => {
+  it('installs Temurin 17, then CodeSignTool, before the packaging step', () => {
+    expect(step('Set up Java 17 for CodeSignTool')).toMatch(
+      /uses: actions\/setup-java@v5\n\s+with:\n\s+distribution: temurin\n\s+java-version: '17'/
+    )
+    const order = [
+      '- name: Set up Java 17 for CodeSignTool',
+      '- name: Download CodeSignTool',
+      '- name: Package installer + portable exe'
+    ].map((name) => workflow.indexOf(name))
+    expect(order).not.toContain(-1)
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+  })
+
+  it('never names CodeSignTool.bat or the bundled JDK', () => {
+    // The .bat always runs the bundled JDK. The workflow finds the jar instead,
+    // and the folder above jar/ becomes CODE_SIGN_TOOL_PATH.
+    expect(workflow).not.toMatch(/CodeSignTool\.bat|jdk-11/)
+    const download = step('Download CodeSignTool')
+    expect(download).toContain("-Filter 'code_sign_tool-*.jar'")
+    expect(download).toContain('$jar.Directory.Parent.FullName')
+  })
+
+  it('stops the download step on a bad layout or a missing Java, before the packaging', () => {
+    // Without these stops, the fault shows minutes later inside electron-builder.
+    const download = step('Download CodeSignTool')
+    expect(download).toContain("$jars.Count -ne 1 -or $jars[0].Directory.Name -ne 'jar'")
+    expect(download).toContain('-not (Test-Path $java)')
+  })
+
+  it('needs no Node 20 holdout', () => {
+    // The env existed only for sslcom/esigner-codesign (`using: node20`).
+    expect(workflow).not.toMatch(/^\s*FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:/m)
+  })
+
+  describe('the java that scripts/sign.js runs', () => {
+    const { resolveCodeSignTool, resolveJava } = createRequire(import.meta.url)('./sign.js')
+    let root, toolDir, bundledJava, javaHome
+
+    // A CodeSignTool folder with the v1.3.2 layout, and a separate JAVA_HOME.
+    // Each java.exe is an empty file: the resolver only reads paths.
+    beforeEach(() => {
+      root = mkdtempSync(join(tmpdir(), 'epona-sign-'))
+      toolDir = join(root, 'CodeSignTool-v1.3.2')
+      bundledJava = join(toolDir, 'jdk-11.0.2', 'bin', 'java.exe')
+      mkdirSync(join(toolDir, 'jdk-11.0.2', 'bin'), { recursive: true })
+      writeFileSync(bundledJava, '')
+      mkdirSync(join(toolDir, 'jar'))
+      writeFileSync(join(toolDir, 'jar', 'code_sign_tool-1.3.2.jar'), '')
+      javaHome = join(root, 'temurin-17')
+      mkdirSync(join(javaHome, 'bin'), { recursive: true })
+      writeFileSync(join(javaHome, 'bin', 'java.exe'), '')
+    })
+    afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+    it('runs the jar on $JAVA_HOME/bin/java.exe, not on the bundled JDK', () => {
+      const { java, jar } = resolveCodeSignTool(toolDir, { JAVA_HOME: javaHome }, 'win32')
+      expect(java).toBe(join(javaHome, 'bin', 'java.exe'))
+      expect(java).not.toBe(bundledJava)
+      expect(jar).toBe(join(toolDir, 'jar', 'code_sign_tool-1.3.2.jar'))
+    })
+
+    it('falls back to the java on PATH, never to the bundled JDK', () => {
+      // No JAVA_HOME, and a JAVA_HOME with no java in it.
+      expect(resolveCodeSignTool(toolDir, {}, 'win32').java).toBe('java')
+      expect(resolveJava({ JAVA_HOME: join(root, 'no-such-jdk') }, 'win32')).toBe('java')
+    })
   })
 })

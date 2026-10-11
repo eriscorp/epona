@@ -23,6 +23,25 @@
 # path was unrun — killPosixTree, the hybrasylTarget spawn guards, serverTarget's
 # non-Windows direct spawn. The tests were there; nothing ran them.
 
+# CHECKOUT DEPTH: 1, the `actions/checkout` default, on purpose (HTOO-328).
+# A depth-1 clone has no parents for the commit it checks out. Thus every
+# commit reads as a root commit, no commit is a merge, and ahead/behind against
+# a real upstream has no answer.
+#
+# Epona reads git: src/main/gitOps.js and src/main/worktreeManager.js run
+# `rev-parse`, `branch -a`, `worktree` and `status`. But no step in CI points
+# that code at the history of this checkout. The git unit tests (gitExec,
+# gitOps, worktreeManager) and the e2e helper createTempRepoWithWorktree each
+# make their own temp repo. changelog-extract.mjs reads CHANGELOG.md, and the
+# release notes come from the GitHub API, not from the clone. Thus depth 1
+# gives no wrong answer today.
+#
+# That is a weaker claim than "Epona reads no git", so the trigger is written
+# here. Set `fetch-depth: 0` on a job when one of its steps reads commit
+# parents, `merge-base`, ahead/behind or `git describe`, or when an e2e spec
+# runs Epona against the repo of this checkout instead of a temp repo. A
+# shallow clone then makes the check pass and measure nothing.
+
 name: CI
 
 # MANUAL ONLY (HTOO-390). GitHub bills windows runners at 2x and macOS at 10x,
@@ -63,6 +82,7 @@ jobs:
     runs-on: windows-2022
 
     steps:
+      # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -104,6 +124,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -143,6 +164,7 @@ jobs:
     runs-on: windows-2022
 
     steps:
+      # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
