@@ -256,7 +256,7 @@ comes in two forms — take whichever suits you, they are the same app:
 macOS and Linux builds (`.dmg`, `.deb`, `.AppImage`) are published too,
 but see the platform note above — the Win32 patches are Windows-only.
 
-On macOS, branch switching for repo-mode launches uses the git that the Xcode Command Line Tools supply. If Epona says that the tools are missing, run `xcode-select --install`. Then pick the repo folder again or click a branch Refresh button. You do not have to restart Epona.
+On macOS, branch switching for repo-mode launches uses the git that the Xcode Command Line Tools supply. If Epona says that the tools are missing, run `xcode-select --install`. Then pick the repo folder again, click a branch Refresh button, or start the launch again. You do not have to restart Epona.
 
 Every release also carries `SHA256SUMS.txt` and a signed build
 provenance attestation. **If Windows Defender or SmartScreen flags the

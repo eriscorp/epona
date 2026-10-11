@@ -9,7 +9,8 @@ import { isCltFailure, CLT_MESSAGE } from './launchEnv/gitFailure.js'
 // system "install developer tools" dialog again. So the first such answer is kept
 // for the process: later calls fail at once, without the shim. reprobeGit()
 // clears it, and only a manual action calls it (a folder pick, a branch Refresh
-// button), never an automatic refresh or the startup and quit sweeps.
+// button, a launch, a server start or reset), never an automatic refresh or the
+// startup and quit sweeps.
 //
 // Only this part of the house launch-env v1 applies to Epona. Its git use is
 // local (rev-parse, branch, worktree, status): no fetch, pull or push, so no

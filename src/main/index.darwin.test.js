@@ -218,6 +218,17 @@ describe('re-asking git after missing Command Line Tools (HTOO-512)', () => {
       expect(reprobeGit).toHaveBeenCalledTimes(1)
     }
   )
+
+  // A launch after the install must not fail on the cached answer.
+  it.each([
+    ['client:launch', 'nothing'],
+    ['instance:start', { id: 'no-such-instance' }],
+    ['instance:reset', { id: 'no-such-instance' }]
+  ])('%s re-probes: a launch is a manual action', async (channel, arg) => {
+    reprobeGit.mockClear()
+    await harness.invoke(channel, arg)
+    expect(reprobeGit).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('⌘W and the Dock on macOS, with a repo-mode server running', () => {

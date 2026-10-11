@@ -7,7 +7,8 @@ import { runGit, ensureDir } from './gitExec.js'
 // Resolve the toplevel of the git working tree containing `path`, or null if
 // `path` isn't inside one. Used to convert a csproj path the user picked into
 // the repo root that ensureWorktree / listBranches expect. Accepts either a
-// file or a directory inside the repo.
+// file or a directory inside the repo. Rejects with code CLT_MISSING (macOS)
+// when git cannot run.
 export async function gitToplevel(path) {
   if (typeof path !== 'string' || !path) return null
   const dir = await ensureDir(path)
@@ -15,7 +16,10 @@ export async function gitToplevel(path) {
     const result = await runGit(dir, ['rev-parse', '--show-toplevel'], { allowFail: true })
     if (result.code !== 0) return null
     return result.stdout || null
-  } catch {
+  } catch (err) {
+    // The missing tools are not the folder's fault. A null here reads as "not
+    // inside a git repository" at launch, so pass the CLT message through.
+    if (err?.code === 'CLT_MISSING') throw err
     return null
   }
 }

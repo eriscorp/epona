@@ -11,7 +11,7 @@ vi.mock('child_process', async (importActual) => ({
 }))
 
 const { runGit, ensureDir, reprobeGit } = await import('./gitExec.js')
-const { diagnoseGitRepo, listBranches } = await import('./gitOps.js')
+const { diagnoseGitRepo, listBranches, gitToplevel } = await import('./gitOps.js')
 
 // A stand-in for the ChildProcess runGit wires itself to. Returned synchronously
 // so the caller can attach handlers, then driven by the test.
@@ -216,6 +216,12 @@ describe('macOS without the Command Line Tools (HTOO-512)', () => {
 
   it('listBranches passes the CLT message through, not "Not a git repository"', async () => {
     await expect(listBranches(workDir)).rejects.toThrow(/xcode-select --install/)
+  })
+
+  it('gitToplevel passes the CLT message through, not a null that reads as "not a repo"', async () => {
+    // A repo-mode launch reports a null here as "csproj is not inside a git
+    // repository".
+    await expect(gitToplevel(workDir)).rejects.toMatchObject({ code: 'CLT_MISSING' })
   })
 
   it('is not a CLT failure off macOS: the same text stays a plain git error', async () => {

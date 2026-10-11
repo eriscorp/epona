@@ -874,6 +874,9 @@ app.whenReady().then(() => {
   })
 
   ipc.handle('client:launch', async (_, targetKind, _renderSettings, profile) => {
+    // A launch is a manual action: ask git again after a cached "Command Line
+    // Tools missing" (macOS), so a launch after the install does not fail.
+    reprobeGit()
     // Spawn-path hardening: disk wins. The renderer's settings payload is
     // ignored so a compromised renderer can't redirect the spawn target —
     // we only execute paths the user persisted via dialog + save.
@@ -1129,6 +1132,7 @@ app.whenReady().then(() => {
   // It asks git again after a cached "Command Line Tools missing" (macOS), so
   // installing the tools and clicking Refresh recovers without a restart. An
   // automatic refresh never sets it, or it raises the install dialog each time.
+  // A launch, a server start and a server reset ask again too (see client:launch).
   const reprobeIfManual = (opts) => {
     if (opts?.manual === true) reprobeGit()
   }
@@ -1256,6 +1260,7 @@ app.whenReady().then(() => {
   }
 
   ipc.handle('instance:start', async (_, supplied) => {
+    reprobeGit() // A manual action, as in client:launch.
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
     const instance = resolved.instance
@@ -1330,6 +1335,7 @@ app.whenReady().then(() => {
   // port bind. The renderer keeps the running flag set across the gap so
   // the UI doesn't flicker mid-restart.
   ipc.handle('instance:reset', async (_, supplied) => {
+    reprobeGit() // A manual action, as in client:launch.
     // Same disk-wins resolution as instance:start.
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
