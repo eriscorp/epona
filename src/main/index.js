@@ -82,11 +82,17 @@ let settingsManager
 //
 // %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
 // no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
-const localAppData =
-  process.platform === 'win32'
-    ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
-    : app.getPath('appData')
-const dataDir = join(localAppData, 'Erisco', 'Epona')
+//
+// LOCALAPPDATA is read on EVERY platform (HTOO-543). Nothing sets it on Linux or
+// macOS except the e2e helper, which points it at a temp dir. Read on Windows
+// only, the redirect did nothing there, and every spec read and wrote the real
+// settings. No other variable moves appData on macOS.
+function localAppDataDir() {
+  if (process.env.LOCALAPPDATA) return process.env.LOCALAPPDATA
+  if (process.platform === 'win32') return join(app.getPath('home'), 'AppData', 'Local')
+  return app.getPath('appData')
+}
+const dataDir = join(localAppDataDir(), 'Erisco', 'Epona')
 app.setPath('userData', dataDir)
 
 // Drop to software rendering in a Remote Desktop session. Like setPath above,
@@ -163,11 +169,15 @@ let mainWindowRevealed = false
 // One-time migration: older Epona stored settings under the Roaming profile
 // (app.getPath('appData')). We now use Local. On first launch after the switch,
 // copy an existing Roaming settings.json (and its backup) into the Local dir so
-// returning users keep their config. No-op on macOS/Linux (old === new dir).
+// returning users keep their config.
 function migrateSettingsFromRoaming(settingsPath) {
+  // Windows only: roaming is a Windows concept. On Linux and macOS a redirected
+  // LOCALAPPDATA (the e2e helper) makes oldDir differ from settingsPath, and this
+  // would copy the user's real settings into the test's temp dir (HTOO-543).
+  if (process.platform !== 'win32') return
   try {
     const oldDir = join(app.getPath('appData'), 'Erisco', 'Epona')
-    if (oldDir === settingsPath) return // same location (non-Windows) — no-op
+    if (oldDir === settingsPath) return // safety: never copy a dir onto itself
     const newPrimary = join(settingsPath, 'settings.json')
     if (existsSync(newPrimary)) return // already migrated / fresh local settings
     const oldPrimary = join(oldDir, 'settings.json')

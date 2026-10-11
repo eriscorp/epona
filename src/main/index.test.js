@@ -22,9 +22,9 @@ import { RENDERER_CSP, SPLASH_CSP } from './windowSecurity.js'
 const here = dirname(fileURLToPath(import.meta.url))
 
 // A throwaway directory for every app.getPath() key AND for %LOCALAPPDATA%.
-// Both matter: index.js derives dataDir from LOCALAPPDATA on Windows and from
-// app.getPath('appData') elsewhere, then writes a session log into it and calls
-// rmSync on a sibling. Pointed anywhere real, a test run would touch a
+// Both matter: index.js derives dataDir from LOCALAPPDATA when it is set, and
+// from app.getPath('appData') when it is not, then writes a session log into it
+// and calls rmSync on a sibling. Pointed anywhere real, a test run would touch a
 // developer's own Epona data.
 const sandbox = mkdtempSync(join(tmpdir(), 'epona-main-boot-'))
 
@@ -73,6 +73,15 @@ describe('booting the main process', () => {
     const call = harness.app.setPath.mock.calls.find(([key]) => key === 'userData')
     expect(call).toBeTruthy()
     expect(call[1]).toContain(join('Erisco', 'Epona'))
+  })
+
+  it('reads LOCALAPPDATA on every platform, not on Windows only', () => {
+    // HTOO-543. The e2e helper isolates a launch by pointing LOCALAPPDATA at a
+    // temp dir. Read on Windows only, that redirect did nothing on Linux and
+    // macOS, and every spec there read and wrote the real settings. This runs on
+    // the POSIX CI job too, which is where the Windows-only read fails it.
+    const call = harness.app.setPath.mock.calls.find(([key]) => key === 'userData')
+    expect(call[1]).toBe(join(sandbox, 'Erisco', 'Epona'))
   })
 })
 

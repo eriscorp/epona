@@ -1,6 +1,6 @@
 import { _electron as electron, expect } from '@playwright/test'
 import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { dirname, join, resolve } from 'path'
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'fs'
 import { execFileSync } from 'child_process'
 import { tmpdir } from 'os'
@@ -13,8 +13,8 @@ export const mainEntry = join(repoRoot, 'out', 'main', 'index.js')
 //
 // LOCALAPPDATA is redirected to a throwaway temp dir because src/main/index.js
 // derives its userData (settings.json, caches) from %LOCALAPPDATA% at module
-// load — pointing it at a temp dir keeps each run hermetic and off the real
-// user profile. Pass `seedSettings` (a settings object) to pre-write
+// load, on every platform — pointing it at a temp dir keeps each run hermetic
+// and off the real user profile. assertIsolated below checks that it held. Pass `seedSettings` (a settings object) to pre-write
 // settings.json so the app hydrates a known config; omit it to get defaults.
 export async function launchEpona({ seedSettings, localAppData: reuseDir } = {}) {
   // Reuse a caller-supplied dir to test persistence across relaunches; otherwise
@@ -38,7 +38,22 @@ export async function launchEpona({ seedSettings, localAppData: reuseDir } = {})
   // Electron resolve package.json -> main -> out/main/index.js, exactly as the
   // packaged app and `electron-vite preview` do.
   const electronApp = await electron.launch({ args: ['.'], cwd: repoRoot, env })
+  await assertIsolated(electronApp, localAppData)
   return { electronApp, localAppData }
+}
+
+// Fail the launch when the app's userData is not under the temp dir (HTOO-543).
+// This is the alarm, not the fix: it reads userData AFTER the launch, so the app
+// has already made its profile folder wherever userData points. It stops a SPEC
+// from saving into the real settings. localAppDataDir() in src/main/index.js is
+// what keeps the launch itself off the real profile.
+export async function assertIsolated(electronApp, localAppData) {
+  const userData = await electronApp.evaluate(({ app }) => app.getPath('userData'))
+  const expected = join(localAppData, 'Erisco', 'Epona')
+  if (resolve(userData).toLowerCase() !== resolve(expected).toLowerCase()) {
+    await electronApp.close().catch(() => {})
+    throw new Error(`e2e isolation failed: userData is ${userData}, expected ${expected}`)
+  }
 }
 
 // Find the main renderer window and wait until it's actually shown. Epona pops a
