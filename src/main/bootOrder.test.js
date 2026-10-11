@@ -53,6 +53,62 @@ describe('main-process boot order', () => {
     expect(setPath).toBeLessThan(ready)
   })
 
+  it('takes the single-instance lock after setPath and the GPU call, before whenReady', () => {
+    // HTOO-351. The lock is keyed on the userData directory, so a lock taken
+    // before the setPath override keys on Electron's default path, and two
+    // builds that disagree about where their data lives never see each other.
+    // After whenReady there is nothing left to prevent. The GPU call stays above
+    // the lock because it is a no-op after ready, and a losing instance exits
+    // before it renders, so its rendering mode never matters.
+    const src = sourceWithoutComments()
+    const setPath = src.indexOf("setPath('userData'")
+    const gpu = src.indexOf('disableHardwareAcceleration()')
+    const lock = src.indexOf('requestSingleInstanceLock()')
+    const ready = src.indexOf('whenReady')
+    expect(lock).toBeGreaterThan(-1)
+    expect(setPath).toBeLessThan(gpu)
+    expect(gpu).toBeLessThan(lock)
+    expect(lock).toBeLessThan(ready)
+  })
+
+  it('takes the lock before any module-scope side effect', () => {
+    // Statement forms, not names. A bare name also matches an import or a
+    // function declaration, which can sit above the lock by construction.
+    const src = sourceWithoutComments()
+    const lock = src.indexOf('requestSingleInstanceLock()')
+    for (const statement of [
+      /^installGlobalErrorHandlers\(/m,
+      /^void initSessionLog\(/m,
+      /^\s+migrateSettingsFromRoaming\(dataDir\)/m,
+      /^\s+settingsManager = createSettingsManager\(/m
+    ]) {
+      const at = src.search(statement)
+      expect(at, `${statement} not found in index.js`).toBeGreaterThan(-1)
+      expect(at, `${statement} runs before the lock`).toBeGreaterThan(lock)
+    }
+  })
+
+  it('restores, shows and focuses on a second launch, in that order', () => {
+    // Without restore() first, a minimised window takes focus in the taskbar and
+    // does not come forward, which reads as the second launch doing nothing.
+    // Before the reveal, the handler does nothing: the window is still hidden
+    // and unhydrated, and the reveal brings it forward.
+    const src = sourceWithoutComments()
+    const start = src.indexOf("app.on('second-instance'")
+    expect(start).toBeGreaterThan(-1)
+    const handler = src.slice(start, src.indexOf('\n  })', start))
+    expect(handler).toMatch(/if \(mainWindowRevealed\) focusMainWindow\(\)/)
+    const helperStart = src.indexOf('function focusMainWindow()')
+    expect(helperStart).toBeGreaterThan(-1)
+    const helper = src.slice(helperStart, src.indexOf('\n  }', helperStart))
+    const restore = helper.indexOf('mainWindow.restore()')
+    const show = helper.indexOf('mainWindow.show()')
+    const focus = helper.indexOf('mainWindow.focus()')
+    expect(restore).toBeGreaterThan(-1)
+    expect(restore).toBeLessThan(show)
+    expect(show).toBeLessThan(focus)
+  })
+
   it('would fail without stripping comments — the guard the naive test misses', () => {
     // Not a test of the app: a test of the test. index.js explains the
     // whenReady constraint in prose ABOVE the call, so in the raw source the

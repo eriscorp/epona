@@ -62,6 +62,11 @@ import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
 import { findPortOwner } from './portOwner.js'
+import originalFs from 'original-fs'
+import { sweepPortableLeftovers } from './portableSweep.js'
+
+// The time after boot that the portable sweep waits (see portableSweep.js).
+const PORTABLE_SWEEP_DELAY_MS = 30_000
 
 let settingsManager
 
@@ -120,9 +125,16 @@ if (softwareRendering) {
 // "Could not open the quota database"). Worse for us: each process keeps its own
 // instanceChildren map and worktree refcounts, so the second window shows "Start
 // Server" for a server the first one is running. Bounce the second launch and
-// focus the existing window instead (wired in createAndWireMainWindow).
+// focus the existing window instead (the 'second-instance' handler in whenReady).
+//
+// app.exit(0), not app.quit() (HTOO-351). quit() is asynchronous: it schedules
+// the shutdown and returns, so the losing process continues through every
+// module-scope statement below. That includes installGlobalErrorHandlers and
+// initSessionLog, which touch and rotate the log set of the FIRST instance on
+// each bounced launch. exit() stops on this statement. bootOrder.test.js pins
+// the order and the call.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
-if (!gotSingleInstanceLock) app.quit()
+if (!gotSingleInstanceLock) app.exit(0)
 
 // Set by before-quit, read by the close guard in createAndWireMainWindow to
 // tell a quit-driven close (Cmd+Q on macOS) from a window close. Module scope
@@ -330,9 +342,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Lost the single-instance race — app.quit() is already queued. Do no setup:
-  // creating windows or the settings manager here would race the first instance
-  // on the same userData dir, which is exactly what the lock prevents.
+  // Lost the single-instance race. app.exit(0) at module scope stops the process
+  // before this point, so this guard is a second line only. Do no setup: creating
+  // windows or the settings manager here would race the first instance on the
+  // same userData dir, which is exactly what the lock prevents.
   if (!gotSingleInstanceLock) return
 
   // Record the renderer locations we trust, BEFORE any window loads. The IPC
@@ -481,12 +494,24 @@ app.whenReady().then(() => {
   // A second launch bounced by the single-instance lock — surface the window we
   // already have. Registered here because mainWindow is function-scoped and gets
   // reassigned by the macOS 'activate' path.
+  //
+  // Before the reveal, do nothing. The main window is still hidden and shows
+  // defaults until the renderer hydrates. Showing it here puts an unhydrated
+  // window under the splash. The splash is always on top, and revealMainWindow
+  // shows and focuses the main window when it is ready.
   app.on('second-instance', () => {
+    if (mainWindowRevealed) focusMainWindow()
+  })
+
+  // Bring the main window to the front. The second-instance handler and the
+  // reveal both use it. Without restore() first, a minimised window takes focus
+  // in the taskbar and does not come forward.
+  function focusMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
-  })
+  }
 
   // Reveal the (hidden) main window and tear down the splash. Guarded so it
   // runs once, whether triggered by the renderer's 'app:ready' signal or the
@@ -511,10 +536,7 @@ app.whenReady().then(() => {
           'Look for an ipc-rejected entry above.'
       })
     }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
+    focusMainWindow()
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy()
     splashWindow = null
   }
@@ -533,6 +555,24 @@ app.whenReady().then(() => {
   // Clear worktrees no config references any more, before any launch can take a
   // refcount on one. Fire-and-forget: this is housekeeping, not a boot step.
   void sweepAllOrphans('startup')
+
+  // Portable exe only: delete the %TEMP% unpack folders that killed launches
+  // left (HTOO-494). The delay keeps the sweep off the disk during boot, and
+  // unref() stops the timer from keeping the process alive. portableSweep.js
+  // gives the reason for each of its rules.
+  //
+  // Only a failure goes to the session log. A removed or skipped folder is not
+  // an error, and a packaged app has no console to show it.
+  setTimeout(() => {
+    sweepPortableLeftovers({
+      // original-fs, not fs: the patched fs opens the app.asar of a leftover and
+      // keeps it open, so Windows refuses each rename.
+      fs: originalFs.promises,
+      execPath: process.execPath,
+      isPortable: app.isPackaged && Boolean(process.env['PORTABLE_EXECUTABLE_DIR']),
+      onError: (message) => captureError({ source: 'portable-sweep', message })
+    }).catch((err) => captureError({ source: 'portable-sweep', message: String(err) }))
+  }, PORTABLE_SWEEP_DELAY_MS).unref()
 
   // Settings
   ipc.handle('settings:load', () => settingsManager.load())
@@ -1321,8 +1361,9 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async (event) => {
   quitRequested = true
   // The instance that lost the single-instance lock owns no children and no
-  // worktree refcounts — let it exit immediately rather than preventDefault-ing
-  // its own quit to run a no-op sweep.
+  // worktree refcounts. app.exit(0) does not emit before-quit, so this guard is
+  // a second line only: it must never preventDefault its own quit to run a no-op
+  // sweep.
   if (!gotSingleInstanceLock) return
   if (app._eponaCleanupRan) return
   app._eponaCleanupRan = true

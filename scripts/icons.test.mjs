@@ -50,9 +50,8 @@ describe('committed icon artifacts', () => {
   })
 
   it('build/icon.png is the 1024 RGBA Windows master', () => {
-    // Deliberately different artwork — the star. Nothing generates it, and
-    // build/portable-splash.bmp is composed from it, so this only pins that it
-    // has not been replaced or folded into the square master.
+    // Deliberately different artwork — the star. Nothing generates it, so this
+    // only pins that it has not been replaced or folded into the square master.
     expect(readHeader(join(BUILD, 'icon.png'))).toEqual({
       width: 1024,
       height: 1024,

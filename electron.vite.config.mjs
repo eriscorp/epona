@@ -7,7 +7,10 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        external: ['da-win32']
+        // `original-fs` is an Electron built-in (the fs without the asar patch),
+        // not a package. Rollup cannot resolve it, and externalizeDepsPlugin does
+        // not list it. The portable sweep needs it; see src/main/portableSweep.js.
+        external: ['da-win32', 'original-fs']
       }
     }
   },

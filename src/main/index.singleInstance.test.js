@@ -9,14 +9,22 @@ import { tmpdir } from 'os'
 // imported — `requestSingleInstanceLock()` runs at module scope — and vi.mock is
 // per-file, so this cannot share the booted process in index.test.js.
 //
-// What makes it worth a file of its own: losing the race must do NO setup. The
-// comment at the top of the whenReady block says so, and the reason is that a
-// second instance creating windows or a settings manager would race the first one
-// on the same userData directory, which is the exact thing the lock exists to
-// prevent. Nothing observable would go wrong on the developer's machine if this
-// regressed — it would corrupt settings for a user who double-clicked twice.
+// What makes it worth a file of its own: losing the race must do NO work. A
+// second instance that creates windows, a settings manager or a session log
+// races the first one on the same userData directory, which is the exact thing
+// the lock exists to prevent. Nothing observable goes wrong on the developer's
+// machine if this regresses — it corrupts settings and rotates the log set for a
+// user who double-clicked twice.
+//
+// The real app.exit() stops the process on the statement. The double's exit is
+// a no-op by default, and under a no-op the module keeps running, so every
+// assertion below would test code that the real process never reaches (HTOO-351).
+// Here exit throws a sentinel instead. The import stops where the real process
+// stops, and the assertions see what a bounced launch really does.
 
 const sandbox = mkdtempSync(join(tmpdir(), 'epona-second-instance-'))
+
+class ExitCalled extends Error {}
 
 const harness = await vi.hoisted(async () => {
   const { createElectronDouble } = await import('./electronDouble.js')
@@ -31,9 +39,20 @@ const harness = await vi.hoisted(async () => {
 
 vi.mock('electron', () => harness.electron)
 
+let importError
+let uncaughtBefore
+
 beforeAll(async () => {
   process.env.LOCALAPPDATA = sandbox
-  await import('./index.js')
+  uncaughtBefore = process.listenerCount('uncaughtException')
+  harness.app.exit.mockImplementation(() => {
+    throw new ExitCalled()
+  })
+  try {
+    await import('./index.js')
+  } catch (err) {
+    importError = err
+  }
   await harness.ready()
 })
 
@@ -42,8 +61,18 @@ afterAll(() => {
 })
 
 describe('a second instance', () => {
-  it('quits instead of running', () => {
-    expect(harness.app.quit).toHaveBeenCalled()
+  it('exits on the lock check, with app.exit(0) and not app.quit()', () => {
+    // The sentinel proves that module execution stopped AT the exit call. Any
+    // other error means index.js failed for another reason first.
+    expect(importError).toBeInstanceOf(ExitCalled)
+    expect(harness.app.exit).toHaveBeenCalledWith(0)
+    expect(harness.app.quit).not.toHaveBeenCalled()
+  })
+
+  it('installs no global error handlers', () => {
+    // installGlobalErrorHandlers is the first module-scope statement below the
+    // lock. Under app.quit() it ran in every bounced launch.
+    expect(process.listenerCount('uncaughtException')).toBe(uncaughtBefore)
   })
 
   it('creates no windows', () => {
@@ -59,11 +88,9 @@ describe('a second instance', () => {
   })
 
   it('writes nothing into the data directory it does not own', () => {
-    // The failure this guards: two processes with the same settings.json open.
-    // initSessionLog is called at module scope, before the lock is even checked,
-    // so the only thing keeping this honest is that the ready block returns early
-    // before the settings manager exists.
-    const entries = readdirSync(sandbox, { withFileTypes: true }).map((e) => e.name)
-    expect(entries).not.toContain('settings.json')
+    // The failure this guards: two processes with the same settings.json open,
+    // and a bounced launch that touches and rotates the owner's session logs.
+    // The sandbox is the whole LOCALAPPDATA, so it must stay empty.
+    expect(readdirSync(sandbox, { recursive: true })).toEqual([])
   })
 })
