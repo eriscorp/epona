@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { readFileSync, rmSync, mkdtempSync } from 'fs'
+import { readFileSync, rmSync, mkdtempSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { fileURLToPath } from 'url'
@@ -110,6 +110,28 @@ describe('the IPC sender guard', () => {
     const foreign = { sender: { id: 9999, isDestroyed: () => false }, senderFrame: null }
     expect(() => listener(foreign)).not.toThrow()
     expect(main.visible).toBe(before)
+  })
+})
+
+describe('the file and folder pickers', () => {
+  // Since Electron 43 a dialog with no defaultPath opens in Downloads
+  // (HTOO-553). withPickerStart fills one in; this checks it on the booted
+  // handlers, so it does not care how a picker reaches the dialog.
+  it('give every dialog a start folder when the renderer names none', async () => {
+    const docs = harness.app.getPath('documents')
+    mkdirSync(docs, { recursive: true })
+    const pickers = [...harness.handlers.keys()].filter((c) => /^dialog:|:pick|^log:save$/.test(c))
+    // The name filter must keep matching: an empty list would pass.
+    expect(pickers.length).toBeGreaterThanOrEqual(6)
+    const { showOpenDialog, showSaveDialog } = harness.electron.dialog
+    for (const channel of pickers) {
+      showOpenDialog.mockClear()
+      showSaveDialog.mockClear()
+      await harness.invoke(channel)
+      const calls = [...showOpenDialog.mock.calls, ...showSaveDialog.mock.calls]
+      expect(calls, channel).toHaveLength(1)
+      expect(String(calls[0][1].defaultPath).startsWith(docs), channel).toBe(true)
+    }
   })
 })
 

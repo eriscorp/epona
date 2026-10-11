@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { dialogDefaultPath, pickerStartPath, withPickerStart } from './pickerStart.js'
 
@@ -136,16 +137,15 @@ describe('withPickerStart', () => {
 })
 
 describe('every picker in main goes through withPickerStart', () => {
-  it('finds no raw dialog.showOpenDialog or showSaveDialog outside pickerStart.js', async () => {
+  it('finds no raw dialog.showOpenDialog or showSaveDialog outside pickerStart.js', () => {
     // A raw call skips the start folder, and since Electron 43 it opens in
-    // Downloads. pickerStart.js itself calls the dialog it wraps.
-    const { readdirSync, readFileSync } = await import('fs')
-    const dir = join(import.meta.dirname)
+    // Downloads. index.test.js checks the same rule on the booted handlers;
+    // this scan also catches a raw call on a channel that check does not name.
+    const dir = import.meta.dirname
     const raw = /(?<![\w.])dialog\.show(Open|Save)Dialog\(/
     const offenders = readdirSync(dir, { recursive: true })
       .map(String)
       .filter((f) => f.endsWith('.js') && !f.endsWith('.test.js') && f !== 'pickerStart.js')
-      .filter((f) => !f.endsWith('electronDouble.js'))
       .filter((f) => raw.test(readFileSync(join(dir, f), 'utf-8')))
     expect(offenders).toEqual([])
   })

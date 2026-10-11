@@ -556,14 +556,11 @@ app.whenReady().then(() => {
   registerDiagnosticsHandlers(ipc, () => app.getVersion())
   registerChangelogHandlers(ipc)
 
-  // File dialogs. Each accepts an optional defaultPath so callers can pre-fill
-  // the picker with the current setting value — without it Electron's dialog
-  // remembers the last directory globally per-window, which leaks state across
-  // unrelated pickers (e.g. picking a server binary biases the next client
-  // pick). An empty, missing or stale defaultPath goes through `withPickerStart`
-  // (HTOO-553): since Electron 43 the OS default is Downloads, so the picker
-  // opens at the last folder picked, then Documents, then home. Every open and
-  // save dialog goes through `pickerDialog`; pickerStart.test.js pins that.
+  // File dialogs. Each picker gets the renderer's defaultPath, the setting it
+  // edits. `withPickerStart` (HTOO-553) replaces an empty, missing or stale one
+  // with the last folder picked, then Documents, then home: since Electron 43
+  // the OS default is Downloads. Every open and save dialog goes through
+  // `pickerDialog`; index.test.js and pickerStart.test.js pin that.
   const pickerDialog = withPickerStart(dialog, {
     fallbacks: () => [app.getPath('documents'), app.getPath('home')]
   })

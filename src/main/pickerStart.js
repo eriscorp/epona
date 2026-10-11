@@ -27,7 +27,7 @@ const pathExists = (p) =>
 /** The first candidate that is a non-empty string and exists on disk. */
 export async function pickerStartPath(candidates, exists = pathExists) {
   for (const p of candidates) {
-    if (typeof p === 'string' && p && (await exists(p))) return p
+    if (p && (await exists(p))) return p
   }
   return undefined
 }
@@ -44,15 +44,16 @@ export async function pickerStartPath(candidates, exists = pathExists) {
  *   nobody.
  */
 export async function dialogDefaultPath(given, start, kind, exists = pathExists) {
-  const asked = typeof given === 'string' && given.length > 0 ? given : undefined
-  if (asked && isAbsolute(asked)) {
-    if (kind === 'open' && (await exists(asked))) return asked
-    if (await exists(dirname(asked))) return kind === 'save' ? asked : dirname(asked)
+  // The renderer's value crosses IPC untyped; taliesin's TypeScript types it.
+  if (typeof given !== 'string') given = undefined
+  if (given && isAbsolute(given)) {
+    if (kind === 'open' && (await exists(given))) return given
+    if (await exists(dirname(given))) return kind === 'save' ? given : dirname(given)
   }
   const dir = await start()
-  if (kind === 'open' || !asked) return dir
-  if (!dir) return asked
-  return join(dir, isAbsolute(asked) ? basename(asked) : asked)
+  if (kind === 'open' || !given) return dir
+  if (!dir) return given
+  return join(dir, isAbsolute(given) ? basename(given) : given)
 }
 
 /**
@@ -73,7 +74,7 @@ export function withPickerStart(dialog, sources) {
         ...opts,
         defaultPath: await dialogDefaultPath(opts.defaultPath, start, 'open', exists)
       })
-      const picked = r.filePaths?.[0]
+      const picked = r.filePaths[0]
       if (picked) {
         lastPickedDir = opts.properties?.includes('openDirectory') ? picked : dirname(picked)
       }

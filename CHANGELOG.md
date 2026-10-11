@@ -36,7 +36,7 @@ the rules above.
 ### Fixed
 
 - **File and folder pickers open in a useful folder.** A picker with no saved path opened in the operating system's default folder, which is Downloads on Electron 43 and later. Now it opens in the folder you picked last in this session, then in Documents, then in your home folder. A saved path that no longer exists is skipped, so its picker does not fall back to Downloads either.
-- **Report an Issue tells you when the copy to the clipboard fails.** Before, the dialog said that the report was on the clipboard, also when the copy failed. Now Epona waits for the copy before it opens the issue page. If the copy fails, the issue page still opens, and the dialog tells you to use Copy to clipboard.
+- **Report an Issue tells you when the copy to the clipboard fails.** Before, the dialog said that the report was on the clipboard, also when the copy failed. Now Epona waits for the copy before it opens the issue page. If the copy fails, the issue page still opens with the report, and the dialog says that the copy failed. If the report is also too long for the page, the dialog tells you to use Copy to clipboard.
 
 ## [2.8.1] - 2026-09-20
 
