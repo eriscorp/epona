@@ -50,6 +50,20 @@ describe('the portable target', () => {
     expect(portableKeys().unpackDirName).toBe('true')
   })
 
+  it('relies on a branch that the installed app-builder-lib still has (HTOO-351)', () => {
+    // `true` works only because of this test of truthiness. package.json allows
+    // minor updates of electron-builder. If an update changes this branch, this
+    // test fails, and somebody must examine `unpackDirName` again. The YAML
+    // tests above cannot see that change.
+    const nsisTarget = readFileSync(
+      join(REPO_ROOT, 'node_modules/app-builder-lib/out/targets/nsis/NsisTarget.js'),
+      'utf8'
+    )
+    expect(nsisTarget).toMatch(
+      /if \(typeof unpackDirName === "string" \|\| !unpackDirName\) \{\s*defines\.UNPACK_DIR_NAME = unpackDirName \|\| /
+    )
+  })
+
   it('reads the block it means to read', () => {
     // A reader that found nothing would pass an absence case vacuously.
     expect(portableKeys()).toHaveProperty('artifactName')

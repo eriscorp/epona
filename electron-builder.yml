@@ -196,7 +196,8 @@ portable:
   #
   # The cost: a killed stub leaves its whole folder in %TEMP%, because no later
   # launch uses that name again. src/main/portableSweep.js removes those folders
-  # (HTOO-494). scripts/portable-config.test.mjs pins this key.
+  # (HTOO-494). scripts/portable-config.test.mjs pins this key, and the
+  # app-builder-lib branch that `true` relies on.
   unpackDirName: true
 nsis:
   # Predictable name for the release workflow's sign + upload steps (the default

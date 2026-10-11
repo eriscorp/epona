@@ -111,7 +111,7 @@ divergence from the skeleton, not an oversight. The full gate is
   which is a blank document icon on every desktop. Both halves are commented in
   `electron-builder.yml`. `desktopName` + `linux.syncDesktopName` are the other half of the same
   symptom — a perfect hicolor set with no window association still shows a generic taskbar icon.
-- **The `portable:` block has no `splashImage` and has `unpackDirName: true`, and both are on purpose.** A splash image puts the NSIS stub in GUI mode, which flashes a blank Setup window after each close (HTOO-466). `false` is the documented value for a per-launch unpack folder, but app-builder-lib gives `false` a build-time KSUID, so a second launch collides with the running copy (HTOO-351). `true` leaves the folder of a killed stub behind, and `src/main/portableSweep.js` removes it (HTOO-494). `scripts/portable-config.test.mjs` pins both keys.
+- **The `portable:` block has no `splashImage` and has `unpackDirName: true`, and both are on purpose.** A splash image puts the NSIS stub in GUI mode, which flashes a blank Setup window after each close (HTOO-466). `false` is the documented value for a per-launch unpack folder, but app-builder-lib gives `false` a build-time KSUID, so a second launch collides with the running copy (HTOO-351). `true` leaves the folder of a killed stub behind, and `src/main/portableSweep.js` removes it (HTOO-494). `scripts/portable-config.test.mjs` pins both keys, and the app-builder-lib branch that `true` relies on.
 - **The themes are not a factory.** Six hand-written theme objects in `src/renderer/src/themes/`,
   `danaan` especially. Do not try to collapse them into a generator. Declined three times; it is the
   headline entry in [docs/plans/00a-backlog.md](docs/plans/00a-backlog.md).

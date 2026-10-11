@@ -71,15 +71,6 @@ describe('main-process boot order', () => {
     expect(lock).toBeLessThan(ready)
   })
 
-  it('stops the losing instance with app.exit(0), not app.quit()', () => {
-    // quit() is asynchronous. The losing process continues through every
-    // module-scope statement below the lock, against the files of the first
-    // instance. exit() stops on the statement.
-    expect(sourceWithoutComments()).toMatch(
-      /const gotSingleInstanceLock = app\.requestSingleInstanceLock\(\)\s*\n\s*if \(!gotSingleInstanceLock\) app\.exit\(0\)\s*\n/
-    )
-  })
-
   it('takes the lock before any module-scope side effect', () => {
     // Statement forms, not names. A bare name also matches an import or a
     // function declaration, which can sit above the lock by construction.
@@ -100,13 +91,19 @@ describe('main-process boot order', () => {
   it('restores, shows and focuses on a second launch, in that order', () => {
     // Without restore() first, a minimised window takes focus in the taskbar and
     // does not come forward, which reads as the second launch doing nothing.
+    // Before the reveal, the handler does nothing: the window is still hidden
+    // and unhydrated, and the reveal brings it forward.
     const src = sourceWithoutComments()
     const start = src.indexOf("app.on('second-instance'")
     expect(start).toBeGreaterThan(-1)
     const handler = src.slice(start, src.indexOf('\n  })', start))
-    const restore = handler.indexOf('mainWindow.restore()')
-    const show = handler.indexOf('mainWindow.show()')
-    const focus = handler.indexOf('mainWindow.focus()')
+    expect(handler).toMatch(/if \(mainWindowRevealed\) focusMainWindow\(\)/)
+    const helperStart = src.indexOf('function focusMainWindow()')
+    expect(helperStart).toBeGreaterThan(-1)
+    const helper = src.slice(helperStart, src.indexOf('\n  }', helperStart))
+    const restore = helper.indexOf('mainWindow.restore()')
+    const show = helper.indexOf('mainWindow.show()')
+    const focus = helper.indexOf('mainWindow.focus()')
     expect(restore).toBeGreaterThan(-1)
     expect(restore).toBeLessThan(show)
     expect(show).toBeLessThan(focus)

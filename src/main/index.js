@@ -500,12 +500,18 @@ app.whenReady().then(() => {
   // window under the splash. The splash is always on top, and revealMainWindow
   // shows and focuses the main window when it is ready.
   app.on('second-instance', () => {
-    if (!mainWindowRevealed) return
+    if (mainWindowRevealed) focusMainWindow()
+  })
+
+  // Bring the main window to the front. The second-instance handler and the
+  // reveal both use it. Without restore() first, a minimised window takes focus
+  // in the taskbar and does not come forward.
+  function focusMainWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
-  })
+  }
 
   // Reveal the (hidden) main window and tear down the splash. Guarded so it
   // runs once, whether triggered by the renderer's 'app:ready' signal or the
@@ -530,10 +536,7 @@ app.whenReady().then(() => {
           'Look for an ipc-rejected entry above.'
       })
     }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
+    focusMainWindow()
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy()
     splashWindow = null
   }
