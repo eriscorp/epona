@@ -50,8 +50,9 @@ function AboutDialog({ open, onClose }) {
           Version {version}
         </Typography>
         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-          {/* color="inherit" + always-underline keeps links readable on the dark
-              fantasy themes, whose primary.main is near-invisible on dark paper. */}
+          {/* color="inherit" + always-underline keeps links readable on every
+              theme. MUI Link uses primary.main, which is below 4.5:1 against
+              paper on chadul, danaan, grinneal and spark (HTOO-355). */}
           <Link
             href="https://www.hybrasyl.com"
             target="_blank"

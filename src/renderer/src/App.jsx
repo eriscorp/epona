@@ -4,12 +4,7 @@ import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
-import hybrasylTheme from './themes/hybrasyl'
-import chadulTheme from './themes/chadul'
-import danaanTheme from './themes/danaan'
-import grinnealTheme from './themes/grinneal'
-import sparkTheme from './themes/spark'
-import mundanesTheme from './themes/mundanes'
+import { themesByName } from './themes'
 import TitleBar from './components/TitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
@@ -45,15 +40,6 @@ const startupTabIndex = (targetKind) => kindToIndex(targetKind)
 // MAIN_W / PANE_W live in uiConstants.js so SettingsPane and LogPane size
 // themselves from the same numbers this resize request is built from.
 const WINDOW_H = 800
-
-const themes = {
-  hybrasyl: hybrasylTheme,
-  chadul: chadulTheme,
-  danaan: danaanTheme,
-  grinneal: grinnealTheme,
-  spark: sparkTheme,
-  mundanes: mundanesTheme
-}
 
 export default function App() {
   const isWindows = window.sparkAPI.platform === 'win32'
@@ -173,7 +159,7 @@ export default function App() {
     return supportsPatch(versions, code, 'groundItemHints') ? ['groundItemHints'] : []
   })()
 
-  const currentTheme = themes[settings.theme] || hybrasylTheme
+  const currentTheme = themesByName[settings.theme] || themesByName.hybrasyl
   // Resolve the active server instance once — reused for the client tab's
   // auto-save target and the server LogPane's title/slug.
   const activeInstance = settings.instances.find((i) => i.id === settings.activeInstance)

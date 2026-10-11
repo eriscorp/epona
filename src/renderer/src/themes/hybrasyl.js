@@ -5,11 +5,19 @@ const hybrasylTheme = responsiveFontSizes(
   createTheme({
     palette: {
       mode: 'dark',
+      // `main` was `#0d182f` — the same value as `background.default` — so every
+      // control that signals "active" through `color="primary"` painted itself
+      // the colour of the page and vanished (HTOO-341). The blue that was
+      // `light` is now `main`: 4.66:1 against the page, 5.18:1 against paper.
+      // `contrastText` is navy, not the theme's cream: cream on this blue is
+      // 3.05:1, which fails WCAG AA for the normal-sized text chip and button
+      // labels are, and no cream-preserving blue clears both thresholds with
+      // any margin. `palette.test.js` pins all three numbers.
       primary: {
-        main: '#0d182f',
-        light: '#4d84d1',
+        main: '#4d84d1',
+        light: '#7fa9e0',
         dark: '#2a4a6e',
-        contrastText: '#f0e6cc'
+        contrastText: '#0d182f'
       },
       secondary: {
         main: '#1e5e56',
