@@ -18,7 +18,7 @@
     "packages/*"
   ],
   "scripts": {
-    "validate": "npm run lint:check && npm test",
+    "validate": "npm run lint:check && npm run format:check && npm test",
     "validate:linux": "node scripts/validate-linux.mjs",
     "verify:fuses": "node scripts/verify-fuses.mjs",
     "format": "prettier --write .",
@@ -39,7 +39,8 @@
     "build:win": "npm run build && electron-builder --win",
     "build:portable": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac --config.beforeBuild=scripts/noop-before-build.cjs",
-    "build:linux": "npm run build && electron-builder --linux AppImage --config.beforeBuild=scripts/noop-before-build.cjs"
+    "build:linux": "npm run build && electron-builder --linux AppImage --config.beforeBuild=scripts/noop-before-build.cjs",
+    "format:check": "prettier --check ."
   },
   "_dependenciesNote": [
     "electron-builder copies EVERY `dependencies` entry into app.asar verbatim.",

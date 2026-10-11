@@ -2,9 +2,10 @@
 
 ## Context
 
-Stage 3.0 ships server instances that launch from a prebuilt `Hybrasyl.dll` or `.exe`. That covers QA-style "I have a known-good build, run it" but not the case the launcher actually exists for: developing a server feature that touches both the server repo *and* the Hybrasyl.Xml repo, where you want to spin up multiple branches against shared world data without csproj edits or worktree juggling.
+Stage 3.0 ships server instances that launch from a prebuilt `Hybrasyl.dll` or `.exe`. That covers QA-style "I have a known-good build, run it" but not the case the launcher actually exists for: developing a server feature that touches both the server repo _and_ the Hybrasyl.Xml repo, where you want to spin up multiple branches against shared world data without csproj edits or worktree juggling.
 
 Stage 3.1 makes that work. An instance picks **mode**:
+
 - **binary** — current Stage 3.0 behavior (binary path → `dotnet <dll>` or `<exe>`)
 - **repo** — server repo path + branch (optional: XML repo path + branch). Epona ensures a `git worktree` for each, optionally writes a `Directory.Build.props` in the server worktree to redirect the `Hybrasyl.Xml` reference, then `dotnet run --project <serverWorktree>/hybrasyl/Hybrasyl.csproj -- --datadir … --logdir … --config <name>`.
 
@@ -18,7 +19,7 @@ The Server tab is already cramped at `WINDOW_H = 720` after the Stage 3.0 Redis 
 
 **Recommended:** mode-conditional rendering + modest height bump (`WINDOW_H` 720 → 800). Repo mode hides `binaryPath`; binary mode hides everything repo-related. Each mode stays roughly at current density. Mode itself is a small `ToggleButtonGroup` (Binary | Repo) at the top of the detail form, wedged into the Name row to save a row.
 
-**Fallback if it's still cramped:** sub-tabs *inside* the Server panel — "Source" (mode + paths/branches OR binary path), "Runtime" (world data, log dir, server config), "Network" (Redis + ports). One extra click but keeps each section breathable. Only do this if mode-conditional + 800px doesn't fit; don't reach for it preemptively.
+**Fallback if it's still cramped:** sub-tabs _inside_ the Server panel — "Source" (mode + paths/branches OR binary path), "Runtime" (world data, log dir, server config), "Network" (Redis + ports). One extra click but keeps each section breathable. Only do this if mode-conditional + 800px doesn't fit; don't reach for it preemptively.
 
 A new top-level tab is a worse fit — instances are still one logical concept; splitting them across tabs duplicates the instance selector.
 
@@ -111,12 +112,14 @@ export async function isGitRepo(repoPath)
 ### 4. `serverTarget.js` rework
 
 Drop the `mode === 'binary'` gate in `validateForLaunch`. Add `validateRepoLaunch(instance)`:
+
 - `serverRepoPath` set and a git repo
 - `serverBranch` non-empty (allow null/'' to mean "use current checkout" — see below)
 - If `xmlBranch` set: `xmlRepoPath` set and a git repo
 - All the existing world/log/config/port checks
 
 New `buildRepoSpawn(instance, { serverWorktreePath })`:
+
 ```js
 // Returns the same { command, args, env } shape buildBinarySpawn does, so
 // the launch() orchestrator stays target-shape-agnostic.
@@ -124,19 +127,27 @@ return {
   command: 'dotnet',
   args: [
     'run',
-    '--project', join(serverWorktreePath, 'hybrasyl', 'Hybrasyl.csproj'),
-    '--configuration', 'Debug',
+    '--project',
+    join(serverWorktreePath, 'hybrasyl', 'Hybrasyl.csproj'),
+    '--configuration',
+    'Debug',
     '--no-launch-profile',
-    '--',  // dotnet/server arg separator
-    '--datadir', instance.worldDataDir,
-    '--logdir', instance.logDir,
-    '--config', stripXmlExt(instance.configFileName)
+    '--', // dotnet/server arg separator
+    '--datadir',
+    instance.worldDataDir,
+    '--logdir',
+    instance.logDir,
+    '--config',
+    stripXmlExt(instance.configFileName)
   ],
-  env: { /* same HYB_REDIS_* conditional logic as buildBinarySpawn */ }
+  env: {
+    /* same HYB_REDIS_* conditional logic as buildBinarySpawn */
+  }
 }
 ```
 
 `launch(instance)` orchestration:
+
 1. `validateForLaunch` (now mode-aware)
 2. Resolve Redis target + probe (unchanged from 3.0)
 3. Port pre-flight (unchanged)
@@ -148,13 +159,14 @@ return {
      - spawn via the same PowerShell wrapper that binary mode uses (so crash output is preserved the same way), but with `command/args/cwd` from `buildRepoSpawn`
      - on the eventual childExit (tracked via the existing `instance:childExit` IPC), `releaseWorktree` for any worktrees this instance ensured
 
-Special case — `serverBranch === null`: use the user's current checkout directly, no worktree, no `--worktree-path` indirection. Useful for "I'm developing on this branch, just run *that*". Don't write Directory.Build.props in this case unless the user separately set `xmlBranch` against the in-place checkout (and even then, warn that it'll dirty their working tree's gitignored files).
+Special case — `serverBranch === null`: use the user's current checkout directly, no worktree, no `--worktree-path` indirection. Useful for "I'm developing on this branch, just run _that_". Don't write Directory.Build.props in this case unless the user separately set `xmlBranch` against the in-place checkout (and even then, warn that it'll dirty their working tree's gitignored files).
 
 **First-run UX:** `dotnet run` from a cold worktree triggers `dotnet restore` + first build, which is slow (10-60s on a clean machine). The PowerShell-wrapper approach already shows the spinner inside the console window, but Epona's Start button just sits "Starting…" the whole time. Add a `'building'` state to the running flag so the UI can show "Building…" → "Running" once we see the server's first stdout line. Hook into the existing line buffer.
 
 ### 5. IPC + preload
 
 [src/main/index.js](e:/Dark Ages Dev/Repos/epona/src/main/index.js):
+
 ```js
 ipcMain.handle('git:listBranches', (_, repoPath) => listBranches(repoPath))
 ipcMain.handle('git:isGitRepo', (_, repoPath) => isGitRepo(repoPath))
@@ -163,6 +175,7 @@ ipcMain.handle('git:isGitRepo', (_, repoPath) => isGitRepo(repoPath))
 Hook `app.on('before-quit')` to release all in-memory refcounted worktrees so a normal Epona shutdown leaves the disk tidy. (Force-close via Task Manager won't run this — orphan-worktree handling on next launch covers that case.)
 
 [src/preload/index.js](e:/Dark Ages Dev/Repos/epona/src/preload/index.js):
+
 ```js
 listBranches: (repoPath) => ipcRenderer.invoke('git:listBranches', repoPath),
 isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath)
@@ -171,6 +184,7 @@ isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath)
 ### 6. UI changes ([src/renderer/src/components/ServerInstancePanel.jsx](e:/Dark Ages Dev/Repos/epona/src/renderer/src/components/ServerInstancePanel.jsx))
 
 **Mode toggle row** (new, between instance selector and Name):
+
 ```jsx
 <ToggleButtonGroup
   size="small"
@@ -185,6 +199,7 @@ isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath)
 ```
 
 **Conditional sections:**
+
 - `selected.mode === 'binary'` → render the existing Binary Path picker
 - `selected.mode === 'repo'` → render:
   - Server Repo path picker (new) — calls `isGitRepo` on change to inline-validate
@@ -195,6 +210,7 @@ isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath)
     - XML Branch dropdown — same shape as server branch
 
 **Memurai help tip** (next to the Redis caption):
+
 ```jsx
 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mt: 0.5 }}>
   <Typography variant="caption" color="text.secondary">
@@ -204,13 +220,10 @@ isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath)
     title={
       <Box>
         <Typography variant="caption" sx={{ display: 'block' }}>
-          On Windows, WSL Redis can drop forwarded connections under load.
-          Memurai is a native Windows Redis-compatible alternative.
+          On Windows, WSL Redis can drop forwarded connections under load. Memurai is a native
+          Windows Redis-compatible alternative.
         </Typography>
-        <Typography
-          variant="caption"
-          sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace' }}
-        >
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace' }}>
           winget install Memurai.MemuraiDeveloper
         </Typography>
       </Box>
@@ -223,8 +236,7 @@ isGitRepo: (repoPath) => ipcRenderer.invoke('git:isGitRepo', repoPath)
 
 Same tip should appear in the Redis-unreachable error Snackbar message (append " · Tip: try Memurai instead of WSL Redis" or similar).
 
-**Building/Running state:**
-The Start button currently flips between "Start Server" / "Stop Server" based on `runningIds`. Add a third visual state when `instanceLogs[id]` is empty AND running — show "Building…" with the spinner. First non-empty log line flips to "Stop Server". This lives in `App.jsx` since that's where `instanceLogs` lives — pass a derived `building` boolean down.
+**Building/Running state:** The Start button currently flips between "Start Server" / "Stop Server" based on `runningIds`. Add a third visual state when `instanceLogs[id]` is empty AND running — show "Building…" with the spinner. First non-empty log line flips to "Stop Server". This lives in `App.jsx` since that's where `instanceLogs` lives — pass a derived `building` boolean down.
 
 [src/renderer/src/App.jsx](e:/Dark Ages Dev/Repos/epona/src/renderer/src/App.jsx): bump `WINDOW_H` from 720 → 800.
 
@@ -253,6 +265,7 @@ The instance schema already has the right fields (`mode`, `serverRepoPath`, `ser
 ## Critical files to modify / create
 
 **New:**
+
 - [src/main/worktreeManager.js](e:/Dark Ages Dev/Repos/epona/src/main/worktreeManager.js)
 - [src/main/worktreeManager.test.js](e:/Dark Ages Dev/Repos/epona/src/main/worktreeManager.test.js)
 - [src/main/buildProps.js](e:/Dark Ages Dev/Repos/epona/src/main/buildProps.js)
@@ -261,6 +274,7 @@ The instance schema already has the right fields (`mode`, `serverRepoPath`, `ser
 - [src/main/gitOps.test.js](e:/Dark Ages Dev/Repos/epona/src/main/gitOps.test.js)
 
 **Modified:**
+
 - [src/main/targets/serverTarget.js](e:/Dark Ages Dev/Repos/epona/src/main/targets/serverTarget.js) — `validateForLaunch` mode-aware, `buildRepoSpawn`, `launch` mode dispatch + worktree lifecycle
 - [src/main/targets/serverTarget.test.js](e:/Dark Ages Dev/Repos/epona/src/main/targets/serverTarget.test.js) — repo-mode validate + spawn cases
 - [src/main/index.js](e:/Dark Ages Dev/Repos/epona/src/main/index.js) — `git:listBranches` / `git:isGitRepo` IPC, `before-quit` worktree release
@@ -286,7 +300,7 @@ The instance schema already has the right fields (`mode`, `serverRepoPath`, `ser
 
 - **Branch creation from inside Epona.** Just lists existing local + remote-tracking branches. New branches are made in a real git client; Epona picks them up next time the dropdown loads.
 - **`git fetch` before listing branches.** Stale view if the user just pushed from elsewhere — they refresh by reopening the dropdown after fetching manually. Auto-fetch is a polish item.
-- **Multi-XML-branch on the same server branch.** If two instances share a server branch but want *different* XML branches, the second instance's `Directory.Build.props` write clobbers the first. v1: detect and reject with a friendly error. v2: keep two server worktrees in that case (worktree-per-(server, xml) pair), but the refcount model gets messier — defer.
+- **Multi-XML-branch on the same server branch.** If two instances share a server branch but want _different_ XML branches, the second instance's `Directory.Build.props` write clobbers the first. v1: detect and reject with a friendly error. v2: keep two server worktrees in that case (worktree-per-(server, xml) pair), but the refcount model gets messier — defer.
 - **Worktree GC UI.** No "show me orphan worktrees and let me delete them" panel yet. `listOrphanWorktrees` exists for it, but the UI lands later.
 - **PR / detached-HEAD instances.** Branch-only for now. PR branches are usually fetched as `pull/N/head` and exist as remote refs already, so they show up in the dropdown.
 - **Build cache/artifact management.** `dotnet`'s own obj/bin caches handle this fine; we don't need to manage MSBuild output.
@@ -317,7 +331,7 @@ The instance schema already has the right fields (`mode`, `serverRepoPath`, `ser
    - **Repo mode, server only (NuGet XML):** create a new instance, mode = repo, point at `E:/Dark Ages Dev/Repos/server`, branch = `main`. Start. Confirm Building… → Running. Confirm a worktree exists at `server/.worktrees/main/`. Stop. Confirm the worktree is removed (clean shutdown).
    - **Repo mode, server + local XML:** same instance, check "Use local XML branch", point at `E:/Dark Ages Dev/Repos/xml`, branch = `develop`. Start. Confirm `Directory.Build.props` exists at `server/.worktrees/main/Directory.Build.props` with the correct `LocalXmlProjectPath` (`xml/.worktrees/develop/src/Hybrasyl.Xml.csproj`). Confirm the server build references the local XML by inspecting build output for `Hybrasyl.Xml -> …\.worktrees\develop\src\bin\…\Hybrasyl.Xml.dll`. Stop. Confirm both worktrees + `Directory.Build.props` are removed.
    - **Two instances, same branch, refcount sharing:** create a second instance also on `server/main`. Start both. Confirm only one worktree directory exists. Stop one — worktree stays. Stop the other — worktree removed.
-   - **Adoption across launcher restart:** start an instance, fully close Epona (which fires `before-quit` and *does* release), confirm clean. Then reach into the on-disk worktrees directly and create one Epona doesn't know about (`git worktree add server/.worktrees/manual <some-branch>`); reopen Epona; create an instance on that branch; confirm Epona adopts the worktree (refcount = 1, no second `git worktree add` attempt).
+   - **Adoption across launcher restart:** start an instance, fully close Epona (which fires `before-quit` and _does_ release), confirm clean. Then reach into the on-disk worktrees directly and create one Epona doesn't know about (`git worktree add server/.worktrees/manual <some-branch>`); reopen Epona; create an instance on that branch; confirm Epona adopts the worktree (refcount = 1, no second `git worktree add` attempt).
    - **Special case: serverBranch = null:** instance with mode=repo, server repo path set, server branch = "(current checkout)". Start. Confirm no worktree is created and the spawn cwd is the repo root itself.
    - **csproj drift guard:** check out a server branch that lacks the `UseLocalXml` conditional, set xmlBranch on the instance, Start. Confirm friendly error mentions the missing csproj support and the required commit.
 4. **`npm run build`** — clean.
@@ -327,6 +341,7 @@ The instance schema already has the right fields (`mode`, `serverRepoPath`, `ser
 ## End state
 
 Server tab supports two instance modes:
+
 - **Binary** — Stage 3.0 behavior preserved verbatim
 - **Repo** — point at server repo + branch (and optionally XML repo + branch); Epona ensures git worktrees per branch, writes a build-props redirect for local XML when requested, and `dotnet run`s the server from the worktree. Multiple instances on the same branch share a worktree via refcount.
 

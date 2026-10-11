@@ -2,11 +2,7 @@
 
 <table align="right" cellpadding="10"><tr><td><img src="docs/images/epona.png" width="320" alt="Epona — Legacy Client tab" /></td></tr></table>
 
-Dark Ages launcher + Hybrasyl server orchestrator. Single tool for
-launching legacy DA clients, launching modern Hybrasyl clients, and
-managing local Hybrasyl server instances — built on Electron + React +
-MUI, sharing a stack with [Creidhne](https://github.com/hybrasyl/creidhne)
-and [Taliesin](https://github.com/hybrasyl/taliesin).
+Dark Ages launcher + Hybrasyl server orchestrator. Single tool for launching legacy DA clients, launching modern Hybrasyl clients, and managing local Hybrasyl server instances — built on Electron + React + MUI, sharing a stack with [Creidhne](https://github.com/hybrasyl/creidhne) and [Taliesin](https://github.com/hybrasyl/taliesin).
 
 The window has three tabs, each driving a different launch target.
 
@@ -18,26 +14,16 @@ The window has three tabs, each driving a different launch target.
 
 <table align="right" cellpadding="10"><tr><td><img src="docs/images/epona_legacy.gif" width="350" alt="Legacy Client tab — in-memory client patching and profile switching" /></td></tr></table>
 
-In-memory patching of an unmodified DA client at launch. No files on
-disk are modified — every patch is written to the running process's
-memory via Win32 kernel32 APIs.
+In-memory patching of an unmodified DA client at launch. No files on disk are modified — every patch is written to the running process's memory via Win32 kernel32 APIs.
 
-- **Server profiles** — define and switch between named server
-  configurations (official, localhost, custom redirect targets); each
-  profile carries hostname, port, and a redirect toggle.
+- **Server profiles** — define and switch between named server configurations (official, localhost, custom redirect targets); each profile carries hostname, port, and a redirect toggle.
 - **Skip intro** — bypass the intro video sequence.
-- **Multiple instances** — allow more than one client to run
-  simultaneously.
+- **Multiple instances** — allow more than one client to run simultaneously.
 - **Hide walls** — toggle wall visibility.
-- **Auto-detect client version** — MD5 hash detection of the picked
-  `Darkages.exe`.
-- **Server connection tester** — validates server reachability using
-  the DA wire-protocol handshake (welcome → version → status).
+- **Auto-detect client version** — MD5 hash detection of the picked `Darkages.exe`.
+- **Server connection tester** — validates server reachability using the DA wire-protocol handshake (welcome → version → status).
 
-**Windows only.** The Win32 process patches don't have a portable
-equivalent. Running on macOS or Linux requires a compatibility layer
-(Wine, CrossOver) and your mileage may vary; the tab shows an inline
-warning when launched on a non-`win32` platform.
+**Windows only.** The Win32 process patches don't have a portable equivalent. Running on macOS or Linux requires a compatibility layer (Wine, CrossOver) and your mileage may vary; the tab shows an inline warning when launched on a non-`win32` platform.
 
 <br clear="all" />
 
@@ -52,19 +38,11 @@ warning when launched on a non-`win32` platform.
 
 ### The Legacy redirect needs an IPv4 address
 
-The Legacy redirect writes your profile's host into the client's
-memory as four raw bytes, so it can only carry an IPv4 address.
-Epona asks DNS for IPv4 specifically, which means `localhost` works
-even on a machine that prefers IPv6 — no need to type `127.0.0.1`
-instead, as earlier versions did.
+The Legacy redirect writes your profile's host into the client's memory as four raw bytes, so it can only carry an IPv4 address. Epona asks DNS for IPv4 specifically, which means `localhost` works even on a machine that prefers IPv6 — no need to type `127.0.0.1` instead, as earlier versions did.
 
-If a hostname has no IPv4 address at all, the launch stops with an
-error and the client is not started. It does not resume a client
-that was patched with a bad address.
+If a hostname has no IPv4 address at all, the launch stops with an error and the client is not started. It does not resume a client that was patched with a bad address.
 
-This only affects the Legacy target — Hybrasyl Client uses env-var
-redirection (`DA_HOST`) which goes through the .NET socket layer
-that handles hostnames natively.
+This only affects the Legacy target — Hybrasyl Client uses env-var redirection (`DA_HOST`) which goes through the .NET socket layer that handles hostnames natively.
 
 ---
 
@@ -72,30 +50,15 @@ that handles hostnames natively.
 
 <table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_hybclient.gif" width="450" alt="Hybrasyl Client tab — modern client launch with cfg templating and log pane" /></td></tr></table>
 
-Launches the modern open-source Hybrasyl client — either a prebuilt
-`.exe` or a `.csproj` source checkout via `dotnet run`.
+Launches the modern open-source Hybrasyl client — either a prebuilt `.exe` or a `.csproj` source checkout via `dotnet run`.
 
-- **Path resolution** — pick a `.exe` (fire-and-forget, multi-instance
-  allowed) or a `.csproj` (singleton, source-launched, stdio piped to
-  the LogPane). The header chip shows which mode resolved.
-- **`Darkages.cfg` templating** — the active server profile's hostname
-  and port are merged into `Darkages.cfg` before spawn, preserving
-  every other line in the file. Same parser semantics as the sibling
-  client repo's `DarkagesCfg`.
-- **.NET 10 runtime detection** — chip warns when the runtime is
-  missing or only an older version is installed (source launches need
-  `Microsoft.NETCore.App 10.x`).
-- **Side LogPane** — for source launches, stdout/stderr stream into a
-  resizable side pane with auto-scroll, clear, save-to-file, and
-  jump-to-latest controls. Disabled with a tooltip for `.exe` mode (no
-  piped stdio).
-- **Auto-save logs** — opt-in checkbox dumps the captured stdout/stderr
-  of each repo-mode launch to the active server instance's `logDir` on
-  client exit (`hybrasyl-client-<timestamp>-pid<n>.log`). Disabled when
-  no active server instance has a log directory set.
+- **Path resolution** — pick a `.exe` (fire-and-forget, multi-instance allowed) or a `.csproj` (singleton, source-launched, stdio piped to the LogPane). The header chip shows which mode resolved.
+- **`Darkages.cfg` templating** — the active server profile's hostname and port are merged into `Darkages.cfg` before spawn, preserving every other line in the file. Same parser semantics as the sibling client repo's `DarkagesCfg`.
+- **.NET 10 runtime detection** — chip warns when the runtime is missing or only an older version is installed (source launches need `Microsoft.NETCore.App 10.x`).
+- **Side LogPane** — for source launches, stdout/stderr stream into a resizable side pane with auto-scroll, clear, save-to-file, and jump-to-latest controls. Disabled with a tooltip for `.exe` mode (no piped stdio).
+- **Auto-save logs** — opt-in checkbox dumps the captured stdout/stderr of each repo-mode launch to the active server instance's `logDir` on client exit (`hybrasyl-client-<timestamp>-pid<n>.log`). Disabled when no active server instance has a log directory set.
 
-Cross-platform in principle, since `dotnet run` works wherever .NET is
-installed. Windows is the primary tested target.
+Cross-platform in principle, since `dotnet run` works wherever .NET is installed. Windows is the primary tested target.
 
 <br clear="all" />
 
@@ -105,76 +68,31 @@ installed. Windows is the primary tested target.
 
 <table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_server.gif" width="350" alt="Hybrasyl Server tab — multi-instance server orchestration" /></td></tr></table>
 
-Multi-instance management for local Hybrasyl server processes. The
-star feature of 2.0.
+Multi-instance management for local Hybrasyl server processes. The star feature of 2.0.
 
-- **Multi-instance CRUD** — add / select / delete / reset / launch
-  named server instances; each carries its own ports, Redis overrides,
-  data directory, server config XML, and launch mode.
-- **Binary mode** — point at a prebuilt server `.dll` (wrapped in
-  `dotnet <dll>`) or self-contained `.exe`.
-- **Repo mode** — point at a server git checkout; launches via
-  `dotnet run --project hybrasyl/Hybrasyl.csproj`. Branch-aware: pick
-  any branch and Epona materializes a git worktree at
-  `.worktrees/<branch>/`, refcounted across instances and reaped on
-  Epona quit.
-- **Local Hybrasyl.Xml** — repo mode can also override the XML library
-  with a local checkout's `Hybrasyl.Xml.csproj` via a generated
-  `Directory.Build.props` (requires the `UseLocalXml` conditional on
-  the server csproj — server commit `11bc748` or later).
-- **World directories registry** — see below; per-instance picker is a
-  dropdown over the registered entries, not a path picker.
-- **Server config XML auto-detection** — scans
-  `<worldDataDir>/xml/serverconfigs/` for files whose second line
-  begins with `<ServerConfig` and offers them as a dropdown. The
-  selected config's `<DataStore>` block is parsed for the Redis
-  endpoint Epona probes pre-launch.
-- **Per-instance Redis overrides** — leave host blank to read the
-  endpoint from the config XML (the usual case); set host/port/db/
-  password to emit `HYB_REDIS_*` env vars instead. Memurai install
-  hint shown next to the Redis caption when the probe fails on a
-  loopback target.
-- **Pre-flight checks** — Redis reachability via real RESP `PING`
-  round-trip (catches WSL2 localhost-forwarding false positives that
-  would otherwise stall `StackExchange.Redis` mid-handshake), and
-  pure-TCP port-in-use probe on the lobby port.
-- **Reset button** — kill + relaunch in one IPC round-trip; useful
-  when iterating on scripts or XML without doing a full Stop → Start.
-- **Log folder quick-open** — the FolderOpen icon next to the Log Dir
-  field opens the folder in Explorer; works while the instance is
-  running so you can tail logs live.
-- **PowerShell wrapper console** — Windows launches go through a
-  `Start-Process` shim that wraps the server in a base64-encoded
-  PowerShell script and blocks on `Read-Host` after exit. Crash
-  output stays readable; the wrapper PID is captured so Stop can
-  `taskkill /F /T` the entire process tree.
+- **Multi-instance CRUD** — add / select / delete / reset / launch named server instances; each carries its own ports, Redis overrides, data directory, server config XML, and launch mode.
+- **Binary mode** — point at a prebuilt server `.dll` (wrapped in `dotnet <dll>`) or self-contained `.exe`.
+- **Repo mode** — point at a server git checkout; launches via `dotnet run --project hybrasyl/Hybrasyl.csproj`. Branch-aware: pick any branch and Epona materializes a git worktree at `.worktrees/<branch>/`, refcounted across instances and reaped on Epona quit.
+- **Local Hybrasyl.Xml** — repo mode can also override the XML library with a local checkout's `Hybrasyl.Xml.csproj` via a generated `Directory.Build.props` (requires the `UseLocalXml` conditional on the server csproj — server commit `11bc748` or later).
+- **World directories registry** — see below; per-instance picker is a dropdown over the registered entries, not a path picker.
+- **Server config XML auto-detection** — scans `<worldDataDir>/xml/serverconfigs/` for files whose second line begins with `<ServerConfig` and offers them as a dropdown. The selected config's `<DataStore>` block is parsed for the Redis endpoint Epona probes pre-launch.
+- **Per-instance Redis overrides** — leave host blank to read the endpoint from the config XML (the usual case); set host/port/db/ password to emit `HYB_REDIS_*` env vars instead. Memurai install hint shown next to the Redis caption when the probe fails on a loopback target.
+- **Pre-flight checks** — Redis reachability via real RESP `PING` round-trip (catches WSL2 localhost-forwarding false positives that would otherwise stall `StackExchange.Redis` mid-handshake), and pure-TCP port-in-use probe on the lobby port.
+- **Reset button** — kill + relaunch in one IPC round-trip; useful when iterating on scripts or XML without doing a full Stop → Start.
+- **Log folder quick-open** — the FolderOpen icon next to the Log Dir field opens the folder in Explorer; works while the instance is running so you can tail logs live.
+- **PowerShell wrapper console** — Windows launches go through a `Start-Process` shim that wraps the server in a base64-encoded PowerShell script and blocks on `Read-Host` after exit. Crash output stays readable; the wrapper PID is captured so Stop can `taskkill /F /T` the entire process tree.
 
 <br clear="all" />
 
 ### World directories registry
 
-Pick a Hybrasyl world data dir (the inner repo containing
-`xml/serverconfigs/`, `mapfiles/`, `scripts/`, etc — typically a
-clone of [Ceridwen](https://github.com/hybrasyl/ceridwen) or a
-private equivalent) once, and reference it by ID across multiple
-instances.
+Pick a Hybrasyl world data dir (the inner repo containing `xml/serverconfigs/`, `mapfiles/`, `scripts/`, etc — typically a clone of [Ceridwen](https://github.com/hybrasyl/ceridwen) or a private equivalent) once, and reference it by ID across multiple instances.
 
-- **Manage in the Settings pane** — add, edit, delete entries. Star
-  icon toggles which entry is the default for new instances. Delete
-  is disabled when an entry is in use; the tooltip shows the count.
-- **At-pick validation** — picking the wrong folder (e.g. the
-  Hybrasyl-org parent instead of the world repo itself) is rejected
-  with a snackbar pointing at `xml/serverconfigs/` as the canonical
-  shape marker.
-- **Editing a path propagates** — change a registry entry's path and
-  every instance pointing at it picks up the new path on next launch.
-  Deduped at migration time so multiple legacy `dataDir` values that
-  pointed at the same folder collapse into one entry.
+- **Manage in the Settings pane** — add, edit, delete entries. Star icon toggles which entry is the default for new instances. Delete is disabled when an entry is in use; the tooltip shows the count.
+- **At-pick validation** — picking the wrong folder (e.g. the Hybrasyl-org parent instead of the world repo itself) is rejected with a snackbar pointing at `xml/serverconfigs/` as the canonical shape marker.
+- **Editing a path propagates** — change a registry entry's path and every instance pointing at it picks up the new path on next launch. Deduped at migration time so multiple legacy `dataDir` values that pointed at the same folder collapse into one entry.
 
-See [`docs/server-launch-resolution.md`](docs/server-launch-resolution.md)
-for how the server resolves `--worldDataDir` / `--dataDir` / `--logDir`
-/ `--config` (CLI flag → `HYB_*` env → built-in default) and why
-Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
+See [`docs/server-launch-resolution.md`](docs/server-launch-resolution.md) for how the server resolves `--worldDataDir` / `--dataDir` / `--logDir` / `--config` (CLI flag → `HYB_*` env → built-in default) and why Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
 
 ---
 
@@ -182,39 +100,22 @@ Epona always passes both `--dataDir` and `--worldDataDir` explicitly.
 
 <table align="right" cellpadding="5"><tr><td><img src="docs/images/epona_options.gif" width="350" alt="Settings pane — themes, world directories, and preferences" /></td></tr></table>
 
-Settings persist to `%LOCALAPPDATA%\Erisco\Epona\settings.json`. Chromium's
-cache and other Electron transients live in the same directory — `userData` is
-pinned to Local (not the roaming profile) before the app is ready.
+Settings persist to `%LOCALAPPDATA%\Erisco\Epona\settings.json`. Chromium's cache and other Electron transients live in the same directory — `userData` is pinned to Local (not the roaming profile) before the app is ready.
 
-- **Atomic writes** — every save writes `settings.tmp.json` and
-  renames over `settings.json` so a crash mid-save can't leave the
-  file half-written. The previous primary is copied to
-  `settings.bak.json` before rename, so corrupt settings can be
-  recovered on next load.
-- **Schema migrations on load** — settings written by older Epona
-  versions are migrated forward in-memory; the migrated shape is
-  persisted on the next save. No-op once already migrated.
-- **Themes** — five themes: Hybrasyl, Chadul, Danaan, Grinneal
-  (shared with Creidhne and Taliesin) and Spark (a faithful port of
-  the original WPF launcher's dark theme).
+- **Atomic writes** — every save writes `settings.tmp.json` and renames over `settings.json` so a crash mid-save can't leave the file half-written. The previous primary is copied to `settings.bak.json` before rename, so corrupt settings can be recovered on next load.
+- **Schema migrations on load** — settings written by older Epona versions are migrated forward in-memory; the migrated shape is persisted on the next save. No-op once already migrated.
+- **Themes** — five themes: Hybrasyl, Chadul, Danaan, Grinneal (shared with Creidhne and Taliesin) and Spark (a faithful port of the original WPF launcher's dark theme).
 
 ### Remote Desktop
 
-Epona detects a Remote Desktop session and switches to software
-rendering, because an RDP session has no GPU and the acceleration
-path costs more than it saves there. There is no setting for this —
-the app adapts rather than asking.
+Epona detects a Remote Desktop session and switches to software rendering, because an RDP session has no GPU and the acceleration path costs more than it saves there. There is no setting for this — the app adapts rather than asking.
 
-If it reads your machine wrongly, `EPONA_DISABLE_GPU` overrides the
-decision in either direction:
+If it reads your machine wrongly, `EPONA_DISABLE_GPU` overrides the decision in either direction:
 
-- `EPONA_DISABLE_GPU=1` — force software rendering anywhere. Useful
-  for reproducing a remote-session report on a local machine.
-- `EPONA_DISABLE_GPU=0` — keep hardware acceleration on, even in a
-  session Epona thinks is remote.
+- `EPONA_DISABLE_GPU=1` — force software rendering anywhere. Useful for reproducing a remote-session report on a local machine.
+- `EPONA_DISABLE_GPU=0` — keep hardware acceleration on, even in a session Epona thinks is remote.
 
-Leave it unset for the normal behaviour. Either setting is reported
-on stdout at startup.
+Leave it unset for the normal behaviour. Either setting is reported on stdout at startup.
 
 <br clear="all" />
 
@@ -222,10 +123,7 @@ on stdout at startup.
 
 ## da-win32
 
-Reusable N-API C++ addon wrapping the kernel32 functions Epona's
-Legacy target needs. Lives in [`packages/da-win32/`](packages/da-win32/)
-and is designed to be extracted to its own published package when
-sibling tools (e.g. Taliesin asset injection) need the same calls.
+Reusable N-API C++ addon wrapping the kernel32 functions Epona's Legacy target needs. Lives in [`packages/da-win32/`](packages/da-win32/) and is designed to be extracted to its own published package when sibling tools (e.g. Taliesin asset injection) need the same calls.
 
 | JS function                             | kernel32 call        |
 | --------------------------------------- | -------------------- |
@@ -237,36 +135,26 @@ sibling tools (e.g. Taliesin asset injection) need the same calls.
 | `suspendThread(handle)`                 | `SuspendThread`      |
 | `closeHandle(handle)`                   | `CloseHandle`        |
 
-All Win32 handles are exposed as JS `BigInt` — never coerced to
-`Number`.
+All Win32 handles are exposed as JS `BigInt` — never coerced to `Number`.
 
 ---
 
 ## Installation
 
-Pre-built releases are on the [releases page](../../releases). Windows
-comes in two forms — take whichever suits you, they are the same app:
+Pre-built releases are on the [releases page](../../releases). Windows comes in two forms — take whichever suits you, they are the same app:
 
-- `epona-x.y.z-portable.exe` — a single file. Run it directly, no
-  installer and no admin rights. It unpacks itself on each start, so it
-  takes a few seconds longer to open.
-- `epona-x.y.z-setup.exe` — an installer, if you would rather have Start
-  menu and desktop entries and a fixed install folder.
+- `epona-x.y.z-portable.exe` — a single file. Run it directly, no installer and no admin rights. It unpacks itself on each start, so it takes a few seconds longer to open.
+- `epona-x.y.z-setup.exe` — an installer, if you would rather have Start menu and desktop entries and a fixed install folder.
 
-macOS and Linux builds (`.dmg`, `.deb`, `.AppImage`) are published too,
-but see the platform note above — the Win32 patches are Windows-only.
+macOS and Linux builds (`.dmg`, `.deb`, `.AppImage`) are published too, but see the platform note above — the Win32 patches are Windows-only.
 
 On macOS, branch switching for repo-mode launches uses the git that the Xcode Command Line Tools supply. If Epona says that the tools are missing, run `xcode-select --install`. Then pick the repo folder again, click a branch Refresh button, or start the launch again. You do not have to restart Epona.
 
-Every release also carries `SHA256SUMS.txt` and a signed build
-provenance attestation. **If Windows Defender or SmartScreen flags the
-download, see [docs/antivirus.md](docs/antivirus.md)** — it is a false
-positive, and that page covers how to verify the file and report it.
+Every release also carries `SHA256SUMS.txt` and a signed build provenance attestation. **If Windows Defender or SmartScreen flags the download, see [docs/antivirus.md](docs/antivirus.md)** — it is a false positive, and that page covers how to verify the file and report it.
 
 ## Building from source
 
-Requires Visual Studio Build Tools with the C++ workload (the native
-addon is C++ + node-gyp). Node.js 18+; CI uses Node 24.
+Requires Visual Studio Build Tools with the C++ workload (the native addon is C++ + node-gyp). Node.js 18+; CI uses Node 24.
 
 ```bash
 npm install
@@ -279,50 +167,37 @@ npm test                # vitest suite
 npm run lint            # eslint + prettier
 ```
 
-Local Windows builds are unsigned: signing needs the SSL.com Cloud
-eSigner credentials, which only CI holds. `scripts/sign.js` logs a skip
-and the build continues.
+Local Windows builds are unsigned: signing needs the SSL.com Cloud eSigner credentials, which only CI holds. `scripts/sign.js` logs a skip and the build continues.
 
-CI builds and publishes every platform on tag push — Windows installer
-and portable exe, macOS dmg, Linux deb and AppImage.
+CI builds and publishes every platform on tag push — Windows installer and portable exe, macOS dmg, Linux deb and AppImage.
 
-Releases are produced via GitHub Actions on `v*` tag push — see
-[`docs/release-process.md`](docs/release-process.md) for the full
-flow and [`.github/workflows/release.yml`](.github/workflows/release.yml)
-for the workflow definition.
+Releases are produced via GitHub Actions on `v*` tag push — see [`docs/release-process.md`](docs/release-process.md) for the full flow and [`.github/workflows/release.yml`](.github/workflows/release.yml) for the workflow definition.
 
 ## Project structure
 
-| Path                                                        | Purpose                                                                                                                                                   |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/da-win32/`                                        | Reusable N-API native addon for Win32 process interop                                                                                                     |
-| `src/main/`                                                 | Electron main process — IPC handlers, settings manager, line buffer, runtime detection, server tester, port probe                                         |
-| `src/main/targets/`                                         | Per-target launchers — `legacyTarget.js` (Win32 patches), `hybrasylTarget.js` (client exe / dotnet run), `serverTarget.js` (binary / repo with worktrees) |
-| `src/main/gitOps.js`, `worktreeManager.js`, `buildProps.js` | Git plumbing for repo-mode launches                                                                                                                       |
-| `src/preload/`                                              | Context bridge exposing `sparkAPI` to the renderer                                                                                                        |
-| `src/renderer/src/components/`                              | UI components — title bar, nav toolbar, profile selector, options, action buttons, settings pane, log pane, server instance panel, hybrasyl client panel  |
-| `src/renderer/src/themes/`                                  | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark, Mundanes)                                                                                          |
-| `src/shared/`                                               | Pure logic shared by main, preload and renderer — no electron or node imports                                                                             |
-| `e2e/`                                                      | Playwright specs driving the built app (Windows)                                                                                                          |
-| `docs/`                                                     | Reference docs (`antivirus.md`, `da-installer.md`, `release-process.md`, `server-launch-resolution.md`)                                                   |
-| `docs/plans/`                                               | Plan index (`00-overview.md`), the deferral register (`00a-backlog.md`), and `complete/` for shipped plan docs                                            |
+| Path | Purpose |
+| --- | --- |
+| `packages/da-win32/` | Reusable N-API native addon for Win32 process interop |
+| `src/main/` | Electron main process — IPC handlers, settings manager, line buffer, runtime detection, server tester, port probe |
+| `src/main/targets/` | Per-target launchers — `legacyTarget.js` (Win32 patches), `hybrasylTarget.js` (client exe / dotnet run), `serverTarget.js` (binary / repo with worktrees) |
+| `src/main/gitOps.js`, `worktreeManager.js`, `buildProps.js` | Git plumbing for repo-mode launches |
+| `src/preload/` | Context bridge exposing `sparkAPI` to the renderer |
+| `src/renderer/src/components/` | UI components — title bar, nav toolbar, profile selector, options, action buttons, settings pane, log pane, server instance panel, hybrasyl client panel |
+| `src/renderer/src/themes/` | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark, Mundanes) |
+| `src/shared/` | Pure logic shared by main, preload and renderer — no electron or node imports |
+| `e2e/` | Playwright specs driving the built app (Windows) |
+| `docs/` | Reference docs (`antivirus.md`, `da-installer.md`, `release-process.md`, `server-launch-resolution.md`) |
+| `docs/plans/` | Plan index (`00-overview.md`), the deferral register (`00a-backlog.md`), and `complete/` for shipped plan docs |
 
 ## Contributing
 
-Issues and pull requests welcome. Please open an issue before starting
-significant work. [CLAUDE.md](CLAUDE.md) has the build commands, the layout, and
-the things that will bite you.
+Issues and pull requests welcome. Please open an issue before starting significant work. [CLAUDE.md](CLAUDE.md) has the build commands, the layout, and the things that will bite you.
 
-Run `npm run lint:check && npm test && npm run build` before opening a PR — CI
-gates all three, plus `npm audit --omit=dev --audit-level=high` and the
-Playwright suite.
+Run `npm run lint:check && npm test && npm run build` before opening a PR — CI gates all three, plus `npm audit --omit=dev --audit-level=high` and the Playwright suite.
 
 ## Security
 
-Epona launches programs and patches a running client's memory, so its trust
-boundary is worth reading before you change the main process: see
-[SECURITY.md](SECURITY.md). Report vulnerabilities through the shared intake
-repo, or in-app via **Settings → About → Report an issue**.
+Epona launches programs and patches a running client's memory, so its trust boundary is worth reading before you change the main process: see [SECURITY.md](SECURITY.md). Report vulnerabilities through the shared intake repo, or in-app via **Settings → About → Report an issue**.
 
 ## Author
 
@@ -334,7 +209,4 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
-_Epona is the spiritual successor to [Spark](https://github.com/hybrasyl/spark)
-(C#/WPF), rewritten on the Electron stack and substantially expanded
-to cover Hybrasyl client launches and server orchestration in addition
-to the original DA-launcher remit._
+_Epona is the spiritual successor to [Spark](https://github.com/hybrasyl/spark) (C#/WPF), rewritten on the Electron stack and substantially expanded to cover Hybrasyl client launches and server orchestration in addition to the original DA-launcher remit._
