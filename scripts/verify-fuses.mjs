@@ -40,7 +40,9 @@
 //    a manual procedure. Automating it means launching a GUI application on a
 //    runner and deciding it "has not printed anything yet", which is a timing
 //    assumption about someone else's binary on a displayless box that nobody
-//    here has measured.
+//    here has measured. The same holds for EnableEmbeddedAsarIntegrityValidation:
+//    this reads that the fuse is on, not that the app still starts with it.
+//    docs/release-process.md starts a packaged build by hand (HTOO-381).
 //
 // Usage: npm run verify:fuses -- <path to packaged binary>
 //   win32   dist/win-unpacked/Epona.exe
@@ -58,14 +60,15 @@ import { fileURLToPath } from 'url'
 export const SENTINEL = 'dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX'
 export const FUSE_STATE = { DISABLE: 0x30, ENABLE: 0x31, REMOVED: 0x72, INHERIT: 0x90 }
 
-// Position on the V1 wire → name. The full list is longer; these are the four
-// electron-builder.yml sets that reach the wire, and the only four asserted.
+// Position on the V1 wire → name. The full list is longer; these are the five
+// electron-builder.yml sets that reach the wire, and the only five asserted.
 // Position matters more than the name does — the wire is an array of bytes and
 // nothing in it is labelled.
 export const EXPECTED = [
   { index: 0, name: 'RunAsNode', state: FUSE_STATE.DISABLE },
   { index: 2, name: 'EnableNodeOptionsEnvironmentVariable', state: FUSE_STATE.DISABLE },
   { index: 3, name: 'EnableNodeCliInspectArguments', state: FUSE_STATE.DISABLE },
+  { index: 4, name: 'EnableEmbeddedAsarIntegrityValidation', state: FUSE_STATE.ENABLE },
   { index: 5, name: 'OnlyLoadAppFromAsar', state: FUSE_STATE.ENABLE }
 ]
 

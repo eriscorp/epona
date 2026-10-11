@@ -77,6 +77,7 @@ divergence from the skeleton, not an oversight. The full gate is
   `["sha1","sha256"]` and calls the sign hook twice per binary. That default assumes `signtool.exe`,
   which takes the hash as an argument; CodeSignTool does not, so the second call re-signs identically
   and burns another Cloud eSigner round trip and TOTP step for nothing.
+- **Anything that writes to `app.asar` after packaging kills the app.** The `enableEmbeddedAsarIntegrityValidation` fuse makes a changed archive exit with code 1, with `ASAR Integrity Violation` on stderr only and no window. A hook may change files in `app.asar.unpacked`: the check does not reach them, and the afterPack signing of `da_win32.node` relies on that (measured, HTOO-381). `npm run verify:fuses` reads the fuses off a package; only a launch proves that the package starts.
 - **Resolve packaged files from `__dirname`, not `app.getAppPath()`.** Under the e2e harness the
   latter returns the entry file's directory. `join(__dirname, '../../<file>')` is correct in a
   packaged build, under `dev`, and under e2e alike.

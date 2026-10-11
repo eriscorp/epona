@@ -42,6 +42,15 @@ preload sandbox, What's New, and the window geometry.
 
 Two limits are worth knowing. A change to the trusted-location set or the IPC guard can reject every IPC and the app still opens a window — the reveal backstop fires at 15 s — so "it launched" proves nothing; `e2e/ipc-guard.spec.js` asserts the allow direction, which does. And e2e runs against `out/`, so the Electron fuses and the packaged renderer path are only provable on a real artifact. Each release build job reads the fuse wire off its own package (§5). The packaged renderer path needs a launch: start one of the release's own binaries once the build lands (§6).
 
+Then package Epona and start the packaged app, before you tag. A tag publishes the release with no further step, so this is the last check before the release is published:
+
+```bash
+npm run build:portable
+npm run verify:fuses -- dist/win-unpacked/Epona.exe
+```
+
+Start `dist/win-unpacked/Epona.exe` and `dist/*-portable.exe`. Each must open its window. Epona enforces the embedded asar integrity fuse (HTOO-381): if `app.asar` changed after the build, the packaged app exits with code 1 and prints `ASAR Integrity Violation` on stderr only. The user sees no window and no message. `npm test` and `npm run e2e` cannot find this fault, because they do not start a package. A local build is unsigned; that is correct, and it does not change the check.
+
 ## 2. Bump the version
 
 [`package.json`](../package.json)'s `version` field drives the release
@@ -150,8 +159,7 @@ and macOS notarization are the slow steps).
   `epona-X.Y.Z-setup.exe`, `epona-X.Y.Z-portable.exe`, `*.deb`,
   `*.AppImage`, `epona-X.Y.Z.dmg`, and `SHA256SUMS.txt`.
 - Confirm the Discord post landed.
-- Smoke-test the artifact: download the portable exe, run on a clean
-  profile to make sure the native addon loaded and the app launches.
+- Smoke-test the artifact: download the portable exe and the installer, and run each on a clean profile to make sure the native addon loaded and the app launches. A build that does not open its window can have a damaged package (§1): take the release down.
 - Check the signature survived the round trip:
   `Get-AuthenticodeSignature .\epona-X.Y.Z-portable.exe` → `Valid`,
   signer `ERISCO LLC`.

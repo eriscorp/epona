@@ -14,7 +14,6 @@ Release process (the notes are authored HERE, not edited on GitHub after the fac
   3. Tag vX.Y.Z and push. The release workflow runs scripts/changelog-extract.mjs
      to pull THIS version's section into the GitHub release body, then appends the
      auto-generated PR list below it.
-  4. When the release job has published the GitHub Release, start the packaged app from it, then run `npm run publish:version -- vX.Y.Z` (needs `gh` and a clean ../cernunnos checkout on main). It writes this version to the house version manifest. Running copies of Epona do not see the release until you do. The job summary reminds you.
 Keep entries user-facing — internal refactors/tests show up in the appended auto list.
 
 Write entries in ASD-STE100 Simplified Technical English (asd-ste100.org), like the rest of the
@@ -47,6 +46,10 @@ the rules above.
 - **File and folder pickers open in a useful folder.** A picker with no saved path opened in the operating system's default folder, which is Downloads on Electron 43 and later. Now it opens in the folder you picked last in this session, then in Documents, then in your home folder. A saved path that no longer exists is skipped, so its picker does not fall back to Downloads either.
 - **Report an Issue tells you when the copy to the clipboard fails.** Before, the dialog said that the report was on the clipboard, also when the copy failed. Now Epona waits for the copy before it opens the issue page. If the copy fails, the issue page still opens with the report, and the dialog says that the copy failed. If the report is also too long for the page, the dialog tells you to use Copy to clipboard.
 - **On the Hybrasyl theme, the accent controls are visible.** The theme used the page background colour as its primary colour, so the scrollbar thumb, the progress bars, the busy spinners and the open log-pane toggle were invisible. These controls now use a blue that is legible against the page.
+
+### Security
+
+- **Epona does not start from a changed app archive.** On Windows and macOS, Epona now checks its app archive against a hash that the build records. If the archive changed after the build, Epona does not start.
 
 ## [2.8.1] - 2026-09-20
 
