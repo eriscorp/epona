@@ -6,8 +6,7 @@
   // package.json under node_modules: thousands of handles on Windows with MUI,
   // Electron, Vite and Vitest installed, which crashed the TS server whatever its
   // heap. The cost: an import from a package not yet imported anywhere is not
-  // suggested until it is typed once. Epona has no typescript dependency, so
-  // elatha's third setting (js/ts.tsdk.path) does not apply.
+  // suggested until it is typed once.
   "typescript.preferences.includePackageJsonAutoImports": "off",
   "actionButtons": {
     "commands": [

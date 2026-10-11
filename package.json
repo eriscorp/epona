@@ -96,22 +96,14 @@
   },
   "_allowScriptsNote": [
     "npm 12 skips every dependency install script that this block does not approve, with only",
-    "a warning and exit 0. Approvals are by name, not by version (HTOO-542).",
-    "esbuild selects its platform binary. electron-winstaller only picks a 7-Zip build for",
-    "Squirrel installers, which Epona does not ship (nsis + portable). fsevents is the macOS",
-    "file watcher behind vite and rollup; it is optional and absent off macOS, so a Windows",
-    "npm ci never sees it.",
+    "a warning and exit 0. Approvals are by name, not by version (HTOO-542). esbuild selects its",
+    "platform binary. fsevents is the macOS file watcher behind vite and rollup; it is optional",
+    "and absent off macOS, so a Windows npm ci never lists it. electron-winstaller is listed as",
+    "false only to mark it reviewed: it serves Squirrel installers, which Epona does not ship.",
     "electron is not listed: since Electron 42 it has no install script. The project's OWN",
     "postinstall runs install-electron first (a no-op when the binary is there), because",
-    "electron-vite dev reads the binary path without require(), so a fresh clone could not",
-    "run npm run dev (HTOO-553). npm 12 does not gate the project's own scripts.",
-    "",
-    "packages/da-win32 is a workspace member, not a registry dependency, and the second half",
-    "of postinstall (electron-builder install-app-deps) rebuilds it against Electron. That",
-    "rebuild asks node-abi for the Electron major's ABI. A node-abi that predates the major",
-    "fails it with 'Could not detect abi for version X', so a major bump of electron needs a",
-    "node-abi that knows it (npm update node-abi). No other house app has a native addon, so",
-    "this step is Epona's alone."
+    "electron-vite dev reads the binary path without require(), so a fresh clone could not run",
+    "npm run dev (HTOO-553). npm 12 does not gate the project's own scripts."
   ],
   "allowScripts": {
     "esbuild": true,
