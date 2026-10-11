@@ -21,6 +21,20 @@ import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { tmpdir } from 'os'
 
+/**
+ * For a spec of the Windows and Linux behaviour (the close guard asks, no Epona
+ * menu). On a macOS host it makes index.js see 'linux', because the CI unit job
+ * also runs on macOS, where a window close does not ask. On other hosts it
+ * changes nothing. Call it before index.js is imported; it returns the restore.
+ */
+export function actAsNonMac() {
+  const real = process.platform
+  if (real === 'darwin') {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+  }
+  return () => Object.defineProperty(process, 'platform', { value: real, configurable: true })
+}
+
 // An object that answers any unknown property with a remembered vi.fn(). The
 // same function comes back each time, so a test can assert on calls.
 function autoStub(overrides = {}) {

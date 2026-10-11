@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import { rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { actAsNonMac } from './electronDouble.js'
 
 // A quit while a repo-mode server runs: the question comes BEFORE the kill.
 //
@@ -85,7 +86,10 @@ function beforeQuitEvent() {
   return { preventDefault: vi.fn() }
 }
 
+let restorePlatform
+
 beforeAll(async () => {
+  restorePlatform = actAsNonMac()
   process.env.LOCALAPPDATA = sandbox
   await import('./index.js')
   await harness.ready()
@@ -107,6 +111,7 @@ beforeEach(() => {
 })
 
 afterAll(() => {
+  restorePlatform()
   rmSync(sandbox, { recursive: true, force: true })
 })
 

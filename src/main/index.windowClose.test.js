@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { actAsNonMac } from './electronDouble.js'
 
 // The main window's close guard (HTOO-456).
 //
@@ -38,13 +39,17 @@ const harness = await vi.hoisted(async () => {
 
 vi.mock('electron', () => harness.electron)
 
+let restorePlatform
+
 beforeAll(async () => {
+  restorePlatform = actAsNonMac()
   process.env.LOCALAPPDATA = sandbox
   await import('./index.js')
   await harness.ready()
 })
 
 afterAll(() => {
+  restorePlatform()
   rmSync(sandbox, { recursive: true, force: true })
 })
 

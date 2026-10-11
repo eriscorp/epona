@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { RENDERER_CSP, SPLASH_CSP } from './windowSecurity.js'
+import { actAsNonMac } from './electronDouble.js'
 
 // The main process, booted.
 //
@@ -40,13 +41,17 @@ const harness = await vi.hoisted(async () => {
 
 vi.mock('electron', () => harness.electron)
 
+let restorePlatform
+
 beforeAll(async () => {
+  restorePlatform = actAsNonMac()
   process.env.LOCALAPPDATA = sandbox
   await import('./index.js')
   await harness.ready()
 })
 
 afterAll(() => {
+  restorePlatform()
   rmSync(sandbox, { recursive: true, force: true })
 })
 
