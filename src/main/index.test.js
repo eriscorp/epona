@@ -75,6 +75,12 @@ describe('booting the main process', () => {
     expect(call[1]).toContain(join('Erisco', 'Epona'))
   })
 
+  it('installs no application menu off macOS', () => {
+    // Windows and Linux are frameless; a menu there would register its
+    // accelerators even while hidden. index.darwin.test.js covers macOS.
+    expect(harness.electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
+  })
+
   it('reads LOCALAPPDATA on every platform, not on Windows only', () => {
     // HTOO-543. The e2e helper isolates a launch by pointing LOCALAPPDATA at a
     // temp dir. Read on Windows only, that redirect did nothing on Linux and

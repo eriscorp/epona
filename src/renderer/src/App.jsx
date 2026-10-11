@@ -25,6 +25,7 @@ import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
 import { useRuntime } from './store/runtimeStore.js'
+import { useAppMenu } from './appMenu.js'
 
 const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
 const kindToIndex = (k) => {
@@ -66,6 +67,9 @@ export default function App() {
   // banner that itself uses no IPC — the existing Report Issue dialog and
   // "Reveal logs" are both invokes, so in exactly this state they are dead too.
   const [bridgeError, setBridgeError] = useState(null)
+  // True once settings have hydrated. The macOS menu waits for it, so it never
+  // reports or acts on the defaults the store starts with.
+  const [ready, setReady] = useState(false)
 
   const applyStatus = (snapshot) =>
     setInstanceStatus(Object.fromEntries((snapshot ?? []).map((s) => [s.id, s])))
@@ -74,6 +78,7 @@ export default function App() {
     hydrate()
       .then((s) => {
         if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind))
+        setReady(true)
       })
       .catch((err) => {
         // hydrate() awaits an IPC invoke. If the bridge is unreachable this
@@ -151,6 +156,38 @@ export default function App() {
         )
     if (path) update({ clientPath: path })
   }
+
+  // The tab bar's change handler. The Go menu (macOS) runs the same one.
+  function selectTab(index) {
+    setActiveTab(index)
+    update({ targetKind: TAB_ORDER[index] })
+  }
+
+  // The console button on the Hybrasyl Client tab is enabled in repo mode only,
+  // and the menu's Log Pane item follows it.
+  const canToggleLogPane = activeTab === 1 && settings.targets.hybrasyl.mode === 'repo'
+
+  // The macOS application menu (src/main/appMenu.js). Each command runs the same
+  // handler as its button. Inert off macOS.
+  useAppMenu(
+    ready,
+    { tab: TAB_ORDER[activeTab], canToggleLogPane, logPaneOpen },
+    {
+      goTab: (tab) => {
+        const index = TAB_ORDER.indexOf(tab)
+        if (index >= 0) selectTab(index)
+      },
+      openSettings: () => setSettingsOpen(true),
+      locateClient: handleLocateClient,
+      revealSettings: () => window.sparkAPI.revealSettings(),
+      revealLogs: () => window.sparkAPI.revealLogs(),
+      toggleLogPane: () => {
+        if (canToggleLogPane) setLogPaneOpen((o) => !o)
+      },
+      openHelp: () => setHelpOpen(true),
+      openReportIssue: () => setReportOpen(true)
+    }
+  )
 
   // Hook-based Legacy options only exist for client builds whose hook sites have
   // been mapped, so resolve which build will actually launch and ask it.
@@ -239,10 +276,7 @@ export default function App() {
 
           <Tabs
             value={activeTab}
-            onChange={(_, v) => {
-              setActiveTab(v)
-              update({ targetKind: TAB_ORDER[v] })
-            }}
+            onChange={(_, v) => selectTab(v)}
             variant="fullWidth"
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >

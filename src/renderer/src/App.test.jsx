@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, waitFor, cleanup, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // The regression this file exists for: the Legacy Client tab used to be
@@ -14,8 +14,9 @@ const savedSettings = { theme: 'hybrasyl', clientPath: '/home/user/DarkAges' }
 // A stub that answers anything App reaches for. Named methods get real
 // behaviour; everything else resolves undefined, and every `on*` returns an
 // unsubscribe, which is what App stores in its effect cleanups.
-function makeSparkAPI(platform) {
+function makeSparkAPI(platform, extra = {}) {
   const named = {
+    ...extra,
     platform,
     // Named rather than left to the Proxy: the fallback mints a FRESH vi.fn per
     // property access, so an assertion on call count would always see zero.
@@ -39,8 +40,8 @@ function makeSparkAPI(platform) {
   })
 }
 
-async function renderApp(platform) {
-  global.window.sparkAPI = makeSparkAPI(platform)
+async function renderApp(platform, extra) {
+  global.window.sparkAPI = makeSparkAPI(platform, extra)
   vi.resetModules()
   const { default: App } = await import('./App.jsx')
   const result = render(<App />)
@@ -155,5 +156,64 @@ describe('the Legacy panel body', () => {
     // deleted, not hidden.
     expect(screen.queryByText(/CrossOver/i)).toBeNull()
     expect(screen.queryByRole('button', { name: /^Launch/i })).toBeNull()
+  })
+})
+
+describe('the macOS application menu', () => {
+  // App wires the menu to its own handlers (appMenu.test.jsx covers the hook).
+  // These check the wiring: a Go command is the tab bar's change, and About
+  // opens the Settings pane and then its About dialog.
+  async function renderWithMenu() {
+    let emit = () => {}
+    const menu = {
+      setMenuState: vi.fn(),
+      onMenuCommand: vi.fn((cb) => {
+        emit = cb
+        return () => {}
+      })
+    }
+    await renderApp('darwin', menu)
+    await waitFor(() => expect(menu.onMenuCommand).toHaveBeenCalled())
+    return { menu, send: (command) => act(() => emit({ command })) }
+  }
+
+  it('reports the tab once settings hydrate, and Go switches the tab', async () => {
+    const { menu, send } = await renderWithMenu()
+    expect(menu.setMenuState).toHaveBeenLastCalledWith({
+      tab: 'legacy',
+      canToggleLogPane: false,
+      logPaneOpen: false
+    })
+
+    send('go:server')
+
+    expect(screen.getByRole('tab', { name: 'Hybrasyl Server' }).getAttribute('aria-selected')).toBe(
+      'true'
+    )
+    expect(menu.setMenuState).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'server' }))
+  })
+
+  it('About opens the Settings pane and its About dialog', async () => {
+    const { send } = await renderWithMenu()
+    send('about')
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /About Epona/i })).toBeTruthy())
+  })
+
+  it('does not switch the tab under an open dialog', async () => {
+    const { send } = await renderWithMenu()
+    send('reportIssue')
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    send('go:server')
+    expect(
+      // hidden: the open dialog sets aria-hidden on the rest of the app.
+      screen.getByRole('tab', { name: 'Legacy Client', hidden: true }).getAttribute('aria-selected')
+    ).toBe('true')
+  })
+
+  it('is inert on Windows', async () => {
+    const menu = { setMenuState: vi.fn(), onMenuCommand: vi.fn(() => () => {}) }
+    await renderApp('win32', menu)
+    expect(menu.onMenuCommand).not.toHaveBeenCalled()
+    expect(menu.setMenuState).not.toHaveBeenCalled()
   })
 })

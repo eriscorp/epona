@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, screen, net, session } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, screen, net, session, Menu } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
@@ -70,6 +70,9 @@ import { sweepPortableLeftovers } from './portableSweep.js'
 
 // The time after boot that the portable sweep waits (see portableSweep.js).
 const PORTABLE_SWEEP_DELAY_MS = 30_000
+import { buildMenuTemplate } from './appMenu.js'
+import { menuStateSchema } from './schemas/menuState.js'
+import { INITIAL_MENU_STATE, MENU_COMMAND_CHANNEL, MENU_STATE_CHANNEL } from '../shared/appMenu.js'
 
 let settingsManager
 
@@ -549,6 +552,45 @@ app.whenReady().then(() => {
     })
   }
 
+  // ── The macOS application menu ────────────────────────────────────────────
+  // An Epona item sends `menu:command` to the main window. The renderer reports
+  // what to grey out and mark (`app:setMenuState`), and the menu is rebuilt when
+  // that changes. Windows and Linux keep no menu: the window is frameless there,
+  // and a menu would register its accelerators even while hidden. See
+  // src/main/appMenu.js.
+  let menuState = INITIAL_MENU_STATE
+
+  function sendMenuCommand(msg) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(MENU_COMMAND_CHANNEL, msg)
+    }
+    // Rebuild from the last report. A checkbox item ticks itself when it is
+    // clicked, and a command can do nothing (a dialog is open), so no new report
+    // comes to correct the tick.
+    setImmediate(applyAppMenu)
+  }
+
+  function applyAppMenu() {
+    if (process.platform !== 'darwin') return
+    const template = buildMenuTemplate(menuState, {
+      appName: appIdentity.productName,
+      isDev: !app.isPackaged,
+      send: sendMenuCommand
+    })
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  }
+
+  // The renderer's menu state (it sends it on macOS only). Registered on every
+  // platform, so the preload's channel always has a listener. A bad report is
+  // dropped, and the menu keeps the last good one.
+  ipc.on(MENU_STATE_CHANNEL, (_, payload) => {
+    const parsed = menuStateSchema.safeParse(payload)
+    if (!parsed.success) return
+    if (JSON.stringify(parsed.data) === JSON.stringify(menuState)) return
+    menuState = parsed.data
+    applyAppMenu()
+  })
+
   // A second launch bounced by the single-instance lock — surface the window we
   // already have. Registered here because mainWindow is function-scoped and gets
   // reassigned by the macOS 'activate' path.
@@ -598,6 +640,10 @@ app.whenReady().then(() => {
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy()
     splashWindow = null
   }
+
+  // Before any window, so the first frame on macOS has Epona's menu and not
+  // Electron's default (whose View menu has Reload and Toggle Developer Tools).
+  applyAppMenu()
 
   // Show the splash immediately, then create the (hidden) main window. Reveal
   // on the renderer's 'app:ready' signal, with a safety timeout so a renderer
@@ -1420,7 +1466,13 @@ app.whenReady().then(() => {
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createAndWireMainWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      // The new renderer reports its own state once it hydrates. Until then the
+      // menu must not mark the closed window's tab or log pane.
+      menuState = INITIAL_MENU_STATE
+      applyAppMenu()
+      createAndWireMainWindow()
+    }
   })
 })
 

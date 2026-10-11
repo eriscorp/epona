@@ -12,6 +12,15 @@ import { contextBridge, ipcRenderer } from 'electron'
 // sandbox reachable.
 contextBridge.exposeInMainWorld('sparkAPI', {
   platform: process.platform,
+  // The macOS application menu (src/main/appMenu.js). The channel names repeat
+  // src/shared/appMenu.js, because this file may import only `electron`;
+  // index.test.js compares the two. onMenuCommand returns its own unsubscribe.
+  onMenuCommand: (cb) => {
+    const listener = (_, msg) => cb(msg)
+    ipcRenderer.on('menu:command', listener)
+    return () => ipcRenderer.removeListener('menu:command', listener)
+  },
+  setMenuState: (state) => ipcRenderer.send('app:setMenuState', state),
   // Signals the main process that the renderer has hydrated its settings, so
   // the splash can be dismissed and the (already-populated) main window shown.
   appReady: () => ipcRenderer.send('app:ready'),

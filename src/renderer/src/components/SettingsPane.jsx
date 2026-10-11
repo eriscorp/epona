@@ -43,6 +43,7 @@ import WhatsNewDialog from './WhatsNewDialog'
 import UpdateCheckButton from './UpdateCheckButton'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
+import { useMenuRequest } from '../useMenuRequest'
 import { DEPTH } from './titleChrome'
 import { THEME_LABELS } from '../themes'
 import eponaLogo from '../assets/epona.webp'
@@ -109,6 +110,10 @@ function SettingsSection({ panel, title, expanded, onToggle, action, detailsSx, 
 export default function SettingsPane({ settings, versions, onClose, onChange, onReportIssue }) {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [whatsNewOpen, setWhatsNewOpen] = useState(false)
+  // The macOS menu's About and What's New open this pane and leave a request,
+  // which these take, also when the pane mounts after the request.
+  useMenuRequest('about', () => setAboutOpen(true))
+  useMenuRequest('whatsNew', () => setWhatsNewOpen(true))
   const [profileDialog, setProfileDialog] = useState(null) // null | { mode, profile }
   const [worldDirDialog, setWorldDirDialog] = useState(null) // null | { mode, worldDir }
   const [flushConfirm, setFlushConfirm] = useState(false)

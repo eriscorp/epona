@@ -43,8 +43,17 @@ const setup = await vi.hoisted(async () => {
   writeFileSync(joinPath(roaming, 'settings.json'), '{"theme":"roaming"}')
   const realPlatform = process.platform
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+  const harness = createElectronDouble({ pathsBase })
+  // How many windows existed at each setApplicationMenu call: the menu must be
+  // in place before the first window, or that window's first frame on macOS has
+  // Electron's default menu (with Reload).
+  const windowsAtMenu = []
+  harness.electron.Menu.setApplicationMenu.mockImplementation(() => {
+    windowsAtMenu.push(harness.windows.length)
+  })
   return {
-    harness: createElectronDouble({ pathsBase }),
+    harness,
+    windowsAtMenu,
     realPlatform,
     killProcessTree: vitest.fn(async () => ({ ok: true })),
     launchServer: vitest.fn(),
@@ -52,8 +61,8 @@ const setup = await vi.hoisted(async () => {
   }
 })
 
-const { harness, killProcessTree, launchServer, cleanup } = setup
-const { dialog, screen } = harness.electron
+const { harness, windowsAtMenu, killProcessTree, launchServer, cleanup } = setup
+const { dialog, screen, Menu } = harness.electron
 
 vi.mock('electron', () => harness.electron)
 vi.mock('./processKill.js', () => ({ killProcessTree }))
@@ -137,6 +146,58 @@ describe('booting on macOS', () => {
   })
 })
 
+describe('the application menu on macOS', () => {
+  // The template the last setApplicationMenu was built from.
+  const lastTemplate = () => Menu.buildFromTemplate.mock.calls.at(-1)[0]
+  const goChecked = () =>
+    lastTemplate()
+      .find((m) => m.label === 'Go')
+      .submenu.filter((i) => i.checked)
+      .map((i) => i.id)
+
+  it('installs the Epona menu before any window exists', () => {
+    expect(windowsAtMenu[0]).toBe(0)
+    expect(lastTemplate()[0].label).toBe('Epona')
+  })
+
+  it('rebuilds the menu from a valid state report, and only on a change', () => {
+    const before = Menu.setApplicationMenu.mock.calls.length
+    const state = { tab: 'server', canToggleLogPane: false, logPaneOpen: false }
+    harness.send('app:setMenuState', state)
+    expect(Menu.setApplicationMenu.mock.calls.length).toBe(before + 1)
+    expect(goChecked()).toEqual(['go:server'])
+
+    harness.send('app:setMenuState', { ...state })
+    expect(Menu.setApplicationMenu.mock.calls.length).toBe(before + 1)
+  })
+
+  it('drops a bad state report and keeps the last good menu', () => {
+    const before = Menu.setApplicationMenu.mock.calls.length
+    harness.send('app:setMenuState', { tab: 'settings', canToggleLogPane: 1 })
+    harness.send('app:setMenuState', null)
+    expect(Menu.setApplicationMenu.mock.calls.length).toBe(before)
+    expect(goChecked()).toEqual(['go:server'])
+  })
+
+  it('sends a clicked item to the window as its command, then rebuilds', async () => {
+    const main = harness.windows.at(-1)
+    main.webContents.send.mockClear()
+    const before = Menu.setApplicationMenu.mock.calls.length
+    const item = lastTemplate()
+      .find((m) => m.label === 'Go')
+      .submenu.find((i) => i.id === 'go:legacy')
+
+    item.click()
+
+    expect(main.webContents.send).toHaveBeenCalledWith('menu:command', { command: 'go:legacy' })
+    // The rebuild undoes a checkbox that ticked itself, until the renderer's
+    // report says the tab really changed.
+    await new Promise((r) => setImmediate(r))
+    expect(Menu.setApplicationMenu.mock.calls.length).toBe(before + 1)
+    expect(goChecked()).toEqual(['go:server'])
+  })
+})
+
 describe('⌘W and the Dock on macOS, with a repo-mode server running', () => {
   it('closes the window on ⌘W without the quit question', async () => {
     // On macOS closing the window does not quit (window-all-closed), so the
@@ -181,6 +242,16 @@ describe('⌘W and the Dock on macOS, with a repo-mode server running', () => {
     harness.emitAppEvent('activate')
     expect(harness.windows.at(-1).destroyed).toBe(false)
     expect(liveDisplayListeners()).toEqual([...DISPLAY_EVENTS].sort())
+  })
+
+  it('resets the menu for the re-created window, before its renderer reports', () => {
+    // The closed window's tab must not stay marked.
+    const go = Menu.buildFromTemplate.mock.calls
+      .at(-1)[0]
+      .find((m) => m.label === 'Go')
+      .submenu.filter((i) => i.checked)
+      .map((i) => i.id)
+    expect(go).toEqual(['go:legacy'])
   })
 
   it('stops the server on a confirmed Dock Quit, after the question', async () => {
