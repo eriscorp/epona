@@ -66,7 +66,10 @@ describe('sanitizeBranchName', () => {
   })
 })
 
-describe('worktreeManager', () => {
+// Every case below runs real git (init, commit, worktree add/remove) in a temp
+// repo. Alone a case takes well under a second, but under a loaded full run the
+// spawns queue and a case can pass the 5 s default. The block has its own limit.
+describe('worktreeManager', { timeout: 30_000 }, () => {
   let repoPath
 
   beforeEach(async () => {
