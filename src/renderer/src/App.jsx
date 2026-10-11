@@ -246,14 +246,20 @@ export default function App() {
             variant="fullWidth"
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >
-            <Tab value={0} label="Legacy Client" />
-            <Tab value={1} label="Hybrasyl Client" />
-            <Tab value={2} label="Hybrasyl Server" />
+            {/* Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
+                TAB_ORDER key. e2e/nav-pages.spec.js reads TAB_ORDER and clicks
+                each one, so a tab added here needs both ids. */}
+            <Tab value={0} label="Legacy Client" data-testid="tab-legacy" />
+            <Tab value={1} label="Hybrasyl Client" data-testid="tab-hybrasyl" />
+            <Tab value={2} label="Hybrasyl Server" data-testid="tab-server" />
           </Tabs>
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
           {activeTab === 0 && (
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <Box
+              data-testid="page-legacy"
+              sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}
+            >
               {isWindows ? (
                 <>
                   <ProfileSelector
@@ -290,7 +296,10 @@ export default function App() {
           )}
 
           {activeTab === 1 && (
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <Box
+              data-testid="page-hybrasyl"
+              sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}
+            >
               <HybrasylClientPanel
                 hybrasyl={settings.targets.hybrasyl}
                 onChange={update}
@@ -313,6 +322,7 @@ export default function App() {
 
           {activeTab === 2 && (
             <Box
+              data-testid="page-server"
               sx={{
                 flex: 1,
                 display: 'flex',
