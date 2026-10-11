@@ -6,11 +6,14 @@ import { describe, expect, it } from 'vitest'
 // look wrong to a reader who has not read the comment above them, and nothing
 // else in the repository exercises them.
 //
+// - No `splashImage` (HTOO-466). The image puts the NSIS stub in GUI mode, which
+//   flashes a blank "Setup" window after every close. Epona removed the image
+//   with this test, so this test is what stops one being added again.
 // - `unpackDirName: true` (HTOO-351, fault 2). The electron-builder docs say
 //   `false`, and `false` silently restores the build-time unpack folder that
 //   shows the "Epona cannot be closed" box on a second launch.
 //
-// It lands on the PACKAGED exe only, so this checks the REQUEST and not the
+// Both land on the PACKAGED exe only, so this checks the REQUEST and not the
 // artifact.
 
 const REPO_ROOT = join(import.meta.dirname, '..')
@@ -37,6 +40,10 @@ function portableKeys(text = YML) {
 }
 
 describe('the portable target', () => {
+  it('has no splash image, so the NSIS stub stays silent (HTOO-466)', () => {
+    expect(portableKeys()).not.toHaveProperty('splashImage')
+  })
+
   it('extracts to a folder unique to each launch (HTOO-351)', () => {
     // `true`, not the documented `false`: app-builder-lib gives `false` a
     // build-time KSUID, which is the collision this avoids.
@@ -48,10 +55,27 @@ describe('the portable target', () => {
     expect(portableKeys()).toHaveProperty('artifactName')
   })
 
+  it('sees a splash image when there is one, so the rule above can fail', () => {
+    const withImage = [
+      'win:',
+      '  target: portable',
+      'portable:',
+      '  artifactName: x',
+      '  splashImage: build/portable-splash.bmp',
+      'mac:',
+      '  category: public.app-category.games'
+    ].join('\n')
+    expect(portableKeys(withImage)).toHaveProperty('splashImage')
+  })
+
   it('stops at the next block, so another block cannot satisfy it', () => {
     const elsewhere = ['portable:', '  artifactName: x', 'nsis:', '  unpackDirName: true'].join(
       '\n'
     )
     expect(portableKeys(elsewhere)).not.toHaveProperty('unpackDirName')
+  })
+
+  it('says why the image is absent, for the next person to want one', () => {
+    expect(YML).toMatch(/NO `splashImage`, on purpose \(HTOO-466\)/)
   })
 })

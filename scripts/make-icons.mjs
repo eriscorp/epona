@@ -6,9 +6,8 @@
 //        └──> build/icons/NxN.png  8 sizes, full-bleed                       (Linux)
 //
 // build/icon.png is NOT touched: it is the star, and it stays the WINDOWS
-// artwork. build/portable-splash.bmp is composed from it (see the recipe in
-// electron-builder.yml), so the icon and the NSIS extraction splash have to
-// agree — which is the same reason balor kept its wreath on Windows.
+// artwork, the same star as the in-app window icon
+// (resources/epona-icon-256.png).
 //
 // ── Why one generator and one master ──
 //

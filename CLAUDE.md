@@ -97,7 +97,7 @@ divergence from the skeleton, not an oversight. The full gate is
   `whenReady` so the sender check applies by construction; a handler added on the raw import
   silently opts out of it. See `src/main/windowSecurity.js`.
 - **There are two icon masters and one generator.** `build/icon.png` is the star and is **Windows
-  only** — `build/portable-splash.bmp` is composed from it, so the two have to agree.
+  only**; it matches the in-app window icon, `resources/epona-icon-256.png`.
   `build/icon-square.png` is the square tile (vendored from the document repo's
   `docs/logos/macros/Epona_fixed.png`) and drives **both** macOS and Linux: `scripts/make-icons.mjs`
   writes `build/icon.icns` and the `build/icons/` hicolor set from it. **Change the square master and
@@ -111,6 +111,7 @@ divergence from the skeleton, not an oversight. The full gate is
   which is a blank document icon on every desktop. Both halves are commented in
   `electron-builder.yml`. `desktopName` + `linux.syncDesktopName` are the other half of the same
   symptom — a perfect hicolor set with no window association still shows a generic taskbar icon.
+- **The `portable:` block has no `splashImage` and has `unpackDirName: true`, and both are on purpose.** A splash image puts the NSIS stub in GUI mode, which flashes a blank Setup window after each close (HTOO-466). `false` is the documented value for a per-launch unpack folder, but app-builder-lib gives `false` a build-time KSUID, so a second launch collides with the running copy (HTOO-351). `true` leaves the folder of a killed stub behind, and `src/main/portableSweep.js` removes it (HTOO-494). `scripts/portable-config.test.mjs` pins both keys.
 - **The themes are not a factory.** Six hand-written theme objects in `src/renderer/src/themes/`,
   `danaan` especially. Do not try to collapse them into a generator. Declined three times; it is the
   headline entry in [docs/plans/00a-backlog.md](docs/plans/00a-backlog.md).
