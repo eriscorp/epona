@@ -55,6 +55,7 @@ import { installGlobalErrorHandlers } from './errorHandlers.js'
 import { registerDiagnosticsHandlers } from './diagnostics.js'
 import { registerChangelogHandlers } from './changelog.js'
 import { checkForUpdates } from './updateCheck.js'
+import { withPickerStart } from './pickerStart.js'
 import { detectRemoteSessionNative } from './remoteSessionNative.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
@@ -559,36 +560,39 @@ app.whenReady().then(() => {
   // the picker with the current setting value — without it Electron's dialog
   // remembers the last directory globally per-window, which leaks state across
   // unrelated pickers (e.g. picking a server binary biases the next client
-  // pick). Empty/missing defaultPath falls back to the OS default.
-  function dialogDefault(p) {
-    return typeof p === 'string' && p.length > 0 ? p : undefined
-  }
+  // pick). An empty, missing or stale defaultPath goes through `withPickerStart`
+  // (HTOO-553): since Electron 43 the OS default is Downloads, so the picker
+  // opens at the last folder picked, then Documents, then home. Every open and
+  // save dialog goes through `pickerDialog`; pickerStart.test.js pins that.
+  const pickerDialog = withPickerStart(dialog, {
+    fallbacks: () => [app.getPath('documents'), app.getPath('home')]
+  })
 
   ipc.handle('dialog:openFile', async (_, title, filters, defaultPath) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await pickerDialog.showOpenDialog(mainWindow, {
       title: title || 'Select File',
       filters: filters || [{ name: 'All files', extensions: ['*'] }],
-      defaultPath: dialogDefault(defaultPath),
+      defaultPath,
       properties: ['openFile']
     })
     return result.canceled ? null : result.filePaths[0]
   })
   ipc.handle('dialog:openDirectory', async (_, title, defaultPath, message) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await pickerDialog.showOpenDialog(mainWindow, {
       title: title || 'Select Directory',
       // macOS renders `message` prominently inside the dialog — use it to spell
       // out what the picked folder should contain. Ignored on other platforms.
       message: typeof message === 'string' && message.length > 0 ? message : undefined,
-      defaultPath: dialogDefault(defaultPath),
+      defaultPath,
       properties: ['openDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
   })
   ipc.handle('dialog:openExe', async (_, defaultPath) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await pickerDialog.showOpenDialog(mainWindow, {
       title: 'Select Dark Ages Executable',
       filters: [{ name: 'Executables', extensions: ['exe'] }],
-      defaultPath: dialogDefault(defaultPath),
+      defaultPath,
       properties: ['openFile']
     })
     return result.canceled ? null : result.filePaths[0]
@@ -690,7 +694,7 @@ app.whenReady().then(() => {
         : `log-${logTimestamp()}.log`
     const settings = await settingsManager.load()
     const defaultDir = activeInstanceLogDir(settings)
-    const result = await dialog.showSaveDialog(mainWindow, {
+    const result = await pickerDialog.showSaveDialog(mainWindow, {
       title: 'Save Log',
       defaultPath: defaultDir ? join(defaultDir, defaultFileName) : defaultFileName,
       filters: [
@@ -863,7 +867,7 @@ app.whenReady().then(() => {
   const installerCacheDir = join(dataDir, 'installer-cache')
 
   ipc.handle('installer:pickInstaller', async (_, defaultPath) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await pickerDialog.showOpenDialog(mainWindow, {
       title: 'Select the Dark Ages installer',
       // Named .exe on every platform — it is a Windows installer being read on a
       // Mac or a Linux box, so the extension filter is about the file, not the host.
@@ -872,17 +876,17 @@ app.whenReady().then(() => {
         { name: 'All files', extensions: ['*'] }
       ],
       message: 'Pick DarkAges741single.exe, or whichever version you downloaded.',
-      defaultPath: dialogDefault(defaultPath),
+      defaultPath,
       properties: ['openFile']
     })
     return result.canceled ? null : result.filePaths[0]
   })
 
   ipc.handle('installer:pickDestination', async (_, defaultPath) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await pickerDialog.showOpenDialog(mainWindow, {
       title: 'Choose where to install Dark Ages',
       message: 'Epona will unpack the Dark Ages files into this folder.',
-      defaultPath: dialogDefault(defaultPath),
+      defaultPath,
       // createDirectory lets a user make the folder in the dialog, which is what
       // the card means by "select or create an application-appropriate destination".
       properties: ['openDirectory', 'createDirectory']
