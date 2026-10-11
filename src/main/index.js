@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, screen, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, screen, net, session } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
@@ -42,7 +42,10 @@ import {
   initWindowSecurity,
   registerTrustedWindow,
   hardenWindow,
-  guardIpc
+  guardIpc,
+  installContentSecurityPolicy,
+  RENDERER_CSP,
+  DEV_RENDERER_CSP
 } from './windowSecurity.js'
 import {
   createInstanceManager,
@@ -248,6 +251,18 @@ async function sweepAllOrphans(reason) {
   }
 }
 
+// The dev server URL when this run loads it, and undefined otherwise. One
+// answer for the three decisions that depend on it: the URL the main window
+// loads, the location the IPC guard trusts, and the CSP the session sends.
+//
+// Keyed on the URL that is actually loaded, NOT on NODE_ENV. The built main
+// bundle reads NODE_ENV at run time, so a stray `NODE_ENV=development` in a
+// user's shell would otherwise relax the CSP of a packaged app. The e2e helper
+// sets NODE_ENV=test, and the e2e run must see the packaged policy.
+function rendererDevUrl() {
+  return app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'] || undefined
+}
+
 function createWindow() {
   const isMac = process.platform === 'darwin'
   const mainWindow = new BrowserWindow({
@@ -320,8 +335,9 @@ function createWindow() {
     })
   }
 
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  const devUrl = rendererDevUrl()
+  if (devUrl) {
+    mainWindow.loadURL(devUrl)
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -351,9 +367,19 @@ app.whenReady().then(() => {
   // Record the renderer locations we trust, BEFORE any window loads. The IPC
   // guard fails closed against this list, so an empty list rejects everything —
   // which is the safe direction, but it means this call is load-bearing.
-  initWindowSecurity(
-    app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'],
-    join(__dirname, '../renderer/index.html')
+  initWindowSecurity(rendererDevUrl(), join(__dirname, '../renderer/index.html'))
+
+  // The CSP as a response HEADER, for the whole session, before any window loads
+  // (HTOO-467). A meta policy applies only once the parser reaches the tag, and
+  // the splash had no policy at all. This covers both documents.
+  //
+  // The dev policy goes ONLY to a window that loads the dev server.
+  // @vitejs/plugin-react injects its refresh preamble as an inline script ahead
+  // of the meta tag, so the packaged `script-src 'self'` stops `npm run dev`.
+  // See the two constants for why they cannot be the same string.
+  installContentSecurityPolicy(
+    session.defaultSession,
+    rendererDevUrl() ? DEV_RENDERER_CSP : RENDERER_CSP
   )
 
   // Every handler below registers through `ipc`, never the raw `ipcMain`, so the

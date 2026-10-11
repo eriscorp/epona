@@ -231,6 +231,8 @@ export function createElectronDouble({
       })),
       getAllDisplays: vi.fn(() => [])
     }),
+    // index.js installs the CSP on the default session's webRequest at boot.
+    session: { defaultSession: autoStub({ webRequest: autoStub({}) }) },
     nativeImage: autoStub({ createFromPath: vi.fn(() => autoStub({})) }),
     Menu: autoStub({ setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn(() => autoStub({})) })
   }

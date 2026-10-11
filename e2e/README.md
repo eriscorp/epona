@@ -65,6 +65,14 @@ not meant to be: the specs need the native addon and a built app.
 - **`worktree-sweep.spec.js`** — the startup sweep collects worktrees stranded by
   a branch switch or a deleted instance, and must never take one with
   uncommitted work in it.
+- **`csp-header.spec.js`** — the CSP is a response header from main, not only a meta tag (HTOO-467). It reads the header off the main document and the splash document through the DevTools protocol, and asserts exactly one `Content-Security-Policy` header with the value of `RENDERER_CSP` or `SPLASH_CSP`. It asserts that the renderer boot and the splash write no `Refused to …` CSP message to the console, that the splash logo loads, and that a remote image is refused. It never hooks `onHeadersReceived`: that hook keeps one listener per session, so a spec that hooked it would remove the app's own CSP.
+
+## What automation cannot reach
+
+Each item below is a check that a person does by hand, and the reason the suite cannot do it.
+
+- **The CSP in `npm run dev`, and DevTools under it (HTOO-467).** Every spec runs the built app with no `ELECTRON_RENDERER_URL`, so it sees the packaged policy only. The dev server gets `DEV_RENDERER_CSP`, because `@vitejs/plugin-react` injects an inline script. To check it: run `npm run dev`, confirm the window renders with no `Refused to` message in its console, and open DevTools (Ctrl+Shift+I). DevTools must render, because the header hook does not police `devtools:`.
+- **The CSP in the packaged exe (HTOO-467).** The suite runs `out/` under a plain Electron, not the asar in the portable exe. The document is a `file:` URL in both, so the policy is the same. To check it: start the portable exe, and confirm the splash logo, the fonts and the app all show.
 
 ## Gotchas (learned the hard way)
 

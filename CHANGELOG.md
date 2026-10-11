@@ -54,6 +54,7 @@ the rules above.
 ### Security
 
 - **Epona does not start from a changed app archive.** On Windows and macOS, Epona now checks its app archive against a hash that the build records. If the archive changed after the build, Epona does not start.
+- **Epona sends its Content-Security-Policy with each page.** The policy was only a tag inside the main page, so it took effect after the page started to load, and the splash had no policy. Epona now attaches the policy to the page response, and the splash has its own narrower policy.
 
 ## [2.8.1] - 2026-09-20
 

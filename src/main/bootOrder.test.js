@@ -119,3 +119,41 @@ describe('main-process boot order', () => {
     expect(raw.indexOf('whenReady')).toBeLessThan(raw.indexOf('disableHardwareAcceleration()'))
   })
 })
+
+describe('the CSP call site (HTOO-467)', () => {
+  // windowSecurity.test.js proves the header string and the installer. Neither
+  // can see whether index.js still CALLS the installer, or calls it before a
+  // window loads. A policy installed after a document starts to load is a policy
+  // that document never had, and the failure is silent: the app runs, the meta
+  // tag still applies, and only the splash loses its policy.
+
+  it('installs the policy on the default session', () => {
+    expect(sourceWithoutComments()).toMatch(
+      /installContentSecurityPolicy\(\s*session\.defaultSession/
+    )
+  })
+
+  it('installs it before either window loads', () => {
+    const src = sourceWithoutComments()
+    const install = src.indexOf('installContentSecurityPolicy(')
+    const splash = src.indexOf('createSplashWindow()')
+    // The CALL, not the declaration: `function createWindow()` sits above
+    // whenReady, so a plain indexOf measures the definition and fails on a
+    // correct file.
+    const main = src.search(/(?<!function )createWindow\(\)/)
+    expect(install, 'the CSP installer is gone from index.js').toBeGreaterThan(-1)
+    expect(splash, 'createSplashWindow() is gone from index.js').toBeGreaterThan(-1)
+    expect(main, 'createWindow() is gone from index.js').toBeGreaterThan(-1)
+    expect(install, 'the splash loads before the CSP is installed').toBeLessThan(splash)
+    expect(install, 'the main window loads before the CSP is installed').toBeLessThan(main)
+  })
+
+  it('chooses the dev policy from the loaded URL, never from NODE_ENV', () => {
+    // The two policies differ, and the dev one relaxes script-src. The built main
+    // bundle reads NODE_ENV at run time, so a key on it lets a user's shell
+    // relax a packaged app. The e2e helper also sets NODE_ENV=test.
+    const src = sourceWithoutComments()
+    expect(src).toMatch(/rendererDevUrl\(\) \? DEV_RENDERER_CSP : RENDERER_CSP/)
+    expect(src).not.toMatch(/NODE_ENV/)
+  })
+})
