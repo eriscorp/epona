@@ -40,13 +40,7 @@ builds and drives the real app under Playwright (Windows only) and
 covers most of it: the IPC sender guard in both directions, the
 preload sandbox, What's New, and the window geometry.
 
-Two limits are worth knowing. A change to the trusted-location set or
-the IPC guard can reject every IPC and the app still opens a window —
-the reveal backstop fires at 15 s — so "it launched" proves nothing;
-`e2e/ipc-guard.spec.js` asserts the allow direction, which does. And
-e2e runs against `out/`, so the Electron fuses and the packaged
-renderer path are only provable on a real artifact — launch one of
-the release's own binaries once the build lands (§5).
+Two limits are worth knowing. A change to the trusted-location set or the IPC guard can reject every IPC and the app still opens a window — the reveal backstop fires at 15 s — so "it launched" proves nothing; `e2e/ipc-guard.spec.js` asserts the allow direction, which does. And e2e runs against `out/`, so the Electron fuses and the packaged renderer path are only provable on a real artifact. Each release build job reads the fuse wire off its own package (§5). The packaged renderer path needs a launch: start one of the release's own binaries once the build lands (§6).
 
 ## 2. Bump the version
 
@@ -143,6 +137,8 @@ which runs four jobs:
   attaching the portable exe, deb, AppImage, and dmg — then prints a
   reminder to publish the version manifest (§6) and posts a Discord
   announcement.
+
+Each of the three build jobs runs `npm run verify:fuses` on its own package after packaging and before upload (HTOO-374). The reader finds the fuse wire in the binary and fails the job if a fuse is not as `electron-builder.yml` sets it. It reads `dist/win-unpacked/Epona.exe`, `dist/linux-unpacked/epona` and `dist/mac-universal/Epona.app`. The universal Mac app has one wire for each architecture, and the reader checks each wire. On macOS it runs before the dmg is signed. `scripts/release-artifacts.test.mjs` pins each step, its path and its position.
 
 Watch the Actions tab to confirm all four jobs go green. Typical
 runtime is several minutes (native rebuild, electron-builder packaging,

@@ -20,6 +20,7 @@
   "scripts": {
     "validate": "npm run lint:check && npm test",
     "validate:linux": "node scripts/validate-linux.mjs",
+    "verify:fuses": "node scripts/verify-fuses.mjs",
     "format": "prettier --write .",
     "lint": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
