@@ -396,7 +396,7 @@ export default function ServerInstancePanel({
               selected.serverRepoPath &&
               refreshBranches(selected.serverRepoPath)
             }
-            onRefresh={() => refreshBranches(selected.serverRepoPath)}
+            onRefresh={() => refreshBranches(selected.serverRepoPath, { manual: true })}
             allowCurrentCheckout
             noGitText="Git not available — server runs directly from the picked folder."
           />
@@ -453,7 +453,7 @@ export default function ServerInstancePanel({
                   selected.xmlRepoPath &&
                   refreshBranches(selected.xmlRepoPath)
                 }
-                onRefresh={() => refreshBranches(selected.xmlRepoPath)}
+                onRefresh={() => refreshBranches(selected.xmlRepoPath, { manual: true })}
                 noGitText="Git not available — XML runs directly from the picked folder."
               />
             </>

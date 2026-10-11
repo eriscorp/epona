@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, screen, net, session } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, screen, net, session, Menu } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, rmSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { createSettingsManager } from './settingsManager.js'
@@ -28,6 +28,7 @@ import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverCon
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
+import { reprobeGit } from './gitExec.js'
 import {
   releaseAll as releaseAllWorktrees,
   flushWorktrees,
@@ -70,6 +71,9 @@ import { sweepPortableLeftovers } from './portableSweep.js'
 
 // The time after boot that the portable sweep waits (see portableSweep.js).
 const PORTABLE_SWEEP_DELAY_MS = 30_000
+import { buildMenuTemplate } from './appMenu.js'
+import { menuStateSchema } from './schemas/menuState.js'
+import { INITIAL_MENU_STATE, MENU_COMMAND_CHANNEL, MENU_STATE_CHANNEL } from '../shared/appMenu.js'
 
 let settingsManager
 
@@ -82,11 +86,17 @@ let settingsManager
 //
 // %LOCALAPPDATA% on Windows; the per-user app-data dir elsewhere (mac/linux have
 // no roaming concept). Do NOT use app.getPath('cache') — it returns Roaming on Windows.
-const localAppData =
-  process.platform === 'win32'
-    ? (process.env.LOCALAPPDATA ?? join(app.getPath('home'), 'AppData', 'Local'))
-    : app.getPath('appData')
-const dataDir = join(localAppData, 'Erisco', 'Epona')
+//
+// LOCALAPPDATA is read on EVERY platform (HTOO-543). Nothing sets it on Linux or
+// macOS except the e2e helper, which points it at a temp dir. Read on Windows
+// only, the redirect did nothing there, and every spec read and wrote the real
+// settings. No other variable moves appData on macOS.
+function localAppDataDir() {
+  if (process.env.LOCALAPPDATA) return process.env.LOCALAPPDATA
+  if (process.platform === 'win32') return join(app.getPath('home'), 'AppData', 'Local')
+  return app.getPath('appData')
+}
+const dataDir = join(localAppDataDir(), 'Erisco', 'Epona')
 app.setPath('userData', dataDir)
 
 // Drop to software rendering in a Remote Desktop session. Like setPath above,
@@ -139,10 +149,25 @@ if (softwareRendering) {
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.exit(0)
 
-// Set by before-quit, read by the close guard in createAndWireMainWindow to
-// tell a quit-driven close (Cmd+Q on macOS) from a window close. Module scope
-// because the guard lives inside whenReady and before-quit does not.
-let quitRequested = false
+// Quit state, shared by the before-quit handler and the window close guard.
+// Module scope because the guard lives inside whenReady and before-quit does not.
+//
+// stopApproved: the user agreed to stop the running repo-mode launches (or none
+//   ran), in either the close guard's question or the quit's. The quit then does
+//   not ask a second time.
+// quitInFlight: a before-quit is asking or cleaning up. A second ⌘Q in that time
+//   is dropped.
+// quitCleanupDone: the shutdown sweep ran. The next quit goes through, and the
+//   close guard lets each window close without a question.
+let stopApproved = false
+let quitInFlight = false
+let quitCleanupDone = false
+
+// Asks whether to stop the running repo-mode launches. Resolves true when
+// nothing runs or the user picks Quit. whenReady replaces it, because the
+// question needs the main window and the tracked children; before that there is
+// nothing to stop.
+let confirmStopRepoLaunches = async () => true
 
 // Report Issue / diagnostics: session logs live in a `logs/` subfolder of the local
 // app-data dir (a clean "Reveal logs folder" target, separate from settings.json).
@@ -163,11 +188,15 @@ let mainWindowRevealed = false
 // One-time migration: older Epona stored settings under the Roaming profile
 // (app.getPath('appData')). We now use Local. On first launch after the switch,
 // copy an existing Roaming settings.json (and its backup) into the Local dir so
-// returning users keep their config. No-op on macOS/Linux (old === new dir).
+// returning users keep their config.
 function migrateSettingsFromRoaming(settingsPath) {
+  // Windows only: roaming is a Windows concept. On Linux and macOS a redirected
+  // LOCALAPPDATA (the e2e helper) makes oldDir differ from settingsPath, and this
+  // would copy the user's real settings into the test's temp dir (HTOO-543).
+  if (process.platform !== 'win32') return
   try {
     const oldDir = join(app.getPath('appData'), 'Erisco', 'Epona')
-    if (oldDir === settingsPath) return // same location (non-Windows) — no-op
+    if (oldDir === settingsPath) return // safety: never copy a dir onto itself
     const newPrimary = join(settingsPath, 'settings.json')
     if (existsSync(newPrimary)) return // already migrated / fresh local settings
     const oldPrimary = join(oldDir, 'settings.json')
@@ -289,8 +318,16 @@ function createWindow() {
     // (hiddenInset insets them into our custom title bar); trafficLightPosition
     // centers them in the 36px-tall bar. Windows/Linux stay fully frameless and
     // use the in-app minimize/close controls in TitleBar.
+    //
+    // fullscreenable: false on macOS, because the window has a fixed size (min ==
+    // max, maximizable: false). The green light would otherwise take it to full
+    // screen and show the fixed layout in the middle of an empty screen.
     ...(isMac
-      ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 10 } }
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 12, y: 10 },
+          fullscreenable: false
+        }
       : { frame: false }),
     // 256px, not the 1024px icon master. Windows takes the packaged app's icon
     // from the exe resource, so this mainly serves dev runs and Linux — but it
@@ -445,8 +482,13 @@ app.whenReady().then(() => {
     // needs its own handler and a fresh closeConfirmed flag. Repo-mode launches
     // own a git worktree + dotnet child tree; bouncing them unintentionally
     // costs build/run state and can wedge worktree refcounts, so prompt first.
-    // Titlebar X, Alt+F4, the in-app X and app quit all fire 'close'; on confirm
-    // we re-fire close so the before-quit cleanup runs on the second pass.
+    // Titlebar X, Alt+F4 and the in-app X fire 'close'; on confirm we re-fire
+    // close, window-all-closed quits, and the before-quit cleanup runs then.
+    //
+    // A quit does not ask here. before-quit asks BEFORE it stops anything, and
+    // it closes the windows only after the cleanup (quitCleanupDone). On macOS a
+    // window close is not a quit either: window-all-closed does not quit there,
+    // so ⌘W and the red light close the window and the launches keep running.
     //
     // The first 'close' is ALWAYS cancelled, and the decision is made after.
     // Electron reads `defaultPrevented` the moment the synchronous part of this
@@ -456,7 +498,7 @@ app.whenReady().then(() => {
     // file, so the only order that works is cancel first, decide, close again.
     let closeConfirmed = false
     mainWindow.on('close', (event) => {
-      if (closeConfirmed) {
+      if (closeConfirmed || quitCleanupDone || process.platform === 'darwin') {
         // A BrowserWindow keeps a native background behind the renderer, and
         // Chromium's default for it is opaque white — no one `backgroundColor`
         // can be right for six themes of which two are light — while the
@@ -473,39 +515,33 @@ app.whenReady().then(() => {
     })
 
     async function decideClose() {
-      const repoRunning = await collectRepoRunning()
-      if (repoRunning.length > 0) {
-        const { response } = await dialog.showMessageBox(mainWindow, {
-          type: 'question',
-          buttons: ['Cancel', 'Quit'],
-          defaultId: 0,
-          cancelId: 0,
-          title: 'Confirm Quit',
-          message: 'Repo-mode launches are still running.',
-          detail:
-            repoRunning.map((r) => `• ${r}`).join('\n') +
-            '\n\nQuitting will stop them and release their git worktrees.'
-        })
-        if (response !== 1) {
-          // Cancel keeps the window, and un-arms a quit that was in flight so
-          // the next plain close of this window stays a close.
-          quitRequested = false
-          return
-        }
-      }
+      // Cancel keeps the window.
+      if (!(await confirmStopRepoLaunches())) return
       if (mainWindow.isDestroyed()) return
+      // Closing the last window quits here (not on macOS, which never gets
+      // this far), so the quit that follows must not ask again.
+      stopApproved = true
       closeConfirmed = true
       // Hide here, synchronously, rather than only in the `close` above:
       // between this call and that event the compositor can paint a frame of
       // the default background, which is exactly the flash the hide prevents.
       mainWindow.hide()
-      // A cancelled 'close' also cancels the app.quit() that raised it, so a
-      // quit-driven close (Cmd+Q on macOS) has to be re-issued as a quit —
-      // closing the window alone would leave the app running with no window
-      // there. Everywhere else, closing the window is the whole request.
-      if (quitRequested) app.quit()
-      else mainWindow.close()
+      mainWindow.close()
     }
+
+    // The display listeners belong to this window. A window re-created by the
+    // Dock's `activate` registers them again, or it loses the resize replay
+    // that an RDP reconnect or a DPI change needs.
+    screen.on('display-metrics-changed', onDisplayChange)
+    screen.on('display-added', onDisplayChange)
+    screen.on('display-removed', onDisplayChange)
+    // screen listeners outlive the window; drop them with it or a second window
+    // (the activate path on macOS) accumulates another set.
+    mainWindow.on('closed', () => {
+      screen.removeListener('display-metrics-changed', onDisplayChange)
+      screen.removeListener('display-added', onDisplayChange)
+      screen.removeListener('display-removed', onDisplayChange)
+    })
 
     // The splash is alwaysOnTop + skipTaskbar. If the main window dies before
     // the reveal (a renderer crash, a close during boot), the splash outlives it
@@ -516,6 +552,45 @@ app.whenReady().then(() => {
       splashWindow = null
     })
   }
+
+  // ── The macOS application menu ────────────────────────────────────────────
+  // An Epona item sends `menu:command` to the main window. The renderer reports
+  // what to grey out and mark (`app:setMenuState`), and the menu is rebuilt when
+  // that changes. Windows and Linux get no Epona menu. They keep Electron's
+  // default menu, as before; the window is frameless there, so it does not show.
+  // See src/main/appMenu.js.
+  let menuState = INITIAL_MENU_STATE
+
+  function sendMenuCommand(msg) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(MENU_COMMAND_CHANNEL, msg)
+    }
+    // Rebuild from the last report. A checkbox item ticks itself when it is
+    // clicked, and a command can do nothing (a dialog is open), so no new report
+    // comes to correct the tick.
+    setImmediate(applyAppMenu)
+  }
+
+  function applyAppMenu() {
+    if (process.platform !== 'darwin') return
+    const template = buildMenuTemplate(menuState, {
+      appName: appIdentity.productName,
+      isDev: !app.isPackaged,
+      send: sendMenuCommand
+    })
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  }
+
+  // The renderer's menu state (it sends it on macOS only). Registered on every
+  // platform, so the preload's channel always has a listener. A bad report is
+  // dropped, and the menu keeps the last good one.
+  ipc.on(MENU_STATE_CHANNEL, (_, payload) => {
+    const parsed = menuStateSchema.safeParse(payload)
+    if (!parsed.success) return
+    if (JSON.stringify(parsed.data) === JSON.stringify(menuState)) return
+    menuState = parsed.data
+    applyAppMenu()
+  })
 
   // A second launch bounced by the single-instance lock — surface the window we
   // already have. Registered here because mainWindow is function-scoped and gets
@@ -566,6 +641,10 @@ app.whenReady().then(() => {
     if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy()
     splashWindow = null
   }
+
+  // Before any window, so the first frame on macOS has Epona's menu and not
+  // Electron's default (whose View menu has Reload and Toggle Developer Tools).
+  applyAppMenu()
 
   // Show the splash immediately, then create the (hidden) main window. Reveal
   // on the renderer's 'app:ready' signal, with a safety timeout so a renderer
@@ -795,6 +874,9 @@ app.whenReady().then(() => {
   })
 
   ipc.handle('client:launch', async (_, targetKind, _renderSettings, profile) => {
+    // A launch is a manual action: ask git again after a cached "Command Line
+    // Tools missing" (macOS), so a launch after the install does not fail.
+    reprobeGit()
     // Spawn-path hardening: disk wins. The renderer's settings payload is
     // ignored so a compromised renderer can't redirect the spawn target —
     // we only execute paths the user persisted via dialog + save.
@@ -1045,7 +1127,17 @@ app.whenReady().then(() => {
   // Git ops for the repo-mode picker — list branches in a chosen repo, and
   // an inline-validation check so the path picker can flag "not a git repo"
   // before the user tries to launch.
-  ipc.handle('git:listBranches', async (_, repoPath) => {
+  //
+  // `manual` is set by a user action (a folder pick, a branch Refresh button).
+  // It asks git again after a cached "Command Line Tools missing" (macOS), so
+  // installing the tools and clicking Refresh recovers without a restart. An
+  // automatic refresh never sets it, or it raises the install dialog each time.
+  // A launch, a server start and a server reset ask again too (see client:launch).
+  const reprobeIfManual = (opts) => {
+    if (opts?.manual === true) reprobeGit()
+  }
+  ipc.handle('git:listBranches', async (_, repoPath, opts) => {
+    reprobeIfManual(opts)
     try {
       return { ok: true, branches: await listBranches(repoPath) }
     } catch (err) {
@@ -1053,7 +1145,10 @@ app.whenReady().then(() => {
     }
   })
   ipc.handle('git:isGitRepo', async (_, repoPath) => isGitRepo(repoPath))
-  ipc.handle('git:diagnoseGitRepo', async (_, repoPath) => diagnoseGitRepo(repoPath))
+  ipc.handle('git:diagnoseGitRepo', async (_, repoPath, opts) => {
+    reprobeIfManual(opts)
+    return diagnoseGitRepo(repoPath)
+  })
 
   // Force-clear managed worktrees for every configured repo — the Settings
   // "Flush Worktrees" escape hatch for the occasional "already exists" wedge.
@@ -1165,6 +1260,7 @@ app.whenReady().then(() => {
   }
 
   ipc.handle('instance:start', async (_, supplied) => {
+    reprobeGit() // A manual action, as in client:launch.
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
     const instance = resolved.instance
@@ -1239,6 +1335,7 @@ app.whenReady().then(() => {
   // port bind. The renderer keeps the running flag set across the gap so
   // the UI doesn't flicker mid-restart.
   ipc.handle('instance:reset', async (_, supplied) => {
+    reprobeGit() // A manual action, as in client:launch.
     // Same disk-wins resolution as instance:start.
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
@@ -1266,8 +1363,8 @@ app.whenReady().then(() => {
   })
 
   // Collect human-readable labels for any repo-mode launches still running, so
-  // the close handler (in createAndWireMainWindow) can list them in the quit
-  // confirmation. Binary launches are detached and self-managed — not listed.
+  // confirmStopRepoLaunches can list them in the quit confirmation. Binary
+  // launches are detached and self-managed — not listed.
   async function collectRepoRunning() {
     const result = []
     if (activeHybrasylChild && activeHybrasylChild.exitCode === null) {
@@ -1284,6 +1381,35 @@ app.whenReady().then(() => {
       console.warn('quit-confirm settings load failed:', err.message)
     }
     return result
+  }
+
+  // The one question both the close guard and before-quit ask. Parented to the
+  // main window when there is one; app-modal otherwise (macOS: Quit from the
+  // Dock after ⌘W closed the window).
+  confirmStopRepoLaunches = async () => {
+    const repoRunning = await collectRepoRunning()
+    if (repoRunning.length === 0) return true
+    const options = {
+      type: 'question',
+      buttons: ['Cancel', 'Quit'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Confirm Quit',
+      message: 'Repo-mode launches are still running.',
+      detail:
+        repoRunning.map((r) => `• ${r}`).join('\n') +
+        '\n\nQuitting will stop them and release their git worktrees.'
+    }
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+    // A question on a minimized window, or in an app that ⌘H hid, does not show.
+    // The quit then seems to do nothing, and a second ⌘Q is dropped while the
+    // question is open. So bring the window and the app forward first.
+    if (parent?.isMinimized()) parent.restore()
+    if (process.platform === 'darwin') app.focus({ steal: true })
+    const { response } = parent
+      ? await dialog.showMessageBox(parent, options)
+      : await dialog.showMessageBox(options)
+    return response === 1
   }
 
   // Window controls
@@ -1355,23 +1481,22 @@ app.whenReady().then(() => {
   //
   // Replays the size the RENDERER asked for, not the clamped result — re-running
   // the clamp against the new work area is the entire point.
-  const onDisplayChange = () => {
+  //
+  // A function declaration, not a const: createAndWireMainWindow registers it,
+  // and runs before this line.
+  function onDisplayChange() {
     if (!lastRequestedSize) return
     applyWindowSize(lastRequestedSize.width, lastRequestedSize.height)
   }
-  screen.on('display-metrics-changed', onDisplayChange)
-  screen.on('display-added', onDisplayChange)
-  screen.on('display-removed', onDisplayChange)
-  // screen listeners outlive the window; drop them with it or a second window
-  // (the activate path on macOS) accumulates another set.
-  mainWindow.on('closed', () => {
-    screen.removeListener('display-metrics-changed', onDisplayChange)
-    screen.removeListener('display-added', onDisplayChange)
-    screen.removeListener('display-removed', onDisplayChange)
-  })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createAndWireMainWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      // The new renderer reports its own state once it hydrates. Until then the
+      // menu must not mark the closed window's tab or log pane.
+      menuState = INITIAL_MENU_STATE
+      applyAppMenu()
+      createAndWireMainWindow()
+    }
   })
 })
 
@@ -1379,22 +1504,52 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// Best-effort cleanup on clean shutdown. Order matters: kill any tracked
-// server instances first so they release their open file handles inside the
-// worktree dirs, otherwise `git worktree remove` fails silently and orphans
-// directories on disk. Force-close via Task Manager won't run this; the next
-// launch's adoption path covers that case.
-app.on('before-quit', async (event) => {
-  quitRequested = true
+// Every quit comes here first: ⌘Q, the menu's and the Dock's Quit, and the
+// app.quit() that window-all-closed calls. The first pass cancels the quit,
+// ASKS, and only then stops the launches. Asking after the kill (the old order)
+// meant the close guard found nothing running, so a ⌘Q never showed the
+// question, and a Cancel could not undo the kill. Once the sweep is done, the
+// quit is issued again and goes through.
+//
+// Force-close via Task Manager won't run this; the next launch's adoption path
+// covers that case.
+app.on('before-quit', (event) => {
   // The instance that lost the single-instance lock owns no children and no
   // worktree refcounts. app.exit(0) does not emit before-quit, so this guard is
   // a second line only: it must never preventDefault its own quit to run a no-op
   // sweep.
   if (!gotSingleInstanceLock) return
-  if (app._eponaCleanupRan) return
-  app._eponaCleanupRan = true
+  if (quitCleanupDone) return
   event.preventDefault()
+  if (quitInFlight) return
+  quitInFlight = true
+  void confirmAndQuit()
+})
 
+async function confirmAndQuit() {
+  try {
+    const approved =
+      stopApproved ||
+      (await confirmStopRepoLaunches().catch((err) => {
+        // A question that cannot be shown must not trap the user in the app.
+        console.warn('quit confirmation failed:', err.message)
+        return true
+      }))
+    // Cancel: nothing is stopped, and the app keeps running.
+    if (!approved) return
+    await shutdownSweep().catch((err) => console.warn('shutdown sweep failed:', err.message))
+    quitCleanupDone = true
+    app.quit()
+  } finally {
+    quitInFlight = false
+  }
+}
+
+// Best-effort cleanup on clean shutdown. Order matters: kill any tracked
+// server instances first so they release their open file handles inside the
+// worktree dirs, otherwise `git worktree remove` fails silently and orphans
+// directories on disk.
+async function shutdownSweep() {
   // Stop polling first: a tick landing mid-teardown would reap entries this
   // sweep is about to kill, and race their worktree cleanup.
   statusMonitor?.stop()
@@ -1422,6 +1577,4 @@ app.on('before-quit', async (event) => {
   // releaseAll only knows about worktrees this run refcounted. Sweep the rest —
   // ones adopted from a previous run, or left by a branch switch.
   await sweepAllOrphans('quit')
-
-  app.quit()
-})
+}

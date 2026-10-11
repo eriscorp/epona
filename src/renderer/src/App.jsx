@@ -25,8 +25,11 @@ import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
 import { useRuntime } from './store/runtimeStore.js'
+import { useAppMenu } from './appMenu.js'
+import { GO_TABS } from '../../shared/appMenu.js'
 
-const TAB_ORDER = ['legacy', 'hybrasyl', 'server']
+// The tab bar and the macOS Go menu read the same list, so they cannot disagree.
+const TAB_ORDER = GO_TABS.map((t) => t.tab)
 const kindToIndex = (k) => {
   const i = TAB_ORDER.indexOf(k)
   return i >= 0 ? i : 0
@@ -66,6 +69,9 @@ export default function App() {
   // banner that itself uses no IPC — the existing Report Issue dialog and
   // "Reveal logs" are both invokes, so in exactly this state they are dead too.
   const [bridgeError, setBridgeError] = useState(null)
+  // True once settings have hydrated. The macOS menu waits for it, so it never
+  // reports or acts on the defaults the store starts with.
+  const [ready, setReady] = useState(false)
 
   const applyStatus = (snapshot) =>
     setInstanceStatus(Object.fromEntries((snapshot ?? []).map((s) => [s.id, s])))
@@ -74,6 +80,7 @@ export default function App() {
     hydrate()
       .then((s) => {
         if (s.targetKind) setActiveTab(startupTabIndex(s.targetKind))
+        setReady(true)
       })
       .catch((err) => {
         // hydrate() awaits an IPC invoke. If the bridge is unreachable this
@@ -151,6 +158,40 @@ export default function App() {
         )
     if (path) update({ clientPath: path })
   }
+
+  // The tab bar's change handler. The Go menu (macOS) runs the same one.
+  function selectTab(index) {
+    setActiveTab(index)
+    update({ targetKind: TAB_ORDER[index] })
+  }
+
+  // The console button on the Hybrasyl Client tab is enabled in repo mode only,
+  // and the menu's Log Pane item follows it. An open pane stays open on the other
+  // tabs, so the item is also enabled while the pane is open, to close it.
+  const canToggleLogPane =
+    logPaneOpen || (activeTab === 1 && settings.targets.hybrasyl.mode === 'repo')
+
+  // The macOS application menu (src/main/appMenu.js). Each command runs the same
+  // handler as its button. Inert off macOS.
+  useAppMenu(
+    ready,
+    { tab: TAB_ORDER[activeTab], canToggleLogPane, logPaneOpen },
+    {
+      goTab: (tab) => {
+        const index = TAB_ORDER.indexOf(tab)
+        if (index >= 0) selectTab(index)
+      },
+      openSettings: () => setSettingsOpen(true),
+      locateClient: handleLocateClient,
+      revealSettings: () => window.sparkAPI.revealSettings(),
+      revealLogs: () => window.sparkAPI.revealLogs(),
+      toggleLogPane: () => {
+        if (canToggleLogPane) setLogPaneOpen((o) => !o)
+      },
+      openHelp: () => setHelpOpen(true),
+      openReportIssue: () => setReportOpen(true)
+    }
+  )
 
   // Hook-based Legacy options only exist for client builds whose hook sites have
   // been mapped, so resolve which build will actually launch and ask it.
@@ -239,19 +280,17 @@ export default function App() {
 
           <Tabs
             value={activeTab}
-            onChange={(_, v) => {
-              setActiveTab(v)
-              update({ targetKind: TAB_ORDER[v] })
-            }}
+            onChange={(_, v) => selectTab(v)}
             variant="fullWidth"
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >
-            {/* Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
-                TAB_ORDER key. e2e/nav-pages.spec.js reads TAB_ORDER and clicks
+            {/* Literal values, not a .map: see A2 in docs/plans/00a-backlog.md.
+                Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
+                TAB_ORDER key. e2e/nav-pages.spec.js reads the tab list and clicks
                 each one, so a tab added here needs both ids. */}
-            <Tab value={0} label="Legacy Client" data-testid="tab-legacy" />
-            <Tab value={1} label="Hybrasyl Client" data-testid="tab-hybrasyl" />
-            <Tab value={2} label="Hybrasyl Server" data-testid="tab-server" />
+            <Tab value={0} label={GO_TABS[0].label} data-testid="tab-legacy" />
+            <Tab value={1} label={GO_TABS[1].label} data-testid="tab-hybrasyl" />
+            <Tab value={2} label={GO_TABS[2].label} data-testid="tab-server" />
           </Tabs>
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 

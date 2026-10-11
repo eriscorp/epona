@@ -8,13 +8,15 @@ export function useGitBranches() {
 
   // Refetch branches for a repo path. Marks the entry loading so the UI can
   // show a spinner and avoid mislabeling missing branches as "(loading…)".
-  function refreshBranches(p) {
+  // `manual: true` only from a Refresh button: it lets main ask git again after
+  // a cached "Command Line Tools missing" (macOS).
+  function refreshBranches(p, { manual = false } = {}) {
     if (!p) return
     setBranchCache((prev) => ({
       ...prev,
       [p]: { branches: prev[p]?.branches ?? [], error: null, loading: true }
     }))
-    window.sparkAPI.listGitBranches(p).then((result) => {
+    window.sparkAPI.listGitBranches(p, { manual }).then((result) => {
       setBranchCache((prev) => ({
         ...prev,
         [p]: result.ok

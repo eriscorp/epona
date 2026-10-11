@@ -81,7 +81,13 @@ describe('every exposed method reaches IPC', () => {
 })
 
 describe('subscription methods', () => {
-  const subscribers = ['onHybrasylLog', 'onHybrasylChildExit', 'onInstanceStatus', 'onInstanceLog']
+  const subscribers = [
+    'onHybrasylLog',
+    'onHybrasylChildExit',
+    'onInstanceStatus',
+    'onInstanceLog',
+    'onMenuCommand'
+  ]
 
   it.each(subscribers)('%s unsubscribes the same listener it registered', (name) => {
     const unsubscribe = api[name](() => {})
@@ -101,6 +107,17 @@ describe('subscription methods', () => {
     const [, listener] = on.mock.calls[0]
     listener({ sender: 'ipc-event-object' }, { instanceId: 'i1', line: 'hello' })
     expect(cb).toHaveBeenCalledWith({ instanceId: 'i1', line: 'hello' })
+  })
+})
+
+describe('the macOS menu channels', () => {
+  it('match src/shared/appMenu.js, which this file cannot import', async () => {
+    const { MENU_COMMAND_CHANNEL, MENU_STATE_CHANNEL } = await import('../shared/appMenu.js')
+    api.onMenuCommand(() => {})
+    expect(on.mock.calls[0][0]).toBe(MENU_COMMAND_CHANNEL)
+    const state = { tab: 'server', canToggleLogPane: false, logPaneOpen: false }
+    api.setMenuState(state)
+    expect(send).toHaveBeenCalledWith(MENU_STATE_CHANNEL, state)
   })
 })
 

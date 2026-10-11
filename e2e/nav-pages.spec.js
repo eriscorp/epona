@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { readFileSync } from 'fs'
-import { join } from 'path'
-import { launchEpona, getMainWindow, repoRoot } from './helpers.js'
+import { GO_TABS } from '../src/shared/appMenu.js'
+import { launchEpona, getMainWindow } from './helpers.js'
 
 // Open every tab, in the real renderer, and check none of them crashed (HTOO-393).
 // Ported from creidhne, which took it from balor.
@@ -16,22 +15,17 @@ import { launchEpona, getMainWindow, repoRoot } from './helpers.js'
 // channel the IPC guard refuses. rendererNodeGlobals.test.js catches the one
 // class (a Node global in the sandboxed renderer) at the source.
 //
-// The list is DERIVED, not written here: it is App.jsx's TAB_ORDER, read as
-// text, because App.jsx is JSX with a component tree behind it and cannot be
-// imported into this Node process. Each tab carries `tab-<kind>` and its panel
+// The list is DERIVED, not written here: it is GO_TABS from src/shared/appMenu.js,
+// the one list App.jsx's TAB_ORDER and the macOS Go menu both read (a plain
+// module with no imports, so this Node process can import it, as creidhne's spec
+// imports its GO_PAGES). Each tab carries `tab-<kind>` and its panel
 // `page-<kind>`. The Settings drawer is added by hand, because it is not a tab.
 //
 // It asserts on the ERROR BOUNDARY and on the panel marker, not on each panel's
 // content, so it does not go stale as the panels change.
 
-function tabOrder() {
-  const source = readFileSync(join(repoRoot, 'src', 'renderer', 'src', 'App.jsx'), 'utf8')
-  const list = /const TAB_ORDER = \[([^\]]*)\]/.exec(source)?.[1] ?? ''
-  return [...list.matchAll(/'([^']+)'/g)].map((m) => m[1])
-}
-
 const PAGES = [
-  ...tabOrder().map((kind) => ({ name: kind, open: `tab-${kind}`, marker: `page-${kind}` })),
+  ...GO_TABS.map(({ tab }) => ({ name: tab, open: `tab-${tab}`, marker: `page-${tab}` })),
   { name: 'settings', open: 'settings-toggle', marker: 'settings-pane' }
 ]
 
@@ -47,9 +41,9 @@ test.describe('every nav page opens', () => {
   })
 
   test('opens each tab and the Settings drawer without hitting the error boundary', async () => {
-    // Guard the guard: a TAB_ORDER that is renamed or reformatted out of the
-    // regex would leave only Settings, and the loop would pass on one page.
-    expect(PAGES.length, 'TAB_ORDER was not read from App.jsx').toBeGreaterThanOrEqual(4)
+    // Guard the guard: an emptied GO_TABS would leave only Settings, and the
+    // loop would pass on one page.
+    expect(PAGES.length, 'GO_TABS lists fewer than three tabs').toBeGreaterThanOrEqual(4)
     ;({ electronApp } = await launchEpona())
     const page = await getMainWindow(electronApp)
     const boundary = page.getByTestId('error-boundary-fallback')

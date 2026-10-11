@@ -39,7 +39,11 @@ test.describe('All themes render without error', () => {
       await page.getByRole('option', { name: theme, exact: true }).click()
       // The app must still be mounted and painted after the switch.
       await expect(page.getByTestId('main-panel')).toBeVisible()
-      await expect(page.getByTestId('app-title')).toHaveText('Epona')
+      await expect(page.getByTestId('title-bar')).toBeVisible()
+      // macOS draws no name in the title bar (the house macOS chrome).
+      if (process.platform !== 'darwin') {
+        await expect(page.getByTestId('app-title')).toHaveText('Epona')
+      }
       backgrounds.add(await readBg())
     }
 

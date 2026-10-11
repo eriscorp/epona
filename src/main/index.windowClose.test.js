@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { actAsNonMac } from './electronDouble.js'
 
 // The main window's close guard (HTOO-456).
 //
@@ -38,13 +39,17 @@ const harness = await vi.hoisted(async () => {
 
 vi.mock('electron', () => harness.electron)
 
+let restorePlatform
+
 beforeAll(async () => {
+  restorePlatform = actAsNonMac()
   process.env.LOCALAPPDATA = sandbox
   await import('./index.js')
   await harness.ready()
 })
 
 afterAll(() => {
+  restorePlatform()
   rmSync(sandbox, { recursive: true, force: true })
 })
 
@@ -91,28 +96,33 @@ describe('closing the main window with nothing running', () => {
 })
 
 describe('closing the main window during an app quit', () => {
-  // A cancelled 'close' also cancels the app.quit() that raised it. On macOS
-  // that would leave the app running with no window, so a confirmed close that
-  // began as a quit is re-issued as a quit rather than as a window close.
-  it('re-issues app.quit() once the close is confirmed', async () => {
+  // A quit asks its question in before-quit, BEFORE it stops anything, and
+  // re-issues app.quit() only after the shutdown sweep. Electron then raises
+  // before-quit again and closes each window. The close guard must let that
+  // close through at once: a cancelled close also cancels the quit, and on
+  // macOS that left the app running with no window. index.quit.test.js pins
+  // the question itself, with a repo-mode server running.
+  it('runs the sweep, quits, and then lets the window close without asking', async () => {
     // The macOS dock path gives us a fresh window with its own guard state.
     harness.emitAppEvent('activate')
     const main = harness.windows.at(-1)
     expect(main.destroyed).toBe(false)
     main.visible = true
+    const destroyedAtHide = observeHide(main)
 
-    // before-quit is what arms the guard's quit path. Under the double the
-    // shutdown sweep in that handler returns early (`app._eponaCleanupRan`
-    // auto-vivifies truthy), so any app.quit() counted from here is the guard's.
-    await harness.emitAppEvent('before-quit', { preventDefault: vi.fn() })
-    const quitsBefore = harness.app.quit.mock.calls.length
+    const first = { preventDefault: vi.fn() }
+    harness.emitAppEvent('before-quit', first)
+    expect(first.preventDefault).toHaveBeenCalled()
+    await vi.waitFor(() => expect(harness.app.quit).toHaveBeenCalledTimes(1))
+
+    // The re-issued quit is not held.
+    const second = { preventDefault: vi.fn() }
+    harness.emitAppEvent('before-quit', second)
+    expect(second.preventDefault).not.toHaveBeenCalled()
 
     main.close()
-    expect(main.destroyed).toBe(false)
-
-    await vi.waitFor(() => expect(harness.app.quit.mock.calls.length).toBe(quitsBefore + 1))
-    expect(main.visible).toBe(false)
-    // The quit is what closes the window; the guard did not close it itself.
-    expect(main.destroyed).toBe(false)
+    expect(main.destroyed).toBe(true)
+    expect(destroyedAtHide).toEqual([false])
+    expect(harness.electron.dialog.showMessageBox).not.toHaveBeenCalled()
   })
 })

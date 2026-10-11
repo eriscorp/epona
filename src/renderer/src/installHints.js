@@ -1,5 +1,7 @@
 // Per-OS install guidance for the optional dependencies Epona can use. Windows
-// uses winget; macOS uses Homebrew; Linux shows Debian/Ubuntu apt. Centralized
+// uses winget; macOS uses Homebrew, except git, which the Xcode Command Line
+// Tools provide (/usr/bin/git is their shim, and a Homebrew git does not repair
+// it); Linux shows Debian/Ubuntu apt. Centralized
 // so the Help dialog and the inline "git not found" hints stay consistent and
 // never tell a non-Windows user to run a winget command.
 
@@ -11,7 +13,7 @@ const COMMANDS = {
     dotnetRuntime: 'winget install --id Microsoft.DotNet.Runtime.10 -e'
   },
   darwin: {
-    git: 'brew install git',
+    git: 'xcode-select --install',
     redis: 'brew install redis',
     dotnetSdk: 'brew install dotnet',
     dotnetRuntime: 'brew install dotnet'
