@@ -211,6 +211,10 @@ These checks are for any OS, or for Windows, and are listed here so that they ar
 
 Rewrite this section for each release: what applies, and what is already done.
 
-All of A1 to A6 and B1 to B8 apply. B4 and B5 depend on what the Mac has; say in the report which ones you skipped and why. The Windows-side items in "Owed elsewhere" are not done yet.
+**macOS: done** on 2026-10-11 (macOS 27.0.1, Apple Silicon, epona `66ffa71`). A1 to A5, B1, B2, B3 and B6 pass, with every count as this page expects; the results are on each card and summed up on HTOO-242. B4 and B5 were skipped by Sabrael's decision: tests cover both, and a fault would come in as a complaint.
+
+**Linux: to do.** A1 to A6 and B6 to B8. A2 expects 24 passed and 5 skipped. For B6, record the case of the client file names exactly as they are on disk (HTOO-287, HTOO-288).
+
+**Windows:** the items in "Owed elsewhere" are not done yet.
 
 When the release is published, Sabrael runs `npm run publish:version -- v2.9.0` on the Windows box. That closes Epona's row on HTOO-382; it is not a Mac or Linux step.
