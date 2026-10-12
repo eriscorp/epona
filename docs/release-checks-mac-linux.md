@@ -215,6 +215,6 @@ Rewrite this section for each release: what applies, and what is already done.
 
 **Linux: done** on 2026-10-11 (Linux Mint 22.3, x86_64, Cinnamon on X11, epona `db45145`). A1 to A6 and B6 to B8 pass, with every count as this page expects; the results are on each card and summed up on HTOO-242. The client file case from B6 is on HTOO-287.
 
-**Windows:** the items in "Owed elsewhere" are not done yet.
+**Windows: done** (Sabrael, 2026-10-12): the items in "Owed elsewhere" are checked. Nothing on this page is owed for 2.9.0.
 
 When the release is published, Sabrael runs `npm run publish:version -- v2.9.0` on the Windows box. That closes Epona's row on HTOO-382; it is not a Mac or Linux step.
