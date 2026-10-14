@@ -2,7 +2,8 @@
  * HOUSE MODULE — launch-env v1 (JS port; types stripped. mabon WP98, HTOO-512;
  * design: oghma WP34).
  * Copied verbatim between the house apps that run git; it imports nothing from
- * the app. Pure: it reads git's stderr and names the cause. It never changes what
+ * the app. hyb-electron-template owns it: change it there, then port it to the
+ * rest. Pure: it reads git's stderr and names the cause. It never changes what
  * git does.
  */
 
