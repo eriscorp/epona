@@ -50,9 +50,8 @@ function AboutDialog({ open, onClose }) {
           Version {version}
         </Typography>
         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-          {/* color="inherit" + always-underline keeps links readable on every
-              theme. MUI Link uses primary.main, which is below 4.5:1 against
-              paper on chadul, danaan, grinneal and spark (HTOO-355). */}
+          {/* color="inherit" + always-underline draws the links in the body text
+              colour, which reads on every surface of every theme (HTOO-355, HTOO-572). */}
           <Link
             href="https://www.hybrasyl.com"
             target="_blank"

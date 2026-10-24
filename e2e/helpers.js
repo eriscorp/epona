@@ -101,12 +101,14 @@ export async function readGeometry(electronApp, page) {
       const el = document.querySelector(sel)
       return el ? Math.round(window.screenX + el.getBoundingClientRect().left) : null
     }
-    const title = document.querySelector('[data-testid="app-title"]')
+    // The house TitleBar (title-bar v1) draws the wordmark as an h6, with no
+    // test id of its own.
+    const title = document.querySelector('[data-testid="title-bar"] h6')
     return {
       screenX: window.screenX,
       innerWidth: window.innerWidth,
       panelScreenLeft: screenLeftOf('[data-testid="main-panel"]'),
-      titleScreenLeft: screenLeftOf('[data-testid="app-title"]'),
+      titleScreenLeft: screenLeftOf('[data-testid="title-bar"] h6'),
       statusScreenLeft: screenLeftOf('[data-testid="client-status"]'),
       // Guards against responsiveFontSizes rescaling the title when the window
       // crosses a breakpoint (a side pane opening widens 480→840px).

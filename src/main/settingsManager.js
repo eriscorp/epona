@@ -2,6 +2,7 @@ import { join } from 'path'
 import { promises as fs } from 'fs'
 import { randomUUID } from 'crypto'
 import { basenameOfPath } from '../shared/pathBasename.js'
+import { migrateThemeName } from '../shared/themeNames.js'
 
 const DEFAULT_PROFILES = [
   {
@@ -268,7 +269,8 @@ function withDefaults(data) {
     hideWalls: typeof data?.hideWalls === 'boolean' ? data.hideWalls : DEFAULTS.hideWalls,
     groundItemHints:
       typeof data?.groundItemHints === 'boolean' ? data.groundItemHints : DEFAULTS.groundItemHints,
-    theme: typeof data?.theme === 'string' ? data.theme : DEFAULTS.theme,
+    // A retired theme name (spark, HTOO-572) loads as the theme that replaces it.
+    theme: typeof data?.theme === 'string' ? migrateThemeName(data.theme) : DEFAULTS.theme,
     activeProfile:
       typeof data?.activeProfile === 'string' ? data.activeProfile : DEFAULTS.activeProfile,
     profiles:

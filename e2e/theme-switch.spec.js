@@ -8,7 +8,7 @@ import { launchEpona, getMainWindow } from './helpers.js'
 // error, the app stays mounted, and the background actually changes (proof the
 // theme is applied, not silently ignored).
 
-const THEMES = ['Hybrasyl', 'Chadul', 'Danaan', 'Grinneal', 'Spark', 'Mundanes']
+const THEMES = ['Hybrasyl', 'Chadul', 'Danaan', 'Grinneal', 'Mundanes', 'Dubhaimid']
 
 test.describe('All themes render without error', () => {
   let electronApp
@@ -42,7 +42,9 @@ test.describe('All themes render without error', () => {
       await expect(page.getByTestId('title-bar')).toBeVisible()
       // macOS draws no name in the title bar (the house macOS chrome).
       if (process.platform !== 'darwin') {
-        await expect(page.getByTestId('app-title')).toHaveText('Epona')
+        await expect(
+          page.getByTestId('title-bar').getByText('Epona', { exact: true })
+        ).toBeVisible()
       }
       backgrounds.add(await readBg())
     }
@@ -50,8 +52,8 @@ test.describe('All themes render without error', () => {
     // No render-time explosions from any theme object.
     expect(pageErrors, `renderer errors: ${pageErrors.join(' | ')}`).toEqual([])
 
-    // The six themes aren't all the same color — light (Mundanes) vs the dark
-    // fantasy themes differ, so we should have seen more than one background.
+    // The six themes aren't all the same color — light (Mundanes, Danaan) vs
+    // the dark themes differ, so we should have seen more than one background.
     expect(backgrounds.size).toBeGreaterThan(1)
   })
 })

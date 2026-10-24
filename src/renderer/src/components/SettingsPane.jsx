@@ -44,8 +44,8 @@ import UpdateCheckButton from './UpdateCheckButton'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { useMenuRequest } from '../useMenuRequest'
-import { DEPTH } from './titleChrome'
-import { THEME_LABELS } from '../themes'
+import { LOGO_FILTER } from './titleChrome'
+import { THEME_LABELS } from '../../../shared/themeNames.js'
 import eponaLogo from '../assets/epona.webp'
 import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
@@ -547,16 +547,15 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               src={eponaLogo}
               alt=""
               aria-hidden
-              sx={{ width: 40, height: 40, borderRadius: 0.5, filter: `drop-shadow(${DEPTH})` }}
+              sx={{ width: 40, height: 40, borderRadius: 0.5, filter: LOGO_FILTER.keyline }}
             />
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                 Epona{version ? ` v${version}` : ''}
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, mt: 0.25 }}>
-                {/* color="inherit" + always-underline keeps links readable on every
-                    theme. MUI Link uses primary.main, which is below 4.5:1 against
-                    paper on chadul, danaan, grinneal and spark (HTOO-355). */}
+                {/* color="inherit" + always-underline draws the links in the body text
+                    colour, which reads on every surface of every theme (HTOO-355, HTOO-572). */}
                 <Link
                   href="https://www.hybrasyl.com"
                   target="_blank"

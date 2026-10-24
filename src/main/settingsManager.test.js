@@ -101,22 +101,22 @@ describe('save/load round-trip', () => {
     const mgr = createSettingsManager(dir)
     const base = await mgr.load()
     await Promise.all([
-      mgr.save({ ...base, theme: 'spark' }),
+      mgr.save({ ...base, theme: 'dubhaimid' }),
       mgr.save({ ...base, theme: 'grinneal' })
     ])
 
     const reloaded = await createSettingsManager(dir).load()
-    expect(['spark', 'grinneal']).toContain(reloaded.theme)
+    expect(['dubhaimid', 'grinneal']).toContain(reloaded.theme)
   })
 
   it('writes a backup of the previous primary on subsequent save', async () => {
     const mgr = createSettingsManager(dir)
     const base = await mgr.load()
-    await mgr.save({ ...base, theme: 'spark' })
+    await mgr.save({ ...base, theme: 'dubhaimid' })
     await mgr.save({ ...base, theme: 'chadul' })
 
     const backup = JSON.parse(await fs.readFile(join(dir, 'settings.bak.json'), 'utf-8'))
-    expect(backup.theme).toBe('spark')
+    expect(backup.theme).toBe('dubhaimid')
     const primary = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
     expect(primary.theme).toBe('chadul')
   })
@@ -282,6 +282,29 @@ describe('targetKind', () => {
 
     const settings = await createSettingsManager(dir).load()
     expect(settings.targetKind).toBe('legacy')
+  })
+})
+
+describe('theme', () => {
+  // Spark retired in HTOO-572: it measured within 1.03–1.07:1 of dubhaimid.
+  it('loads a saved spark theme as dubhaimid', async () => {
+    const saved = { clientPath: '', theme: 'spark', activeProfile: 'official' }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(saved), 'utf-8')
+
+    const mgr = createSettingsManager(dir)
+    const settings = await mgr.load()
+    expect(settings.theme).toBe('dubhaimid')
+
+    // The next save writes the new name, so the file stops naming spark.
+    await mgr.save(settings)
+    const primary = JSON.parse(await fs.readFile(join(dir, 'settings.json'), 'utf-8'))
+    expect(primary.theme).toBe('dubhaimid')
+  })
+
+  it('keeps a current theme name', async () => {
+    const saved = { clientPath: '', theme: 'grinneal', activeProfile: 'official' }
+    await fs.writeFile(join(dir, 'settings.json'), JSON.stringify(saved), 'utf-8')
+    expect((await createSettingsManager(dir).load()).theme).toBe('grinneal')
   })
 })
 

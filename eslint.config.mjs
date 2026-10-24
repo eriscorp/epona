@@ -24,5 +24,13 @@ export default [
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn'
     }
+  },
+  {
+    // The house title-bar module is the template's JS edition, copied as it is
+    // (HTOO-572). It imports React for the classic JSX runtime. Epona uses the
+    // automatic runtime, so this rule marks that import as used. Do not edit
+    // the file to remove the import: the next port would put it back.
+    files: ['src/renderer/src/components/TitleBar.jsx'],
+    rules: { 'react/jsx-uses-react': 'error' }
   }
 ]

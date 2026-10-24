@@ -5,7 +5,7 @@ import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import { themesByName } from './themes'
-import TitleBar from './components/TitleBar'
+import AppTitleBar from './components/AppTitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
 import OptionsPanel from './components/OptionsPanel'
@@ -265,7 +265,7 @@ export default function App() {
             overflow: 'hidden'
           }}
         >
-          <TitleBar />
+          <AppTitleBar />
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
           <BridgeErrorBanner error={bridgeError} />
           <NavToolbar
