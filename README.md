@@ -104,7 +104,7 @@ Settings persist to `%LOCALAPPDATA%\Erisco\Epona\settings.json`. Chromium's cach
 
 - **Atomic writes** — every save writes `settings.tmp.json` and renames over `settings.json` so a crash mid-save can't leave the file half-written. The previous primary is copied to `settings.bak.json` before rename, so corrupt settings can be recovered on next load.
 - **Schema migrations on load** — settings written by older Epona versions are migrated forward in-memory; the migrated shape is persisted on the next save. No-op once already migrated.
-- **Themes** — five themes: Hybrasyl, Chadul, Danaan, Grinneal (shared with Creidhne and Taliesin) and Spark (a faithful port of the original WPF launcher's dark theme).
+- **Themes** — six themes: Hybrasyl, Chadul, Danaan and Grinneal (the four Dark Ages themes), and Mundanes and Dubhaimid (light and dark, with plain controls). They are the house palettes, the same as in the other house apps. Settings → Theme → Theme gallery shows each control in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
 
 ### Remote Desktop
 
@@ -183,7 +183,7 @@ Releases are produced via GitHub Actions on `v*` tag push — see [`docs/release
 | `src/main/gitOps.js`, `worktreeManager.js`, `buildProps.js` | Git plumbing for repo-mode launches |
 | `src/preload/` | Context bridge exposing `sparkAPI` to the renderer |
 | `src/renderer/src/components/` | UI components — title bar, nav toolbar, profile selector, options, action buttons, settings pane, log pane, server instance panel, hybrasyl client panel |
-| `src/renderer/src/themes/` | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Spark, Mundanes) |
+| `src/renderer/src/themes/` | MUI themes (Hybrasyl, Chadul, Danaan, Grinneal, Mundanes, Dubhaimid), copied from the house template |
 | `src/shared/` | Pure logic shared by main, preload and renderer — no electron or node imports |
 | `e2e/` | Playwright specs driving the built app (Windows) |
 | `docs/` | Reference docs (`antivirus.md`, `da-installer.md`, `release-process.md`, `server-launch-resolution.md`) |

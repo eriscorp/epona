@@ -28,7 +28,7 @@ A desktop launcher for Dark Ages and Hybrasyl. It starts the legacy client (patc
 
 5. **The renderer global is `window.sparkAPI`, not the house `window.api`.** Renderer code reaches it through `src/renderer/src/diagnosticsBridge.js` where possible, so the name is in one place. Renaming it is a breaking change to the preload contract with no user-visible payoff; it stays.
 
-6. **The six themes are hand-written objects, not a factory.** `src/renderer/src/themes/` holds six theme files, `danaan` especially intricate. Collapsing them into a `createFantasyTheme(tokens)` generator has been proposed by three separate review passes and declined every time. It is the register's headline entry.
+6. **The six themes are hand-written objects, not a factory.** `src/renderer/src/themes/` holds six theme files, `danaan` especially intricate. Since HTOO-572 they are the template's house files (the JS editions in `hyb-electron-template/house-js/`), copied as they are: a change goes into the template first, then each app copies it. Collapsing them into a `createFantasyTheme(tokens)` generator has been proposed by three separate review passes and declined every time. It is the register's headline entry. Spark retired in HTOO-572 (it was within 1.03–1.07:1 of dubhaimid); a saved `spark` setting loads as `dubhaimid`.
 
 7. **Release notes are authored in `CHANGELOG.md` as PRs land**, user-facing prose only. Cutting a release promotes `## [Unreleased]`, and the tag fires `release.yml`, which extracts that section into the GitHub release body. Full steps in [`../release-process.md`](../release-process.md).
 

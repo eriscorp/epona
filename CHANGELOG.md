@@ -31,6 +31,28 @@ the rules above.
 
 ## [Unreleased]
 
+### Added
+
+- **The Dubhaimid theme.** Dubhaimid is the dark theme with plain controls that the other house apps have. Select it in Settings → Theme.
+- **A theme gallery.** Settings → Theme → Theme gallery shows each control in the theme that you select, with the contrast that it measures. It is for a check by eye. Click Back to go to the tabs again.
+
+### Changed
+
+- **The six themes use the house colours.** Text, links, the accent colour and the status colours have a contrast of 4.5:1 or more on the page and on the panels, in every theme. Labels on filled controls also have 4.5:1 or more.
+- **A selected chip and a status chip show their colour.** Before, each theme drew all chips the same. For example, the chip in What's New that marks the version you run now shows the accent colour.
+- **The title bar is the house title bar.** Danaan and Grinneal have a dark bar with light, outlined text. No theme engraves its bar text. The close button turns red under the pointer in every theme. The name on the bar is larger, and the bar has more space at each end.
+- **Body text in the four Dark Ages themes is larger,** as in the other house apps.
+- **The client status and the icons on the toolbar below the title bar are easy to read in every theme.** Before, the status text was hard to read on the Danaan, Grinneal and Mundanes toolbars.
+
+### Removed
+
+- **The Spark theme.** With the house colours, Spark was almost the same as Dubhaimid. If your settings name Spark, Epona opens in Dubhaimid.
+
+### Fixed
+
+- **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
+- **A Stop Server button shows the error colour in the four Dark Ages themes.** Before, it looked the same as the other buttons.
+
 ## [2.9.0] - 2026-10-12
 
 ### Added
