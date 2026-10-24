@@ -19,14 +19,18 @@ import { launchEpona, getMainWindow } from './helpers.js'
 // the one list App.jsx's TAB_ORDER and the macOS Go menu both read (a plain
 // module with no imports, so this Node process can import it, as creidhne's spec
 // imports its GO_PAGES). Each tab carries `tab-<kind>` and its panel
-// `page-<kind>`. The Settings drawer is added by hand, because it is not a tab.
+// `page-<kind>`. The Settings drawer and the theme gallery are added by hand,
+// because they are not tabs.
 //
 // It asserts on the ERROR BOUNDARY and on the panel marker, not on each panel's
 // content, so it does not go stale as the panels change.
 
 const PAGES = [
   ...GO_TABS.map(({ tab }) => ({ name: tab, open: `tab-${tab}`, marker: `page-${tab}` })),
-  { name: 'settings', open: 'settings-toggle', marker: 'settings-pane' }
+  { name: 'settings', open: 'settings-toggle', marker: 'settings-pane' },
+  // The theme gallery opens from the Theme section of the Settings drawer, which
+  // the line above leaves open (Theme is the section that starts open).
+  { name: 'theme gallery', open: 'theme-gallery-open', marker: 'theme-gallery-page' }
 ]
 
 // A fault thrown shortly after a panel mounts (an effect, a first IPC answer)
@@ -40,10 +44,10 @@ test.describe('every nav page opens', () => {
     await electronApp?.close()
   })
 
-  test('opens each tab and the Settings drawer without hitting the error boundary', async () => {
+  test('opens each tab, the Settings drawer and the theme gallery without hitting the error boundary', async () => {
     // Guard the guard: an emptied GO_TABS would leave only Settings, and the
     // loop would pass on one page.
-    expect(PAGES.length, 'GO_TABS lists fewer than three tabs').toBeGreaterThanOrEqual(4)
+    expect(PAGES.length, 'GO_TABS lists fewer than three tabs').toBeGreaterThanOrEqual(5)
     ;({ electronApp } = await launchEpona())
     const page = await getMainWindow(electronApp)
     const boundary = page.getByTestId('error-boundary-fallback')

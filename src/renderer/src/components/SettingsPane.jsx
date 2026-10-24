@@ -38,6 +38,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined'
+import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined'
 import AboutDialog from './AboutDialog'
 import WhatsNewDialog from './WhatsNewDialog'
 import UpdateCheckButton from './UpdateCheckButton'
@@ -107,7 +108,14 @@ function SettingsSection({ panel, title, expanded, onToggle, action, detailsSx, 
   )
 }
 
-export default function SettingsPane({ settings, versions, onClose, onChange, onReportIssue }) {
+export default function SettingsPane({
+  settings,
+  versions,
+  onClose,
+  onChange,
+  onReportIssue,
+  onOpenThemeGallery
+}) {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [whatsNewOpen, setWhatsNewOpen] = useState(false)
   // The macOS menu's About and What's New open this pane and leave a request,
@@ -294,6 +302,17 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               ))}
             </Select>
           </FormControl>
+          {/* The house theme gallery (HTOO-572): each control in each theme, with
+              its measured contrast, for review by eye. */}
+          <Button
+            size="small"
+            startIcon={<PaletteOutlinedIcon />}
+            onClick={onOpenThemeGallery}
+            data-testid="theme-gallery-open"
+            sx={{ mt: 1 }}
+          >
+            Theme gallery
+          </Button>
         </SettingsSection>
 
         {/* Legacy Client — path + memory-patch version target */}
