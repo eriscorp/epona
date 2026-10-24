@@ -10,7 +10,7 @@ import { themesByName as houseThemes } from './index'
  * sizes it had before the house palette (Sabrael, 2026-10-24): MUI's default
  * body and subtitle sizes, at every window width. h6 is the house size, which is
  * also the size Epona had. The title-bar wordmark size is `EPONA_WORDMARK_SIZE`,
- * which AppTitleBar applies, because the house TitleBar sets its own size.
+ * which AppTitleBar passes to the house TitleBar as `wordmarkSize`.
  *
  * The theme files stay byte-identical to the template (HTOO-572). This file is
  * Epona's own, and it changes typography only: the palette and the component
@@ -26,7 +26,7 @@ export const EPONA_TYPE_SIZES = {
   subtitle2: '0.875rem'
 }
 
-/** The title-bar wordmark. The house TitleBar draws 1.5rem; Epona drew 1.15rem. */
+/** The title-bar wordmark. The house TitleBar's default is 1.5rem; Epona drew 1.15rem. */
 export const EPONA_WORDMARK_SIZE = '1.15rem'
 
 /**

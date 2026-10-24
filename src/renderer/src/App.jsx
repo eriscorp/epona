@@ -287,6 +287,7 @@ export default function App() {
           <NavToolbar
             detectedVersion={detectedVersion}
             clientPath={settings.clientPath}
+            settingsOpen={settingsOpen}
             onLocateClient={handleLocateClient}
             onToggleSettings={() => setSettingsOpen((o) => !o)}
             onOpenHelp={() => setHelpOpen(true)}

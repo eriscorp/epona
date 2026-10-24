@@ -41,7 +41,8 @@ the rules above.
 - **The six themes use the house colours.** Text, links, the accent colour and the status colours have a contrast of 4.5:1 or more on the page and on the panels, in every theme. Labels on filled controls also have 4.5:1 or more.
 - **A selected chip and a status chip show their colour.** Before, each theme drew all chips the same. For example, the chip in What's New that marks the version you run now shows the accent colour.
 - **The title bar is the house title bar.** Danaan and Grinneal have a dark bar with light, outlined text. No theme engraves its bar text. The close button turns red under the pointer in every theme. The bar has more space at each end.
-- **The client status and the icons on the toolbar below the title bar are easy to read in every theme.** Before, the status text was hard to read on the Danaan, Grinneal and Mundanes toolbars.
+- **The client status and the icons on the toolbar below the title bar are easy to read in every theme.** Before, the status text was hard to read on the Danaan, Grinneal and Mundanes toolbars. The toolbar is no longer faded: it has the same colour as the title bar. While the Settings pane is open, the Settings button has a light background and a ring.
+- **Visited links are easy to read in every theme.** Before, a visited link, such as the release link of the update check, was hard to read in Hybrasyl and Chadul.
 
 ### Removed
 

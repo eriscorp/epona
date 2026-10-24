@@ -1,12 +1,13 @@
 import { Toolbar, IconButton, Tooltip, Divider, Box, Typography } from '@mui/material'
 import { GiSettingsKnobs, GiMagnifyingGlass, GiHelp, GiBugNet } from 'react-icons/gi'
-import { chromeKind, windowButtonSx } from './titleChrome'
+import { chromeKind, navButtonSx } from './titleChrome'
 import { useSettings } from '../store/settingsStore.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 
 export default function NavToolbar({
   detectedVersion,
   clientPath,
+  settingsOpen = false,
   onLocateClient,
   onToggleSettings,
   onOpenHelp,
@@ -14,11 +15,19 @@ export default function NavToolbar({
 }) {
   const isWindows = window.sparkAPI.platform === 'win32'
   const theme = useSettings((s) => s.settings?.theme)
-  // A second bar under the title bar. It paints secondary.main too, so its
-  // icons take the title bar's window-button chrome from the house module
-  // (titleChrome.js): secondary.contrastText, the keyline on the decorated
-  // themes, and the same hover (HTOO-572). navToolbar.test.jsx measures them.
-  const btnSx = { ...windowButtonSx(chromeKind(theme)), mx: -0.5 }
+  // A second bar under the title bar. It paints secondary.main too, and its
+  // buttons take the house nav-bar chrome (titleChrome.js, HTOO-572): the bar's
+  // text colour, the house hover, and the one current-page mark, here on
+  // Settings while its pane is open. The bar is not faded with opacity: a
+  // faded bar draws its text and icons below the ratios the house measures.
+  // NavToolbar.test.jsx measures the caption and the icons in each theme.
+  const kind = chromeKind(theme)
+  // The game glyphs keep the size they had on this bar.
+  const btnSx = (current = false) => ({
+    ...navButtonSx(kind, current),
+    '& svg': { fontSize: '1.4em' },
+    mx: -0.5
+  })
   // Windows shows the detected legacy-client version (memory-patch target).
   // Non-Windows points at a Dark Ages asset folder, which carries no version —
   // so report whether assets have been located, and which folder.
@@ -34,7 +43,7 @@ export default function NavToolbar({
     <Toolbar
       variant="dense"
       disableGutters
-      sx={{ bgcolor: 'secondary.main', minHeight: 40, opacity: 0.85, px: 2 }}
+      sx={{ bgcolor: 'secondary.main', minHeight: 40, px: 2 }}
     >
       {/* Text on the bar is secondary.contrastText (HTOO-572). text.button is for
           headings on the page: on this bar it measured 1.19:1 in mundanes, 1.66:1
@@ -55,7 +64,7 @@ export default function NavToolbar({
       <Box sx={{ flexGrow: 1 }} />
 
       <Tooltip title={isWindows ? 'Locate Client' : 'Locate Assets'}>
-        <IconButton sx={btnSx} onClick={onLocateClient}>
+        <IconButton sx={btnSx()} onClick={onLocateClient}>
           <GiMagnifyingGlass />
         </IconButton>
       </Tooltip>
@@ -67,7 +76,12 @@ export default function NavToolbar({
       />
 
       <Tooltip title="Settings">
-        <IconButton data-testid="settings-toggle" sx={btnSx} onClick={onToggleSettings}>
+        <IconButton
+          data-testid="settings-toggle"
+          aria-pressed={settingsOpen}
+          sx={btnSx(settingsOpen)}
+          onClick={onToggleSettings}
+        >
           <GiSettingsKnobs />
         </IconButton>
       </Tooltip>
@@ -75,13 +89,13 @@ export default function NavToolbar({
       <Tooltip
         title={isWindows ? 'Recommended installs (winget commands)' : 'Recommended installs'}
       >
-        <IconButton sx={btnSx} onClick={onOpenHelp}>
+        <IconButton sx={btnSx()} onClick={onOpenHelp}>
           <GiHelp />
         </IconButton>
       </Tooltip>
 
       <Tooltip title="Report an issue">
-        <IconButton sx={btnSx} onClick={onReportIssue}>
+        <IconButton sx={btnSx()} onClick={onReportIssue}>
           <GiBugNet />
         </IconButton>
       </Tooltip>
