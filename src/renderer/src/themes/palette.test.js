@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { themesByName } from './index'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName } from './eponaThemes'
 import { filledControls } from './filledControls'
 import { blend, contrast, luminance } from '../lib/contrast'
 

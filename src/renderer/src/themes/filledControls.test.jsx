@@ -5,7 +5,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import { Alert, Box, Button, Chip, IconButton } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
-import { themesByName } from './index'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName } from './eponaThemes'
 import { contrast } from '../lib/contrast'
 import UpdateNotice, { START_DELAY_MS } from '../components/UpdateNotice'
 

@@ -2,7 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
-import { themesByName } from '../themes'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName } from '../themes/eponaThemes'
 import { blend, contrast, parseColor } from '../lib/contrast'
 import { useSettings } from '../store/settingsStore.js'
 import NavToolbar from './NavToolbar'

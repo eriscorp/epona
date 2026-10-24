@@ -44,7 +44,8 @@ import FormatItalicIcon from '@mui/icons-material/FormatItalic'
 import StarIcon from '@mui/icons-material/Star'
 import { useSettings } from '../store/settingsStore.js'
 import { blend, contrast, parseColor } from '../lib/contrast'
-import { themesByName } from '../themes'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName, EPONA_WORDMARK_SIZE } from '../themes/eponaThemes'
 import {
   GLYPHS,
   LOGO_FILTER,
@@ -586,7 +587,8 @@ function BarPreview({ name }) {
               variant="h6"
               sx={{
                 fontWeight: 'bold',
-                '&&': { fontSize: '1.5rem' },
+                // Epona's wordmark size, as AppTitleBar draws it (Sabrael, 2026-10-24).
+                '&&': { fontSize: EPONA_WORDMARK_SIZE },
                 color: 'secondary.contrastText',
                 textShadow: TITLE_SHADOW[kind]
               }}

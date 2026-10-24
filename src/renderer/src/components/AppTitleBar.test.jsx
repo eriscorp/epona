@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
-import { hybrasylTheme } from '../themes'
+import { themesByName, EPONA_WORDMARK_SIZE } from '../themes/eponaThemes'
 import { appIdentity } from '../../../shared/appIdentity.js'
 import { useSettings } from '../store/settingsStore.js'
 import AppTitleBar from './AppTitleBar'
@@ -18,7 +18,7 @@ import AppTitleBar from './AppTitleBar'
 function mount(platform = 'win32') {
   window.sparkAPI = { platform, minimizeWindow: vi.fn(), closeWindow: vi.fn() }
   const view = render(
-    <ThemeProvider theme={hybrasylTheme}>
+    <ThemeProvider theme={themesByName.hybrasyl}>
       <AppTitleBar />
     </ThemeProvider>
   )
@@ -65,6 +65,13 @@ describe('AppTitleBar', () => {
     useSettings.setState((s) => ({ settings: { ...s.settings, theme: 'mundanes' } }))
     mount()
     expect(shadow()).not.toMatch(/#000/)
+  })
+
+  it("draws the wordmark at Epona's size, not the house 1.5rem (Sabrael, 2026-10-24)", () => {
+    mount()
+    expect(getComputedStyle(screen.getByText(appIdentity.productName)).fontSize).toBe(
+      EPONA_WORDMARK_SIZE
+    )
   })
 
   it('on macOS draws no window buttons, no logo and no name', () => {

@@ -5,7 +5,8 @@ import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from '@mui/material/styles'
 import StarIcon from '@mui/icons-material/Star'
-import { themesByName } from '../themes'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName } from '../themes/eponaThemes'
 import TitleBar, { ChromeButton } from './TitleBar'
 
 function renderBar(props = {}) {

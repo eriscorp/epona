@@ -2,7 +2,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { ThemeProvider, Chip } from '@mui/material'
-import { themesByName } from './index'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName } from './eponaThemes'
 
 const THEME_NAMES = Object.keys(themesByName)
 
