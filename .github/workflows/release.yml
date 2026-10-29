@@ -42,6 +42,12 @@ permissions:
 # shallow clone then makes the check pass and measure nothing.
 
 jobs:
+  # The Linux jobs name `ubuntu-24.04`, not `ubuntu-latest` (house-wide,
+  # 2026-10-29). GitHub moves `ubuntu-latest` to Ubuntu 26 from 2026-10-19, and
+  # a new image under a release build is a change nobody chose: xvfb and the
+  # packaging tools come from the image. Move to a newer image on purpose, in
+  # its own commit, after one `workflow_dispatch` run on it passes.
+  #
   build-windows:
     # Pinned to windows-2022 (VS 2022 / version 17). windows-latest has
     # rolled to an image with VS 18 (the "Microsoft Visual Studio\18"
@@ -196,7 +202,7 @@ jobs:
           retention-days: 1
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
@@ -338,7 +344,7 @@ jobs:
           retention-days: 1
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build-windows, build-linux, build-mac]
     if: github.ref_type == 'tag'
 
