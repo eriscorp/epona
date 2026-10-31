@@ -5,6 +5,7 @@ import { tmpdir } from 'os'
 import { spawn } from 'child_process'
 import {
   sanitizeBranchName,
+  worktreeDirName,
   ensureWorktree,
   releaseWorktree,
   releaseAll,
@@ -66,6 +67,33 @@ describe('sanitizeBranchName', () => {
   })
 })
 
+describe('worktreeDirName (HTOO-655)', () => {
+  it('keeps the readable name for a lower-case branch', () => {
+    expect(worktreeDirName('develop')).toBe('develop')
+    expect(worktreeDirName('feature/foo')).toBe('feature__foo')
+    expect(worktreeDirName('release/v1.2.3')).toBe('release__v1.2.3')
+  })
+
+  it('gives two branches that differ only in case two folders, with case ignored', () => {
+    // macOS and Windows ignore case in file names, so Feature/X and feature/x
+    // shared one folder.
+    const upper = worktreeDirName('Feature/X')
+    const lower = worktreeDirName('feature/x')
+    expect(upper.toLowerCase()).not.toBe(lower.toLowerCase())
+    expect(upper).toMatch(/^Feature__X-[0-9a-f]{8}$/)
+  })
+
+  it('gives branches that sanitize to one name their own folders', () => {
+    expect(worktreeDirName('a/b')).not.toBe(worktreeDirName('a__b'))
+    expect(worktreeDirName('a:b')).not.toBe(worktreeDirName('a_b'))
+    expect(worktreeDirName('a_/b')).not.toBe(worktreeDirName('a/_b'))
+  })
+
+  it('is stable for one branch', () => {
+    expect(worktreeDirName('Feature/X')).toBe(worktreeDirName('Feature/X'))
+  })
+})
+
 // Every case below runs real git (init, commit, worktree add/remove) in a temp
 // repo. Alone a case takes well under a second, but under a loaded full run the
 // spawns queue and a case can pass the 5 s default. The block has its own limit.
@@ -99,6 +127,22 @@ describe('worktreeManager', { timeout: 30_000 }, () => {
     it('sanitizes slash-bearing branch names into the on-disk path', async () => {
       const path = await ensureWorktree(repoPath, 'feature/foo')
       expect(path).toBe(resolvePath(repoPath, '.worktrees', 'feature__foo'))
+      expect((await fs.stat(path)).isDirectory()).toBe(true)
+    })
+
+    it('adopts a worktree made under the old folder name (HTOO-655)', async () => {
+      // Before the hash, a branch with capitals got its readable name alone.
+      await gitSync(repoPath, ['branch', 'Feature/X'])
+      const old = resolvePath(repoPath, '.worktrees', 'Feature__X')
+      await gitSync(repoPath, ['worktree', 'add', old, 'Feature/X'])
+
+      expect(await ensureWorktree(repoPath, 'Feature/X')).toBe(old)
+    })
+
+    it('makes a new worktree for a branch with capitals under the hashed name', async () => {
+      await gitSync(repoPath, ['branch', 'Feature/X'])
+      const path = await ensureWorktree(repoPath, 'Feature/X')
+      expect(path).toBe(resolvePath(repoPath, '.worktrees', worktreeDirName('Feature/X')))
       expect((await fs.stat(path)).isDirectory()).toBe(true)
     })
 
