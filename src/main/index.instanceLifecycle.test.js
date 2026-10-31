@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest'
+import { EventEmitter } from 'events'
 import { rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -292,5 +293,118 @@ describe('instance:stop for an instance Epona never launched', () => {
     expect(result.adopted).toBe(true)
     expect(result.error).toMatch(/2610/)
     expect(result.error).toMatch(/Task Manager/)
+  })
+})
+
+// A server child, as spawnDirect returns one on macOS and Linux. Like Node's
+// ChildProcess: an exit by signal leaves `exitCode` null, and a spawn that
+// failed has no pid and emits only 'error'.
+function fakeServerChild({ pid = 5150 } = {}) {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  if (pid !== null) child.pid = pid
+  child.exitCode = null
+  child.exit = (code, signal = null) => {
+    child.exitCode = code
+    child.emit('exit', code, signal)
+  }
+  child.kill = vi.fn(() => {
+    setImmediate(() => child.exit(null, 'SIGTERM'))
+    return true
+  })
+  return child
+}
+
+async function startChildInstance(child) {
+  launchServer.mockResolvedValue({ success: true, child, cleanup })
+  const result = await harness.invoke('instance:start', { id: 'inst-1' })
+  expect(result.success).toBe(true)
+}
+
+const flush = () => new Promise((r) => setImmediate(r))
+const sent = (channel) =>
+  harness.windows
+    .at(-1)
+    .webContents.send.mock.calls.filter(([c]) => c === channel)
+    .map(([, payload]) => payload)
+
+describe('a server child (macOS and Linux)', () => {
+  it('that exits on its own is untracked, and its cleanup runs (HTOO-641)', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+
+    child.exit(1)
+    await flush()
+
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ instanceId: 'inst-1', pid: 5150, code: 1, signal: null })
+    ])
+    // Untracked: Stop finds nothing to stop, and Start launches again rather than
+    // overwriting the old entry and leaking its cleanup.
+    await expect(harness.invoke('instance:stop', 'inst-1')).resolves.toEqual({
+      success: true,
+      wasRunning: false
+    })
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('that failed to spawn is untracked, so Start works again (HTOO-589)', async () => {
+    const child = fakeServerChild({ pid: null })
+    await startChildInstance(child)
+
+    child.emit('error', new Error('spawn dotnet ENOENT'))
+    await flush()
+
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(sent('instance:log')).toContainEqual({
+      instanceId: 'inst-1',
+      stream: 'stderr',
+      line: '[spawn error] spawn dotnet ENOENT'
+    })
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ instanceId: 'inst-1', code: null, signal: null })
+    ])
+    const again = fakeServerChild()
+    await startChildInstance(again)
+    expect(launchServer).toHaveBeenCalledTimes(2)
+  })
+
+  it('stopped by Stop runs its cleanup once, from the exit', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+
+    const result = await harness.invoke('instance:stop', 'inst-1')
+
+    expect(result).toEqual({ success: true, wasRunning: true })
+    expect(child.kill).toHaveBeenCalled()
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('reset finishes the cleanup before it relaunches', async () => {
+    // The cleanup releases the worktree and the build-props claim, which the
+    // relaunch takes again. A relaunch that ran first would be refused.
+    const order = []
+    let release
+    cleanup.mockImplementation(() => {
+      order.push('cleanup started')
+      return new Promise((r) => (release = r)).then(() => order.push('cleanup done'))
+    })
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    launchServer.mockImplementation(async () => {
+      order.push('relaunch')
+      return { success: true, child: fakeServerChild({ pid: 6160 }), cleanup }
+    })
+
+    const reset = harness.invoke('instance:reset', { id: 'inst-1' })
+    await flush()
+    await flush()
+    expect(order).toEqual(['cleanup started'])
+    release()
+
+    await expect(reset).resolves.toMatchObject({ success: true })
+    expect(order).toEqual(['cleanup started', 'cleanup done', 'relaunch'])
   })
 })

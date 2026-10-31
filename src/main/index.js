@@ -942,13 +942,26 @@ app.whenReady().then(() => {
     }
   }
 
+  // A server child's exit, or a failed spawn (childLines.js), untracks it and
+  // runs its launch cleanup. The map holds the tracked entry, `{ kind, value,
+  // cleanup }`, so the test is on `value`: comparing the entry to the child was
+  // never true, and the entry stayed until a Stop (HTOO-641). The cleanup is
+  // run-once (instanceManager.js), so a Stop or Reset that is waiting on this exit
+  // awaits the same run rather than starting a second.
   function wireInstanceLogs(instanceId, child) {
     pipeChildLines(child, {
       onStdoutLine: (line) => safeSend('instance:log', { instanceId, stream: 'stdout', line }),
       onStderrLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line }),
       onExit: (code, signal) => {
-        if (instanceChildren.get(instanceId) === child) instanceChildren.delete(instanceId)
+        const entry = instanceChildren.get(instanceId)
+        const ours = entry?.value === child
+        if (ours) instanceChildren.delete(instanceId)
         safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal })
+        if (ours) {
+          entry.cleanup().catch((err) => {
+            console.warn(`instance ${instanceId} cleanup failed:`, err.message)
+          })
+        }
       },
       onErrorLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line })
     })

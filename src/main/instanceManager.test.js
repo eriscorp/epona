@@ -5,6 +5,7 @@ import {
   isTrackedAlive,
   raceChildExit,
   resolveInstanceForLaunch,
+  runOnce,
   createInstanceManager
 } from './instanceManager.js'
 
@@ -62,6 +63,33 @@ describe('raceChildExit', () => {
       throw new Error('already gone')
     })
     await expect(raceChildExit(child, 20)).resolves.toBeUndefined()
+  })
+})
+
+describe('runOnce', () => {
+  it('runs the function on the first call only, and every call gets the same promise', async () => {
+    let release
+    const fn = vi.fn(() => new Promise((r) => (release = r)))
+    const once = runOnce(fn)
+    const first = once()
+    const second = once()
+    expect(second).toBe(first)
+    await Promise.resolve() // the call is deferred one microtask
+    expect(fn).toHaveBeenCalledTimes(1)
+    release('done')
+    await expect(first).resolves.toBe('done')
+    await expect(once()).resolves.toBe('done')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives every caller the same rejection, and does not run again', async () => {
+    const fn = vi.fn(async () => {
+      throw new Error('worktree busy')
+    })
+    const once = runOnce(fn)
+    await expect(once()).rejects.toThrow('worktree busy')
+    await expect(once()).rejects.toThrow('worktree busy')
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -147,14 +175,18 @@ describe('createInstanceManager.spawnAndTrackInstance', () => {
 
   it('tracks a child launch and wires its logs, returning an IPC-safe result', async () => {
     const child = fakeChild()
-    const cleanup = async () => {}
+    const cleanup = vi.fn(async () => {})
     const { spawnAndTrackInstance, instanceChildren, wireInstanceLogs } = setup({
       success: true,
       child,
       cleanup
     })
     const safe = await spawnAndTrackInstance({ id: 'i1' })
-    expect(instanceChildren.get('i1')).toEqual({ kind: 'child', value: child, cleanup })
+    const entry = instanceChildren.get('i1')
+    expect(entry).toMatchObject({ kind: 'child', value: child })
+    // The tracked cleanup is the launch's, made run-once (HTOO-641).
+    await Promise.all([entry.cleanup(), entry.cleanup()])
+    expect(cleanup).toHaveBeenCalledTimes(1)
     expect(wireInstanceLogs).toHaveBeenCalledWith('i1', child)
     expect(safe).toEqual({ success: true })
   })
