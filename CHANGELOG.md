@@ -54,7 +54,11 @@ the rules above.
 ### Fixed
 
 - **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
-- **A Stop Server button shows the error colour in the four Dark Ages themes.** Before, it looked the same as the other buttons.
+- **A Stop Server button shows the error colour in the six Dark Ages themes.** Before, it looked the same as the other buttons.
+
+### Security
+
+- **Epona runs on Electron 44.10.0.** It has Node 24.22.1, a Node security release, and a newer Chromium.
 
 ## [2.9.0] - 2026-10-12
 
