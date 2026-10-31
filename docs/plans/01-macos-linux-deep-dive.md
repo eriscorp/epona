@@ -223,6 +223,13 @@ The card asks for a fault that hides other faults to go first. Three of those co
 - F6 (HTOO-645): a binary-mode apphost off Windows gets `DOTNET_ROOT` from `dotnet --list-runtimes`, .NET 10 first, when `DOTNET_ROOT` is unset and `dotnet` has an absolute path. `m4-dotnet.mjs` M4.2 spawns with it.
 - HTOO-591: on macOS, an output line with "Bad CPU type in executable" or MSB6003 with `(86)` adds one stderr line, `[epona] The build needs Rosetta…`, which the exit notice quotes. No probe before the launch, so a build that needs no x86_64 tool still starts.
 
+**Group 4** (HTOO-593, HTOO-594 with F12, HTOO-647, HTOO-656):
+
+- HTOO-593: on macOS, a picked folder that ends in `.app` resolves to `Contents/MacOS/<CFBundleExecutable>` from an XML `Info.plist` (Brigid's is XML), or to the bundle's base name. The program is spawned directly, so the `DA_*` variables reach it. The macOS `openFile` picker already selects a bundle.
+- HTOO-594: `spawnStarted` waits for `spawn` or `error`. The client launch (both modes) and `spawnDirect` report the error and undo the setup. `describeSpawnError` names Rosetta for errno -86 and `chmod +x` for EACCES. `spawnDirect` catches a synchronous throw. `runBusy` clears its label in a `finally`. F12: a `.exe` is invalid off Windows, and an extension-less file with no execute bit names `chmod +x`. HTOO-596 keeps the server picker and the wording (group 6).
+- HTOO-647: `csprojInWorktree` realpaths the csproj before `relative()`.
+- HTOO-656: a Dark Ages path that does not exist gives the "not set" error, and the check runs before any worktree is made.
+
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.

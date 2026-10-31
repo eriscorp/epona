@@ -1,9 +1,10 @@
 import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
-import { dirname, relative, join, resolve as resolveAbs } from 'path'
+import { basename, dirname, relative, join, resolve as resolveAbs } from 'path'
 import { gitToplevel } from '../gitOps.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { resolveDotnetPath, dotnetRootEnv } from '../dotnet.js'
+import { spawnStarted, describeSpawnError } from './spawnStarted.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -19,6 +20,9 @@ export async function resolvePath(configuredPath) {
   } catch {
     return { kind: 'invalid', reason: `path does not exist: ${configuredPath}` }
   }
+  if (stat.isDirectory() && process.platform === 'darwin' && /\.app\/?$/i.test(configuredPath)) {
+    return resolveAppBundle(configuredPath)
+  }
   if (!stat.isFile()) {
     return { kind: 'invalid', reason: `path is not a file: ${configuredPath}` }
   }
@@ -32,6 +36,15 @@ export async function resolvePath(configuredPath) {
     return { kind: 'dll', dllPath: configuredPath, cwd: dirname(configuredPath) }
   }
   if (lower.endsWith('.exe')) {
+    // A Windows program cannot run here. It showed as a valid prebuilt binary
+    // and then failed to start with no report (F12 in HTOO-627).
+    if (process.platform !== 'win32') {
+      return {
+        kind: 'invalid',
+        reason:
+          'this is a Windows program; pick the macOS or Linux build of the client, or its .dll'
+      }
+    }
     return { kind: 'exe', exePath: configuredPath, cwd: dirname(configuredPath) }
   }
   // On macOS/Linux the published client is an apphost with no extension (e.g.
@@ -47,8 +60,39 @@ export async function resolvePath(configuredPath) {
     reason:
       process.platform === 'win32'
         ? 'path must be a .exe, .dll, or .csproj file'
-        : 'path must be an executable, .dll, or .csproj file'
+        : // A client unzipped from a GitHub artifact loses its execute bit (HTOO-594).
+          'path must be an executable, .dll, or .csproj file. If it is the client program, make it executable: chmod +x <file>'
   }
+}
+
+// A macOS app bundle, such as Brigid.app: run Contents/MacOS/<CFBundleExecutable>
+// (HTOO-593). Brigid ships for macOS only as a bundle. `open -a` would drop the
+// DA_* variables that the client reads, so the program is spawned directly.
+// Without a CFBundleExecutable in an XML Info.plist, the bundle's base name.
+async function resolveAppBundle(configuredPath) {
+  const bundle = configuredPath.replace(/\/+$/, '')
+  let name = basename(bundle).replace(/\.app$/i, '')
+  try {
+    const plist = await fs.readFile(join(bundle, 'Contents', 'Info.plist'), 'utf-8')
+    const m = plist.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/)
+    if (m) name = m[1].trim()
+  } catch {
+    /* no readable Info.plist: keep the base name */
+  }
+  const exePath = join(bundle, 'Contents', 'MacOS', name)
+  let stat
+  try {
+    stat = await fs.stat(exePath)
+  } catch {
+    return { kind: 'invalid', reason: `the app bundle has no program at Contents/MacOS/${name}` }
+  }
+  if (!stat.isFile() || (stat.mode & 0o111) === 0) {
+    return {
+      kind: 'invalid',
+      reason: `Contents/MacOS/${name} in the app bundle is not executable: chmod +x it`
+    }
+  }
+  return { kind: 'exe', exePath, cwd: dirname(exePath) }
 }
 
 // Pure: shape the command/args/cwd for child_process.spawn based on a resolved
@@ -70,6 +114,17 @@ export function buildSpawnArgs(resolved, dotnetPath = 'dotnet') {
     }
   }
   throw new Error(`cannot build spawn args for resolved kind '${resolved.kind}'`)
+}
+
+// The picked csproj's path inside a branch worktree. gitToplevel gives the repo
+// root as a physical path. The csproj as picked can go through a symlink (/tmp
+// and /var on macOS, a ~/Repos on another volume), and relative() then climbed
+// out of the repo with `../..`: the result pointed back at the main checkout,
+// which ran the wrong code with no error, or at nothing (HTOO-647). realpath
+// makes both sides physical.
+export async function csprojInWorktree(repoRoot, worktreePath, csprojPath) {
+  const csprojReal = await fs.realpath(resolveAbs(csprojPath))
+  return join(worktreePath, relative(repoRoot, csprojReal))
 }
 
 // Decide which configured path to feed `resolvePath` based on the target's
@@ -103,14 +158,30 @@ function pathForMode(config) {
 // process group and a stop signals the client it started too (HTOO-644), as
 // spawnDirect does for a server.
 export async function launch(config, profile, daClientPath) {
-  if (typeof daClientPath !== 'string' || daClientPath.length === 0) {
-    return {
-      success: false,
-      error:
-        process.platform === 'win32'
-          ? 'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
-          : 'Dark Ages folder not set — open the Legacy Client tab and pick the folder containing your Dark Ages data files.'
-    }
+  const notSet = {
+    success: false,
+    error:
+      process.platform === 'win32'
+        ? 'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
+        : 'Dark Ages folder not set — open the Legacy Client tab and pick the folder containing your Dark Ages data files.'
+  }
+  if (typeof daClientPath !== 'string' || daClientPath.length === 0) return notSet
+
+  // DA_ASSET_PATH is universally needed: the client's fallback is
+  // `<binary>/..` which is wrong for both prebuilt-exe and `dotnet run`
+  // layouts.
+  //
+  // daClientPath is either a file (Windows: Dark Ages.exe) or a directory (how
+  // non-Windows users point Epona at their DA assets via "Locate Assets"). Use
+  // a directory as-is; for a file, use its containing directory. A path that
+  // does not exist is the same as no path: a Windows path carried to macOS or
+  // Linux has the dirname `.`, and the client then looked for its assets in its
+  // own folder with no error (HTOO-656).
+  let assetPath
+  try {
+    assetPath = (await fs.stat(daClientPath)).isDirectory() ? daClientPath : dirname(daClientPath)
+  } catch {
+    return notSet
   }
 
   const configured = pathForMode(config)
@@ -152,8 +223,7 @@ export async function launch(config, profile, daClientPath) {
       }
       worktreePath = await ensureWorktree(repoRoot, config.clientBranch)
       releaseFn = () => releaseWorktree(repoRoot, config.clientBranch)
-      const relCsproj = relative(repoRoot, resolveAbs(resolved.csprojPath))
-      resolved.csprojPath = join(worktreePath, relCsproj)
+      resolved.csprojPath = await csprojInWorktree(repoRoot, worktreePath, resolved.csprojPath)
       resolved.cwd = dirname(resolved.csprojPath)
     } catch (err) {
       try {
@@ -171,20 +241,8 @@ export async function launch(config, profile, daClientPath) {
     resolved.kind === 'repo' || resolved.kind === 'dll' ? await resolveDotnetPath() : 'dotnet'
   const { command, args, cwd } = buildSpawnArgs(resolved, dotnetPath)
 
-  // DA_ASSET_PATH is universally needed: the client's fallback is
-  // `<binary>/..` which is wrong for both prebuilt-exe and `dotnet run`
-  // layouts. DA_HOST / DA_HOST_PORT only override when the active profile
-  // is non-empty; without them the client falls back to its hardcoded host.
-  //
-  // daClientPath is either a file (Windows: Dark Ages.exe) or a directory (how
-  // non-Windows users point Epona at their DA assets via "Locate Assets"). Use
-  // a directory as-is; for a file, use its containing directory.
-  let assetPath = dirname(daClientPath)
-  try {
-    if ((await fs.stat(daClientPath)).isDirectory()) assetPath = daClientPath
-  } catch {
-    // Path is gone — keep dirname() and let the client's own fallback cope.
-  }
+  // DA_HOST / DA_HOST_PORT only override when the active profile is
+  // non-empty; without them the client falls back to its hardcoded host.
   // DA_NO_LAUNCHER: Epona IS the launcher, so the client should never show its own selector —
   // even for a hostname-less profile (which sets no DA_HOST and would otherwise drop into the
   // launcher). The client then resolves host from DA_HOST or its saved config, asset from
@@ -213,6 +271,14 @@ export async function launch(config, profile, daClientPath) {
       detached: isRepo && process.platform !== 'win32',
       env
     })
+    // Report success only once the program runs: a missing `dotnet`, a
+    // folder that is gone or a blocked apphost fails after spawn() returns
+    // (HTOO-594).
+    const failed = await spawnStarted(child)
+    if (failed) {
+      await releaseFn().catch(() => {})
+      return { success: false, error: `Failed to start the client: ${describeSpawnError(failed)}` }
+    }
     // For repo launches with a worktree, the cleanup releases the worktree
     // when the child exits. For binary / no-branch repo launches, cleanup is
     // a no-op. The caller is responsible for actually invoking cleanup on
@@ -230,6 +296,8 @@ export async function launch(config, profile, daClientPath) {
     } catch {
       /* swallow during error recovery */
     }
-    return { success: false, error: `Failed to spawn client: ${err.message}` }
+    // A synchronous failure, such as an x86_64-only program on a Mac with no
+    // Rosetta ("Unknown system error -86").
+    return { success: false, error: `Failed to start the client: ${describeSpawnError(err)}` }
   }
 }

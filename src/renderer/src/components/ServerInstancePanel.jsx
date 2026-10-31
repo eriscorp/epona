@@ -246,12 +246,20 @@ export default function ServerInstancePanel({
 
   // Run a start/stop/reset op behind the shared busy-label + error-snack
   // guard. `op` is the bound IPC call; `failMsg` the fallback error text.
+  // `finally`: an operation that throws, rather than returning
+  // `{ success: false }`, left the button on "Starting…" until the window
+  // reloaded (HTOO-594).
   async function runBusy(label, op, failMsg) {
     if (!selected) return
     setBusyLabel(label)
-    const result = await op()
-    setBusyLabel(null)
-    if (!result.success) setSnack({ severity: 'error', message: result.error ?? failMsg })
+    try {
+      const result = await op()
+      if (!result.success) setSnack({ severity: 'error', message: result.error ?? failMsg })
+    } catch (err) {
+      setSnack({ severity: 'error', message: err?.message ?? failMsg })
+    } finally {
+      setBusyLabel(null)
+    }
   }
   const handleStart = () => runBusy('Starting…', () => onStart(selected), 'Failed to start')
   const stopNow = () => runBusy('Stopping…', () => onStop(selected.id), 'Failed to stop')

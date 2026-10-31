@@ -266,7 +266,7 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
 
   // Main's two event streams for server instances, captured so a test can send
   // a log line and an exit as main would.
-  async function renderServerTab(platform, { running = false } = {}) {
+  async function renderServerTab(platform, { running = false } = {}, extra = {}) {
     savedSettings.targetKind = 'server'
     savedSettings.instances = [INSTANCE]
     savedSettings.activeInstance = 'inst-1'
@@ -277,6 +277,7 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
         return () => {}
       })
     await renderApp(platform, {
+      ...extra,
       onInstanceLog: on('log'),
       onInstanceChildExit: on('exit'),
       onInstanceStatus: on('status')
@@ -310,6 +311,19 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
   it('win32: the console button stays off, because the server has its own console', async () => {
     await renderServerTab('win32')
     expect(screen.getByTestId('server-log-toggle').disabled).toBe(true)
+  })
+
+  it('shows Start Server again after a Start that throws (HTOO-594)', async () => {
+    // A rejected IPC call left the button on "Starting…" until a reload.
+    await renderServerTab(
+      'linux',
+      {},
+      { startInstance: vi.fn().mockRejectedValue(new Error('spawn Unknown system error -86')) }
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Start Server' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('-86')
+    expect(screen.getByRole('button', { name: 'Start Server' })).toBeTruthy()
   })
 
   it('shows Start Server again as soon as the server exits', async () => {
