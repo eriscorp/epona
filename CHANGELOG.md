@@ -77,6 +77,7 @@ the rules above.
 
 ### Security
 
+- **On macOS, an environment variable can no longer load other code into Epona.** Before, the signed app accepted the `DYLD_*` variables, so a library named in `DYLD_INSERT_LIBRARIES` ran inside Epona.
 - **Epona runs on Electron 44.10.0.** It has Node 24.22.1, a Node security release, and a newer Chromium.
 
 ## [2.9.0] - 2026-10-12
