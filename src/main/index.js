@@ -27,6 +27,7 @@ import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
+import { buildHint } from './buildHints.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { reprobeGit } from './gitExec.js'
 import {
@@ -984,9 +985,20 @@ app.whenReady().then(() => {
   // run-once (instanceManager.js), so a Stop or Reset that is waiting on this exit
   // awaits the same run rather than starting a second.
   function wireInstanceLogs(instanceId, child) {
+    // Advice for a build failure the output does not explain (buildHints.js),
+    // once per hint per run.
+    const hinted = new Set()
+    const send = (stream) => (line) => {
+      safeSend('instance:log', { instanceId, stream, line })
+      const hint = buildHint(line)
+      if (hint && !hinted.has(hint)) {
+        hinted.add(hint)
+        safeSend('instance:log', { instanceId, stream: 'stderr', line: hint })
+      }
+    }
     pipeChildLines(child, {
-      onStdoutLine: (line) => safeSend('instance:log', { instanceId, stream: 'stdout', line }),
-      onStderrLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line }),
+      onStdoutLine: send('stdout'),
+      onStderrLine: send('stderr'),
       onExit: (code, signal) => {
         const entry = instanceChildren.get(instanceId)
         const ours = entry?.value === child

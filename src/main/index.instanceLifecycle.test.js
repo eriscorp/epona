@@ -491,6 +491,29 @@ describe('a server child (macOS and Linux)', () => {
   })
 })
 
+describe("a server build's output", () => {
+  it('gets the Rosetta advice once, on stderr, on macOS (HTOO-591)', async () => {
+    const realPlatform = process.platform
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    Object.defineProperty(process, 'platform', { value: 'darwin' })
+    try {
+      const bad =
+        'error MSB6003: protoc could not be run. Win32Exception (86): Bad CPU type in executable\n'
+      child.stdout.emit('data', Buffer.from(bad + bad))
+    } finally {
+      Object.defineProperty(process, 'platform', { value: realPlatform })
+    }
+
+    const hints = sent('instance:log').filter((l) => l.line.includes('install-rosetta'))
+    expect(hints).toEqual([
+      { instanceId: 'inst-1', stream: 'stderr', line: expect.stringMatching(/^\[epona\] /) }
+    ])
+    child.exit(1)
+    await flush()
+  })
+})
+
 describe('the status push after Start, Stop and Reset (HTOO-589, F4)', () => {
   it('sends the status after a Stop even when nothing changed', async () => {
     // A Stop on an adopted server can report success and kill nothing
