@@ -206,16 +206,23 @@ The card asks for a fault that hides other faults to go first. Three of those co
 7. **Windows.** F29 (the server's output in the pane), after F5.
 8. **The docs.** F26, F27, and the new checks from F23 and F24, last, so that they describe the code as it ships.
 
-**F1 moved to group 1** (2026-10-31). `wireInstanceLogs`' `onExit` compared the tracked entry, `{ kind, value, cleanup }`, with the child, so it never deleted the entry: a server that exited on its own stayed tracked, and the next Stop ran its cleanup. HTOO-589 needs that untrack, and with the untrack and no cleanup on exit, the cleanup could never run. So group 1 takes F1 too: the exit untracks the entry and runs a run-once cleanup, which Stop and Reset await. Group 2 keeps HTOO-592, F2 and F3, and the box re-run of `lifecycle.mjs` after it still covers F1.
+**F1 moved to group 1** (2026-10-31). `wireInstanceLogs`' `onExit` compared the tracked entry, `{ kind, value, cleanup }`, with the child, so it never deleted the entry: a server that exited on its own stayed tracked, and the next Stop ran its cleanup. HTOO-589 needs that untrack, and with the untrack and no cleanup on exit, the cleanup could never run. So group 1 takes F1 too: the exit untracks the entry and runs a run-once cleanup, which Stop and Reset await. Group 2 keeps HTOO-592, F2 and F3.
+
+**Group 2** (HTOO-592, HTOO-642, HTOO-644):
+
+- `killProcessTree` on POSIX finds the PID's real process group with `ps`, and never signals Epona's own group. It sends SIGTERM, waits up to 5 s while any process in the group lives, then sends SIGKILL and waits 2 s. "Already gone" needs the PID gone too. A group that outlives SIGKILL is a failure.
+- `stopChild` replaces `raceChildExit`. It ends a tracked child through `killProcessTree` and waits for its `exit`. Stop and Reset run no cleanup after a failed stop, and the instance stays tracked. A Reset that cannot stop the server does not relaunch it.
+- The quit sweep stops the repo-mode client (through a hook from `whenReady`) and every server in parallel, runs each launch's cleanup after its own kill, and only then releases the worktrees. A repo-mode client is `detached` on POSIX, so its group holds the client that `dotnet run` starts.
+- The M3 step of `lifecycle.mjs` calls `stopChild`, and passes only when the listener is gone and the port is free at the moment Stop returns.
 
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.
 
-- **The fixes are built on the Windows box.** It has the full gate, e2e, the `da-win32` rebuild and signing, and the Windows work (F29, F17). `npm run validate:linux` runs the unit suite on real Linux through WSL. Each PR records its Windows checks and leaves the macOS and Linux rows owed, as the release plan says.
+- **The fixes are built on the Windows box.** It has the full gate, e2e, the `da-win32` rebuild and signing, and the Windows work (F29, F17). CI runs the unit suite on Ubuntu and macOS (`unit-posix`), and the Linux box replaces the WSL run (`npm run validate:linux`) for anything more (Sabrael, 2026-10-31). Each PR records its Windows checks and leaves the macOS and Linux rows owed, as the release plan says.
 - **Before the work starts, each box runs every check it can, as the baseline** (Sabrael, 2026-10-31). That is every check below except M7, W1 and L4, which test a released build or a fix. L5 and L7 use a local `npm run build:linux` AppImage.
-- **After a fix group merges, the boxes run again the script that covers it.** `01-box-checks/lifecycle.mjs` after group 2 (the lifecycle), on the Mac and the Linux box: mocked tests on Windows cannot show process groups and signals, and HTOO-642 is a fault that a passing unit test did not catch. `01-box-checks/build-and-git.sh` after group 3 (the server launch). Each must print `SUMMARY: PASS`.
-- **The end-of-release pass runs the whole table again** on both boxes, against the release's own dmg and AppImage, and adds M7, L4 and W1.
+- **The boxes run the scripts again in the pre-release pass, not after each group** (Sabrael, 2026-10-31). `01-box-checks/lifecycle.mjs` covers group 2 (the lifecycle), on the Mac and the Linux box: mocked tests on Windows cannot show process groups and signals, and HTOO-642 is a fault that a passing unit test did not catch. `01-box-checks/build-and-git.sh` covers group 3 (the server launch). Each must print `SUMMARY: PASS`. The real-process tests in `processKill.test.js` run on every PR in `unit-posix`, so CI catches a group-kill fault before then.
+- **The pre-release pass runs the whole table again** on both boxes, against the release's own dmg and AppImage, with the two scripts, and adds M7, L4 and W1.
 
 The scripts print PASS or FAIL against the fixed behaviour, and exit 1 on a FAIL. On `main` at `a1a2d16` they print M1 FAIL, M3 PASS and M6 FAIL (the `R&D` folder). M2 and M5 test git and MSBuild, which no fix changes, so they print FACT; unit tests in epona check the HTOO-644 and HTOO-646 fixes.
 
