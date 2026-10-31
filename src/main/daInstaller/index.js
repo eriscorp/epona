@@ -23,7 +23,7 @@
 import { join } from 'path'
 import { readWiseManifest, NotAWiseInstallerError } from './wiseArchive.js'
 import { extractClientFiles, ExtractionCancelledError } from './wiseExtract.js'
-import { downloadInstaller, DownloadCancelledError } from './installerDownload.js'
+import { downloadInstaller, discardInstaller, DownloadCancelledError } from './installerDownload.js'
 import { verifyClientTree } from '../daAssets.js'
 import { NotAPortableExecutableError } from './peOverlay.js'
 
@@ -161,6 +161,13 @@ export async function downloadAndInstall({
     destinationDir,
     onProgress,
     signal
+  })
+  // The client passed verifyClientTree, so the installer has done its job. It
+  // is about 208 MB, in the settings folder that backups copy, and nothing
+  // removed it (HTOO-657). An install that failed threw above and keeps it, so a
+  // retry need not download it again.
+  await discardInstaller(download.path).catch((err) => {
+    console.warn('could not remove the downloaded installer:', err.message)
   })
   return { ...result, download }
 }

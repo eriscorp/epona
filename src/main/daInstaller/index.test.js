@@ -11,6 +11,7 @@ import {
 } from './index.js'
 import { EXPECTED_CLIENT_ARCHIVES } from '../daAssets.js'
 import { buildWiseInstaller } from './wiseFixture.js'
+import { downloadInstaller } from './installerDownload.js'
 
 let dir
 
@@ -228,12 +229,35 @@ describe('downloadAndInstall', () => {
 
     expect(result.download).toMatchObject({ reused: false })
     expect(result.verification.ok).toBe(true)
-    // Cached under a fixed name, so a second run can find and reuse it.
-    expect(await fs.readdir(cacheDir)).toContain(CACHED_INSTALLER_NAME)
     expect(await fs.readFile(join(destination, 'Legend.dat'), 'utf8')).toBe('legend.dat contents')
+    // The client is in place, so the 208 MB installer and its metadata go
+    // (HTOO-657).
+    expect(await fs.readdir(cacheDir)).toEqual([])
   })
 
-  it('reuses the cached installer on a second run', async () => {
+  it('keeps the installer and its metadata when the install fails, for a retry', async () => {
+    // Every archive but the first: verifyClientTree refuses the tree.
+    const buffer = buildWiseInstaller(completeClient().slice(1)).buffer
+    const cacheDir = join(dir, 'cache')
+    await fs.mkdir(cacheDir)
+
+    await expect(
+      downloadAndInstall({
+        cacheDir,
+        destinationDir: join(dir, 'DarkAges'),
+        url: 'u',
+        fetchImpl: serveInstaller(buffer)
+      })
+    ).rejects.toBeInstanceOf(InstallError)
+
+    // Cached under a fixed name, so the next run can find and reuse it.
+    expect((await fs.readdir(cacheDir)).sort()).toEqual([
+      CACHED_INSTALLER_NAME,
+      `${CACHED_INSTALLER_NAME}.meta.json`
+    ])
+  })
+
+  it('reuses an installer that an earlier attempt left in the cache', async () => {
     // The installer has to clear the downloader's reuse floor, which exists to
     // stop a saved error page being reused forever. Deflate would squash a run of
     // one byte to nothing, so the filler is incompressible.
@@ -246,19 +270,21 @@ describe('downloadAndInstall', () => {
     await fs.mkdir(cacheDir)
     const fetchImpl = serveInstaller(buffer)
 
-    await downloadAndInstall({
-      cacheDir,
-      destinationDir: join(dir, 'first'),
+    // What an attempt that did not finish leaves: the download, and no client.
+    // A successful install removes it (HTOO-657).
+    await downloadInstaller({
+      destinationPath: join(cacheDir, CACHED_INSTALLER_NAME),
       url: 'u',
       fetchImpl
     })
-    const second = await downloadAndInstall({
+    const retry = await downloadAndInstall({
       cacheDir,
-      destinationDir: join(dir, 'second'),
+      destinationDir: join(dir, 'DarkAges'),
       url: 'u',
       fetchImpl
     })
-    expect(second.download.reused).toBe(true)
+    expect(retry.download.reused).toBe(true)
+    expect(await fs.readdir(cacheDir)).toEqual([])
   })
 
   it('refuses without a download folder', async () => {
