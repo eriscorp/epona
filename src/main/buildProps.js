@@ -13,18 +13,46 @@ const FILE_NAME = 'Directory.Build.props'
 
 // MSBuild on Windows prefers backslashes in path properties. The design doc
 // in the server repo (docs/epona-branch-instances.md) shows backslashes; we
-// match for consistency, even though MSBuild accepts either.
-function toWindowsPath(p) {
-  return p.replace(/\//g, '\\')
+// match for consistency, even though MSBuild accepts either. On macOS and Linux
+// the path keeps its forward slashes: MSBuild there converts a backslash path,
+// but the path for that OS is the one to write (HTOO-654).
+function msbuildPath(p) {
+  return process.platform === 'win32' ? p.replace(/\//g, '\\') : p
 }
 
+// A folder name with `&` or `<` made the file malformed, and restore then
+// dropped the reference with no error (HTOO-654).
+function escapeXml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+// `xmlCsprojAbsPath` null: a file that sets nothing, for a branch worktree that
+// builds with the NuGet package (HTOO-646). MSBuild imports the first
+// Directory.Build.props it finds above a project, and looks no further unless
+// that file imports the next one. A worktree lives at <repo>/.worktrees/<branch>/,
+// so with no file of its own it took the repo root's: another instance's local
+// XML, or a hand-written UseLocalProtocol.
 function renderXml(xmlCsprojAbsPath) {
-  const winPath = toWindowsPath(xmlCsprojAbsPath)
+  if (xmlCsprojAbsPath === null) {
+    return [
+      '<Project>',
+      '  <!-- Written by Epona. It stops MSBuild from importing a Directory.Build.props',
+      '       from the repo root, so this worktree builds with the NuGet packages. -->',
+      '</Project>',
+      ''
+    ].join('\r\n')
+  }
+  const path = escapeXml(msbuildPath(xmlCsprojAbsPath))
   return [
     '<Project>',
     '  <PropertyGroup>',
     '    <UseLocalXml>true</UseLocalXml>',
-    `    <LocalXmlProjectPath>${winPath}</LocalXmlProjectPath>`,
+    `    <LocalXmlProjectPath>${path}</LocalXmlProjectPath>`,
     '  </PropertyGroup>',
     '</Project>',
     ''
@@ -34,12 +62,13 @@ function renderXml(xmlCsprojAbsPath) {
 // Writes (or rewrites) the Directory.Build.props file. Idempotent: if the
 // file already exists with matching content, the write is skipped so the
 // mtime stays stable and we don't trigger a phantom MSBuild rebuild on the
-// next dotnet invocation.
+// next dotnet invocation. `xmlCsprojAbsPath` null writes the file that sets
+// nothing (renderXml).
 export async function writeBuildProps(serverWorktreePath, xmlCsprojAbsPath) {
   if (typeof serverWorktreePath !== 'string' || !serverWorktreePath) {
     throw new Error('writeBuildProps: serverWorktreePath is required')
   }
-  if (typeof xmlCsprojAbsPath !== 'string' || !xmlCsprojAbsPath) {
+  if (xmlCsprojAbsPath !== null && (typeof xmlCsprojAbsPath !== 'string' || !xmlCsprojAbsPath)) {
     throw new Error('writeBuildProps: xmlCsprojAbsPath is required')
   }
   const filePath = join(serverWorktreePath, FILE_NAME)
@@ -70,14 +99,17 @@ export async function writeBuildProps(serverWorktreePath, xmlCsprojAbsPath) {
 // only a manual file delete could clear.
 const claims = new Map()
 
-// MSBuild path comparison. Both sides come from the same join + toWindowsPath,
-// so an exact match after normalising separators is enough; nothing here
-// invents case-folding policy.
+// MSBuild path comparison. Both sides come from the same join, so an exact
+// match after normalising separators is enough; nothing here invents
+// case-folding policy. null is the NuGet package, and matches only itself.
 function sameXmlTarget(a, b) {
-  return toWindowsPath(a) === toWindowsPath(b)
+  if (a === null || b === null) return a === b
+  return a.replace(/\\/g, '/') === b.replace(/\\/g, '/')
 }
 
-// Claim the redirect for one owner. Returns { ok: true } when the write may go
+// Claim the redirect for one owner. `xmlCsprojAbsPath` null claims the file
+// that sets nothing (HTOO-646): an owner that wants a local XML in the same
+// worktree conflicts with it, as two different local XMLs do. Returns { ok: true } when the write may go
 // ahead — either nobody holds this worktree, or every holder wants the same
 // XML csproj and the file they need is the file we are about to write.
 //

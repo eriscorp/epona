@@ -129,9 +129,26 @@ async function csprojSupportsLocalXml(serverWorktreePath) {
 
 // Name an instance's XML selection the way the user set it. An empty string is
 // the "use the XML repo in place" option rather than a branch, and calling that
-// a branch in an error message sends the reader looking for one.
+// a branch in an error message sends the reader looking for one. null is no
+// local XML: the build uses the published package.
 export function describeXmlBranch(xmlBranch) {
+  if (xmlBranch === null) return 'the published Hybrasyl.Xml package'
   return xmlBranch ? `XML branch "${xmlBranch}"` : 'the XML checkout in place'
+}
+
+// The refusal when another running instance holds this server worktree's
+// Directory.Build.props for a different XML. `wanted` is this instance's
+// label, as describeXmlBranch takes it.
+function buildPropsConflict(conflict, wanted) {
+  return {
+    success: false,
+    error:
+      `Another running instance already points this server worktree at ` +
+      `${describeXmlBranch(conflict.xmlBranchLabel)}, and this one needs ` +
+      `${describeXmlBranch(wanted)}. They share one ` +
+      `Directory.Build.props because they share a server branch. Stop the ` +
+      `other instance, or put both on the same XML branch.`
+  }
 }
 
 // Friendly-message preflight: is every field the launcher actually needs
@@ -268,7 +285,8 @@ async function launchRepo(instance) {
   //    picked repo path.
   let serverWorktreePath
   let releaseServer = async () => {}
-  if (instance.serverBranch && !instance.serverNoGit) {
+  const onBranchWorktree = Boolean(instance.serverBranch && !instance.serverNoGit)
+  if (onBranchWorktree) {
     serverWorktreePath = await ensureWorktree(instance.serverRepoPath, instance.serverBranch)
     releaseServer = () => releaseWorktree(instance.serverRepoPath, instance.serverBranch)
   } else {
@@ -346,18 +364,24 @@ async function launchRepo(instance) {
       if (!claim.ok) {
         await releaseXml()
         await releaseServer()
-        return {
-          success: false,
-          error:
-            `Another running instance already points this server worktree at ` +
-            `${describeXmlBranch(claim.conflict.xmlBranchLabel)}, and this one needs ` +
-            `${describeXmlBranch(instance.xmlBranch)}. They share one ` +
-            `Directory.Build.props because they share a server branch. Stop the ` +
-            `other instance, or put both on the same XML branch.`
-        }
+        return buildPropsConflict(claim.conflict, instance.xmlBranch)
       }
       didClaimBuildProps = true
       await writeBuildProps(serverWorktreePath, xmlCsproj)
+      didWriteBuildProps = true
+    } else if (onBranchWorktree) {
+      // No local XML, in a worktree Epona made: write the file that sets
+      // nothing, or MSBuild imports the repo root's (HTOO-646). Claimed like a
+      // redirect, so that a second instance on this branch cannot point the
+      // worktree at a local XML while this one runs. An in-place launch builds
+      // the user's own checkout, and its root file is theirs to keep.
+      const claim = claimBuildProps(serverWorktreePath, null, instance.id, null)
+      if (!claim.ok) {
+        await releaseServer()
+        return buildPropsConflict(claim.conflict, null)
+      }
+      didClaimBuildProps = true
+      await writeBuildProps(serverWorktreePath, null)
       didWriteBuildProps = true
     }
 
