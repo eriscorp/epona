@@ -12,6 +12,7 @@ import {
 } from '../shared/issueUrl.js'
 import { scrubText } from '../shared/scrub.js'
 import { captureError, getRecentErrors, getLogsDir } from './sessionLog.js'
+import { openFolder } from './openFolder.js'
 
 // Backing logic + IPC handlers for the Report Issue / diagnostics module. Pure-helper
 // composition (src/shared/*) + Electron clipboard/shell. Payloads are validated with
@@ -131,6 +132,7 @@ export function registerDiagnosticsHandlers(ipcMain, getVersion) {
   )
   ipcMain.handle('diagnostics:revealLogs', () => {
     const dir = getLogsDir()
-    if (dir) void shell.openPath(dir)
+    if (!dir) return { ok: false, path: '(none)', error: 'the session log is not open' }
+    return openFolder(shell, dir)
   })
 }

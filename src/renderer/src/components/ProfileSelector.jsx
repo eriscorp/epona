@@ -5,7 +5,23 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
 
-export default function ProfileSelector({ profiles, activeProfile, onChange }) {
+// Where a launch goes with this profile. `redirect` is the legacy client's
+// memory patch, and it decides the legacy caption only. The Hybrasyl client is
+// sent to the profile's host whenever it has one (DA_HOST in hybrasylTarget.js),
+// so "No redirect (official servers)" was wrong for it (HTOO-659).
+export function profileCaption(profile, targetKind) {
+  if (targetKind === 'hybrasyl') {
+    return profile.hostname ? `${profile.hostname}:${profile.port}` : "The client's own server"
+  }
+  return profile.redirect ? `${profile.hostname}:${profile.port}` : 'No redirect (official servers)'
+}
+
+export default function ProfileSelector({
+  profiles,
+  activeProfile,
+  onChange,
+  targetKind = 'legacy'
+}) {
   const profile = profiles.find((p) => p.id === activeProfile) || profiles[0]
 
   return (
@@ -26,9 +42,7 @@ export default function ProfileSelector({ profiles, activeProfile, onChange }) {
       </FormControl>
       {profile && (
         <Typography variant="caption" color="text.button" sx={{ mt: 0.5, display: 'block' }}>
-          {profile.redirect
-            ? `${profile.hostname}:${profile.port}`
-            : 'No redirect (official servers)'}
+          {profileCaption(profile, targetKind)}
         </Typography>
       )}
     </Box>

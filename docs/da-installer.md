@@ -96,7 +96,7 @@ KRU serve it from S3 with `ETag`, `Last-Modified` and range support, which is wh
 - **Reuse** when a complete file's recorded validators still match the server.
 - **No partial mistaken for valid** — bytes go to a `.part` file, promoted only after the transfer delivers exactly the advertised length.
 
-The cache lives under `installer-cache/` in Epona's data directory, not the OS temp folder, so resume survives a reboot.
+The cache lives under `installer-cache/` in Epona's data directory, not the OS temp folder, so resume survives a reboot. It is for a retry only: when the install passes `verifyClientTree`, Epona deletes the installer and its `.meta.json` (HTOO-657). The installer is about 208 MB, and the data directory is in the user's backups.
 
 ## Measured against the retail installer
 

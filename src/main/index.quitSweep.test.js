@@ -62,7 +62,10 @@ vi.mock('./processKill.js', () => ({ killProcessTree }))
 vi.mock('./targets/serverTarget.js', () => ({ launch: launchServer }))
 vi.mock('./targets/hybrasylTarget.js', () => ({ launch: launchHybrasyl, resolvePath: vi.fn() }))
 vi.mock('./portProbe.js', () => ({ isPortInUse: async () => false }))
-vi.mock('./portOwner.js', () => ({ findPortOwner: async () => null }))
+vi.mock('./portOwner.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  findPortOwner: async () => null
+}))
 vi.mock('./processAlive.js', () => ({ isProcessAlive: () => true }))
 vi.mock('./worktreeManager.js', async (importOriginal) => ({
   ...(await importOriginal()),

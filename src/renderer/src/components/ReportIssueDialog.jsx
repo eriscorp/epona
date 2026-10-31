@@ -15,6 +15,7 @@ import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import { bridge } from '../diagnosticsBridge.js'
+import { revealFailure } from '../revealFailure'
 
 // Compose the issue body: the user's description, then the (edited) diagnostics in
 // a fenced block so GitHub renders it as preformatted text.
@@ -85,8 +86,10 @@ function ReportIssueDialog({ open, onClose }) {
     }
   }
 
-  const handleRevealLogs = () => {
-    bridge()?.revealLogs()
+  // A folder that did not open shows in the dialog's own snackbar (HTOO-658).
+  const handleRevealLogs = async () => {
+    const failure = revealFailure(await bridge()?.revealLogs())
+    if (failure) setFeedback(failure)
   }
 
   return (

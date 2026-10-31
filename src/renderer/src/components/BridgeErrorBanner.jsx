@@ -13,8 +13,25 @@ import Typography from '@mui/material/Typography'
 // that says so.
 //
 // The logs path is spelled out rather than made a button for the same reason:
-// opening it would be an invoke.
-const LOGS_PATH = '%LOCALAPPDATA%\\Erisco\\Epona\\logs'
+// opening it would be an invoke. It is the path for this OS: the banner gave
+// the Windows path on every OS, when it is the user's only route to the logs
+// (HTOO-648). The platform comes from the preload's `platform`, a plain
+// property that needs no IPC, or from `navigator.platform` when there is no
+// bridge at all.
+export function logsPathFor(platform) {
+  if (platform === 'win32') return '%LOCALAPPDATA%\\Erisco\\Epona\\logs'
+  if (platform === 'darwin') return '~/Library/Application Support/Erisco/Epona/logs'
+  return '~/.config/Erisco/Epona/logs'
+}
+
+function currentPlatform() {
+  const fromBridge = globalThis.window?.sparkAPI?.platform
+  if (typeof fromBridge === 'string') return fromBridge
+  const nav = globalThis.navigator?.platform ?? ''
+  if (/^Win/i.test(nav)) return 'win32'
+  if (/^Mac/i.test(nav)) return 'darwin'
+  return 'linux'
+}
 
 export default function BridgeErrorBanner({ error }) {
   if (!error) return null
@@ -38,7 +55,7 @@ export default function BridgeErrorBanner({ error }) {
       <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
         Buttons will not respond and your settings are not being saved. The window is showing
         defaults, not your saved configuration. Please report this, and include the newest file in{' '}
-        {LOGS_PATH}
+        {logsPathFor(currentPlatform())}
       </Typography>
       <Typography
         variant="caption"

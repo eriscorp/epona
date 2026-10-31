@@ -71,6 +71,16 @@ the rules above.
 - **On macOS and Linux, Epona refuses a Windows `.exe` as the client, and tells you when the client is not executable.** Before, the `.exe` showed as a valid client and then did not start.
 - **A client on a branch runs the code from that branch when its folder is reached through a symbolic link.** Before, it could run the code from the main checkout with no error.
 - **Epona tells you when the Dark Ages folder does not exist.** Before, with settings copied from Windows, the client started without its assets and gave no error.
+- **On Windows and Linux, Ctrl+R, Ctrl+Shift+I and F11 do nothing.** Before, Ctrl+R reloaded the window and closed the Log Pane, Ctrl+Shift+I opened the developer tools, and F11 put the window in full screen, where it drew wrong.
+- **Epona tells you when a Reveal folder button cannot open the folder.** Before, on a Linux desktop with no program for folders, Reveal settings folder, Reveal logs folder and the Report Issue folder button did nothing. Now a notice names the folder.
+- **When Epona cannot start, its message names the logs folder of your OS.** Before, it gave the Windows folder on macOS and Linux too.
+- **The profile caption on the Hybrasyl Client tab shows the server that the client connects to.** Before, it said "No redirect (official servers)" for a profile with the redirect off, but the client connected to the profile's host. On macOS and Linux, the profile editor no longer shows the redirect checkbox, which applies to the legacy client on Windows only.
+- **On macOS and Linux, the toolbar says "Assets Not Found" when the Dark Ages folder does not hold the game files.** Before, it showed any folder that was set as found.
+- **On macOS and Linux, Epona's messages name Activity Monitor, Finder, the file manager or `kill`, not Task Manager or Explorer.** On Linux, Stop finds a server with `ss` when `lsof` is not installed. The world folder example shows a path for your OS.
+- **On macOS and Linux, a server published as a program, without `.dll`, runs.** Before, Epona ran it through `dotnet`, which failed. A Windows `.exe` is refused with a clear message.
+- **Two branches whose names differ only in capital letters get their own worktree folders.** Before, on macOS and Windows they shared one folder, and the launch failed.
+- **Epona deletes the Dark Ages installer after a successful install.** Before, the 208 MB download stayed in Epona's settings folder on macOS and Linux.
+- **Server and client output keeps letters such as é when the output arrives in pieces.** Before, such a letter could show as two replacement characters.
 - **On an Apple Silicon Mac, Epona tells you when a server build needs Rosetta.** Before, the build stopped with exit code 1 and no explanation. Now the log and the notice give the command that installs Rosetta.
 - **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
 - **A Stop Server button shows the error colour in the six Dark Ages themes.** Before, it looked the same as the other buttons.

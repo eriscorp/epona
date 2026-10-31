@@ -44,6 +44,7 @@ import WhatsNewDialog from './WhatsNewDialog'
 import UpdateCheckButton from './UpdateCheckButton'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
+import { revealFailure } from '../revealFailure'
 import { useMenuRequest } from '../useMenuRequest'
 import { LOGO_FILTER } from './titleChrome'
 import { THEME_LABELS } from '../../../shared/themeNames.js'
@@ -51,6 +52,7 @@ import eponaLogo from '../assets/epona.webp'
 import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 import { detectProtectedLocation } from '../../../shared/protectedPaths.js'
+import { worldFolderPlaceholder } from '../platformWords'
 
 const THEMES = Object.entries(THEME_LABELS).map(([key, label]) => ({ key, label }))
 
@@ -406,7 +408,7 @@ export default function SettingsPane({
               >
                 <ListItemText
                   primary={p.name}
-                  secondary={p.redirect ? `${p.hostname}:${p.port}` : 'No redirect'}
+                  secondary={p.redirect || !isWindows ? `${p.hostname}:${p.port}` : 'No redirect'}
                   primaryTypographyProps={{ variant: 'body2' }}
                   secondaryTypographyProps={{ variant: 'caption' }}
                 />
@@ -622,7 +624,9 @@ export default function SettingsPane({
               variant="text"
               size="small"
               startIcon={<FolderOpenIcon />}
-              onClick={() => window.sparkAPI.revealSettings()}
+              onClick={async () =>
+                setWorktreeSnack(revealFailure(await window.sparkAPI.revealSettings()))
+              }
             >
               Reveal settings folder
             </Button>
@@ -688,6 +692,12 @@ export default function SettingsPane({
 
 function ProfileDialog({ mode, profile: initial, onSave, onCancel }) {
   const [profile, setProfile] = useState(initial)
+  // The redirect is the legacy client's memory patch, which runs on Windows
+  // only. Off Windows the Hybrasyl client always goes to the host, so the
+  // checkbox did nothing there, and it greyed out the host when unticked
+  // (HTOO-659).
+  const isWindows = window.sparkAPI.platform === 'win32'
+  const hostEditable = profile.redirect || !isWindows
   function patch(p) {
     setProfile((prev) => ({ ...prev, ...p }))
   }
@@ -711,7 +721,7 @@ function ProfileDialog({ mode, profile: initial, onSave, onCancel }) {
           size="small"
           label="Hostname"
           value={profile.hostname}
-          disabled={!profile.redirect}
+          disabled={!hostEditable}
           onChange={(e) => patch({ hostname: e.target.value })}
         />
         <TextField
@@ -720,20 +730,24 @@ function ProfileDialog({ mode, profile: initial, onSave, onCancel }) {
           label="Port"
           type="number"
           value={profile.port}
-          disabled={!profile.redirect}
+          disabled={!hostEditable}
           onChange={(e) => patch({ port: Number(e.target.value) })}
           inputProps={{ min: 1, max: 65535 }}
         />
-        <FormControlLabel
-          control={
-            <Checkbox
-              size="small"
-              checked={profile.redirect}
-              onChange={(e) => patch({ redirect: e.target.checked })}
-            />
-          }
-          label={<Typography variant="body2">Redirect to custom server</Typography>}
-        />
+        {isWindows && (
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={profile.redirect}
+                onChange={(e) => patch({ redirect: e.target.checked })}
+              />
+            }
+            label={
+              <Typography variant="body2">Redirect the legacy client to this server</Typography>
+            }
+          />
+        )}
       </DialogContent>
       <DialogActions>
         <Button size="small" onClick={onCancel}>
@@ -815,7 +829,7 @@ function WorldDirDialog({ mode, worldDir: initial, onSave, onCancel }) {
               setPickError(null)
               setWorldDir((p) => ({ ...p, path: e.target.value }))
             }}
-            placeholder="C:\\Hybrasyl\\world"
+            placeholder={worldFolderPlaceholder(window.sparkAPI.platform)}
             inputProps={{ style: { fontFamily: 'monospace', fontSize: 11 } }}
           />
           <Button

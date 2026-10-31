@@ -154,6 +154,12 @@ function metaPathFor(destinationPath) {
   return `${destinationPath}.meta.json`
 }
 
+// Delete a downloaded installer and its `.meta.json`. Missing files are fine.
+export async function discardInstaller(destinationPath) {
+  await fs.rm(destinationPath, { force: true })
+  await fs.rm(metaPathFor(destinationPath), { force: true })
+}
+
 async function readMeta(destinationPath) {
   try {
     return JSON.parse(await fs.readFile(metaPathFor(destinationPath), 'utf8'))

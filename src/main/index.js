@@ -28,6 +28,7 @@ import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverCon
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
 import { buildHint } from './buildHints.js'
+import { openFolder } from './openFolder.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { reprobeGit } from './gitExec.js'
 import {
@@ -67,7 +68,7 @@ import { detectRemoteSessionNative } from './remoteSessionNative.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
-import { findPortOwner } from './portOwner.js'
+import { findPortOwner, stopByHandHint } from './portOwner.js'
 import originalFs from 'original-fs'
 import { sweepPortableLeftovers } from './portableSweep.js'
 
@@ -325,14 +326,16 @@ function createWindow() {
     // centers them in the 36px-tall bar. Windows/Linux stay fully frameless and
     // use the in-app minimize/close controls in TitleBar.
     //
-    // fullscreenable: false on macOS, because the window has a fixed size (min ==
-    // max, maximizable: false). The green light would otherwise take it to full
-    // screen and show the fixed layout in the middle of an empty screen.
+    // fullscreenable: false on every OS, because the window has a fixed size
+    // (min == max, maximizable: false). On macOS the green light would take it to
+    // full screen and show the fixed layout in the middle of an empty screen. On
+    // Windows F11 moved it to the corner of the display with a dark title bar,
+    // and on Linux it drew the page wider than the window (HTOO-649).
+    fullscreenable: false,
     ...(isMac
       ? {
           titleBarStyle: 'hiddenInset',
-          trafficLightPosition: { x: 12, y: 10 },
-          fullscreenable: false
+          trafficLightPosition: { x: 12, y: 10 }
         }
       : { frame: false }),
     // 256px, not the 1024px icon master. Windows takes the packaged app's icon
@@ -562,9 +565,13 @@ app.whenReady().then(() => {
   // ── The macOS application menu ────────────────────────────────────────────
   // An Epona item sends `menu:command` to the main window. The renderer reports
   // what to grey out and mark (`app:setMenuState`), and the menu is rebuilt when
-  // that changes. Windows and Linux get no Epona menu. They keep Electron's
-  // default menu, as before; the window is frameless there, so it does not show.
-  // See src/main/appMenu.js.
+  // that changes. See src/main/appMenu.js.
+  //
+  // Windows and Linux get no menu at all. Electron's default menu did not show
+  // on the frameless window, but its keys worked: Ctrl+R reloaded the renderer
+  // and lost the log pane, Ctrl+Shift+I opened DevTools in a packaged build,
+  // and F11 put the fixed-size window in full screen (HTOO-649, L3 and W2).
+  // Chromium handles copy and paste in text fields with no menu.
   let menuState = INITIAL_MENU_STATE
 
   function sendMenuCommand(msg) {
@@ -578,7 +585,10 @@ app.whenReady().then(() => {
   }
 
   function applyAppMenu() {
-    if (process.platform !== 'darwin') return
+    if (process.platform !== 'darwin') {
+      Menu.setApplicationMenu(null)
+      return
+    }
     const template = buildMenuTemplate(menuState, {
       appName: appIdentity.productName,
       isDev: !app.isPackaged,
@@ -700,7 +710,7 @@ app.whenReady().then(() => {
   // App / diagnostics (About card). Reveal opens the app-owned settings folder;
   // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs;
   // registerChangelogHandlers backs the What's New dialog.
-  ipc.handle('app:revealSettings', () => shell.openPath(dataDir))
+  ipc.handle('app:revealSettings', () => openFolder(shell, dataDir))
   // Update check (house module update-check v1, HTOO-382). No payload to
   // validate: the renderer sends nothing, and main reads the running version
   // itself. It never throws: "up to date" and "could not tell" come back as
@@ -1309,7 +1319,7 @@ app.whenReady().then(() => {
         adopted: true,
         error:
           `Something is listening on port ${inst.lobbyPort}, but Epona couldn't find which ` +
-          `process owns it. Stop it from Task Manager.`
+          `process owns it. ${stopByHandHint()}`
       }
     }
     const result = await killProcessTree(pid)
@@ -1362,7 +1372,7 @@ app.whenReady().then(() => {
     }
     // Untracked but its lobby port is listening: a server from an earlier Epona
     // run (or started by hand). Say so plainly — serverTarget's port preflight
-    // would otherwise report a generic "port already in use, kill dotnet.exe".
+    // would otherwise report a generic "port already in use".
     if (!existing && (await isPortInUse('127.0.0.1', instance.lobbyPort, 500))) {
       return {
         success: false,

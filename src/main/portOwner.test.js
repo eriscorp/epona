@@ -1,5 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { parseNetstatOwner, parseLsofOwner } from './portOwner.js'
+import { parseNetstatOwner, parseLsofOwner, parseSsOwner, stopByHandHint } from './portOwner.js'
+
+// HTOO-596. Arch and a minimal Fedora install no lsof, and the adopted Stop then
+// said "Stop it from Task Manager" on Linux.
+describe('parseSsOwner', () => {
+  it('finds the PID in an ss -Hltnp line', () => {
+    const line =
+      'LISTEN 0      512          0.0.0.0:2610       0.0.0.0:*    users:(("Hybrasyl",pid=5954,fd=200))'
+    expect(parseSsOwner(line)).toBe(5954)
+  })
+
+  it('is null when ss names no process, or prints nothing', () => {
+    expect(parseSsOwner('LISTEN 0 512 0.0.0.0:2610 0.0.0.0:*')).toBeNull()
+    expect(parseSsOwner('')).toBeNull()
+    expect(parseSsOwner(undefined)).toBeNull()
+  })
+})
+
+describe('stopByHandHint', () => {
+  it("names each OS's own tool", () => {
+    expect(stopByHandHint('win32')).toBe('Stop it from Task Manager.')
+    expect(stopByHandHint('darwin')).toMatch(/Activity Monitor/)
+    expect(stopByHandHint('linux')).toMatch(/install lsof/)
+    expect(stopByHandHint('linux')).not.toMatch(/Task Manager/)
+  })
+})
 
 const NETSTAT = `
 Active Connections

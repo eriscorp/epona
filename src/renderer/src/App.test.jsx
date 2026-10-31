@@ -104,8 +104,8 @@ describe('when the IPC bridge is unreachable', () => {
   // the app then opened on defaults with every IPC-backed control dead — while
   // checkboxes and text fields still worked, because those never leave the
   // renderer. Nothing on screen said so, and Report Issue is itself an invoke.
-  async function renderBroken() {
-    global.window.sparkAPI = makeSparkAPI('win32')
+  async function renderBroken(platform = 'win32') {
+    global.window.sparkAPI = makeSparkAPI(platform)
     global.window.sparkAPI.loadSettings.mockRejectedValue(
       new Error('IPC "settings:load" rejected: untrusted sender (location-mismatch)')
     )
@@ -124,6 +124,15 @@ describe('when the IPC bridge is unreachable', () => {
     expect(alert.textContent).toMatch(/showing\s+defaults/i)
     // The underlying error, so a report carries the actual cause.
     expect(alert.textContent).toMatch(/location-mismatch/)
+  })
+
+  it.each([
+    ['win32', '%LOCALAPPDATA%\\Erisco\\Epona\\logs'],
+    ['darwin', '~/Library/Application Support/Erisco/Epona/logs'],
+    ['linux', '~/.config/Erisco/Epona/logs']
+  ])('%s: names the logs folder of that OS (HTOO-648)', async (platform, path) => {
+    await renderBroken(platform)
+    expect((await screen.findByRole('alert')).textContent).toContain(path)
   })
 
   it('still signals app:ready, so a broken bridge does not also cost 15 seconds', async () => {
@@ -177,6 +186,26 @@ describe('the macOS application menu', () => {
     await waitFor(() => expect(menu.onMenuCommand).toHaveBeenCalled())
     return { menu, send: (command) => act(() => emit({ command })) }
   }
+
+  it('names the folder when Reveal Settings Folder cannot open it (HTOO-658)', async () => {
+    let emit = () => {}
+    await renderApp('darwin', {
+      onMenuCommand: vi.fn((cb) => {
+        emit = cb
+        return () => {}
+      }),
+      revealSettings: vi.fn().mockResolvedValue({
+        ok: false,
+        path: '/Users/me/Library/Application Support/Erisco/Epona',
+        error: 'Failed to open path'
+      })
+    })
+    await act(() => emit({ command: 'revealSettings' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Could not open the folder /Users/me/Library/Application Support/Erisco/Epona'
+    )
+  })
 
   it('reports the tab once settings hydrate, and Go switches the tab', async () => {
     const { menu, send } = await renderWithMenu()

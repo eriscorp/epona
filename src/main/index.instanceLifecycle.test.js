@@ -82,7 +82,10 @@ vi.mock('./targets/serverTarget.js', () => ({ launch: launchServer }))
 // adopted-instance path probes them too. Left real, these tests would open
 // loopback sockets on a schedule and depend on nothing else using port 2610.
 vi.mock('./portProbe.js', () => ({ isPortInUse }))
-vi.mock('./portOwner.js', () => ({ findPortOwner }))
+vi.mock('./portOwner.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  findPortOwner
+}))
 // The wrapper PIDs here are made up. Each Start, Stop and Reset forces a status
 // pass (HTOO-589), and with the real check that pass finds PID 4242 dead and
 // reaps the instance before the test can stop it. A real wrapper is alive.
@@ -299,7 +302,7 @@ describe('instance:stop for an instance Epona never launched', () => {
     expect(killProcessTree).toHaveBeenCalledWith(9191)
   })
 
-  it('tells the user to use Task Manager when it cannot find the owner', async () => {
+  it("names this OS's tool when it cannot find the owner (HTOO-596)", async () => {
     // The one case with no action available. Reporting success would leave the
     // renderer showing a stopped server that is still holding the port.
     isPortInUse.mockResolvedValue(true)
@@ -310,7 +313,9 @@ describe('instance:stop for an instance Epona never launched', () => {
     expect(result.success).toBe(false)
     expect(result.adopted).toBe(true)
     expect(result.error).toMatch(/2610/)
-    expect(result.error).toMatch(/Task Manager/)
+    // Task Manager on Windows only: Linux reached this whenever lsof was
+    // missing, and the message named Task Manager there too.
+    expect(result.error).toMatch(process.platform === 'win32' ? /Task Manager/ : /`kill`/)
   })
 })
 

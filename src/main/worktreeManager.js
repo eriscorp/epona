@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { promises as fs } from 'fs'
 import { join, resolve as resolvePath, sep } from 'path'
 import { runGit } from './gitExec.js'
@@ -41,8 +42,21 @@ export function sanitizeBranchName(branch) {
   return branch.replace(/\//g, '__').replace(/[^A-Za-z0-9._-]/g, '_')
 }
 
+// The folder for a branch under .worktrees. A branch in lower case, with only
+// letters, digits, `.`, `-` and `/`, keeps its readable name. Any other branch
+// also gets 8 hex characters of a hash of its exact name, because its readable
+// name can collide: `Feature/X` and `feature/x` name one folder on macOS and
+// Windows, where the file system ignores case (HTOO-655), and `a/b` and `a__b`,
+// or `a:b` and `a_b`, sanitize to the same name on every OS. A worktree already
+// on disk under the old name is still found: adoption matches the branch.
+export function worktreeDirName(branch) {
+  const name = sanitizeBranchName(branch)
+  if (/^[a-z0-9.-]+(\/[a-z0-9.-]+)*$/.test(branch)) return name
+  return `${name}-${createHash('sha1').update(branch).digest('hex').slice(0, 8)}`
+}
+
 function worktreePath(repoPath, branch) {
-  return resolvePath(repoPath, '.worktrees', sanitizeBranchName(branch))
+  return resolvePath(repoPath, '.worktrees', worktreeDirName(branch))
 }
 
 // Canonical absolute form of a repo root. `path.resolve` alone is not enough on
