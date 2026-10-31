@@ -80,10 +80,18 @@ describe('booting the main process', () => {
     expect(call[1]).toContain(join('Erisco', 'Epona'))
   })
 
-  it('installs no Epona menu off macOS', () => {
-    // Windows and Linux are frameless and keep Electron's default menu, as
-    // before. index.darwin.test.js covers macOS.
-    expect(harness.electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
+  it('removes the default menu off macOS, so its keys do nothing (HTOO-649)', () => {
+    // The default menu's Ctrl+R reloaded the renderer, Ctrl+Shift+I opened
+    // DevTools, and F11 took the fixed-size window to full screen.
+    // index.darwin.test.js covers the Epona menu on macOS.
+    const { setApplicationMenu, buildFromTemplate } = harness.electron.Menu
+    expect(setApplicationMenu).toHaveBeenCalled()
+    expect(setApplicationMenu.mock.calls.every(([menu]) => menu === null)).toBe(true)
+    expect(buildFromTemplate).not.toHaveBeenCalled()
+  })
+
+  it('keeps the fixed-size window out of full screen (HTOO-649)', () => {
+    expect(harness.windows.at(-1).options).toMatchObject({ frame: false, fullscreenable: false })
   })
 
   it('reads LOCALAPPDATA on every platform, not on Windows only', () => {
