@@ -4,6 +4,7 @@ import { basename, dirname, relative, join, resolve as resolveAbs } from 'path'
 import { gitToplevel } from '../gitOps.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { resolveDotnetPath, dotnetRootEnv } from '../dotnet.js'
+import { spawnStarted, describeSpawnError } from './spawnStarted.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -256,6 +257,14 @@ export async function launch(config, profile, daClientPath) {
       detached: isRepo && process.platform !== 'win32',
       env
     })
+    // Report success only once the program runs: a missing `dotnet`, a
+    // folder that is gone or a blocked apphost fails after spawn() returns
+    // (HTOO-594).
+    const failed = await spawnStarted(child)
+    if (failed) {
+      await releaseFn().catch(() => {})
+      return { success: false, error: `Failed to start the client: ${describeSpawnError(failed)}` }
+    }
     // For repo launches with a worktree, the cleanup releases the worktree
     // when the child exits. For binary / no-branch repo launches, cleanup is
     // a no-op. The caller is responsible for actually invoking cleanup on
@@ -273,6 +282,8 @@ export async function launch(config, profile, daClientPath) {
     } catch {
       /* swallow during error recovery */
     }
-    return { success: false, error: `Failed to spawn client: ${err.message}` }
+    // A synchronous failure, such as an x86_64-only program on a Mac with no
+    // Rosetta ("Unknown system error -86").
+    return { success: false, error: `Failed to start the client: ${describeSpawnError(err)}` }
   }
 }

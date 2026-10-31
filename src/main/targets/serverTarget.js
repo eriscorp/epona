@@ -12,6 +12,7 @@ import {
   releaseBuildProps
 } from '../buildProps.js'
 import { resolveDotnetPath } from '../dotnet.js'
+import { spawnStarted, describeSpawnError } from './spawnStarted.js'
 
 // The server config the user picked, as a path for `--configFile`. `--config`
 // takes a config's Name attribute, not its file name, and matches it with case:
@@ -249,13 +250,28 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
 // and let the renderer's log panel surface its output via wireInstanceLogs.
 // detached:true puts the child in its own process group so killProcessTree can
 // SIGKILL the whole tree by negated pid. Shared by binary + repo modes.
-function spawnDirect(spec, cwd, cleanup) {
-  const child = spawn(spec.command, spec.args, {
-    cwd,
-    env: { ...process.env, ...spec.env },
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe']
-  })
+//
+// It reports success only once the program runs, and undoes the launch's setup
+// when it does not. A synchronous throw rejected the IPC call, and the Start
+// button stayed on "Starting…" (HTOO-594).
+async function spawnDirect(spec, cwd, cleanup) {
+  let failed
+  let child
+  try {
+    child = spawn(spec.command, spec.args, {
+      cwd,
+      env: { ...process.env, ...spec.env },
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    failed = await spawnStarted(child)
+  } catch (err) {
+    failed = err
+  }
+  if (failed) {
+    await cleanup()
+    return { success: false, error: `Failed to start the server: ${describeSpawnError(failed)}` }
+  }
   return { success: true, child, cleanup }
 }
 
