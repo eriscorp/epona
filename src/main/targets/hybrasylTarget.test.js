@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { resolvePath, buildSpawnArgs, launch } from './hybrasylTarget.js'
+import { resolvePath, buildSpawnArgs, launch, csprojInWorktree } from './hybrasylTarget.js'
 
 let dir
 
@@ -286,5 +286,38 @@ describe('launch (pre-spawn validation)', () => {
     )
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/Repo mode requires a \.csproj path/)
+  })
+
+  it('treats a Dark Ages path that does not exist as not set (HTOO-656)', async () => {
+    // A Windows path carried to macOS or Linux has the dirname `.`, and the
+    // client looked for its assets in its own folder with no error.
+    const result = await launch(
+      { mode: 'binary', binaryPath: '' },
+      null,
+      'C:\\DarkAges\\Darkages.exe'
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/not set/)
+  })
+})
+
+// HTOO-647. Real folders and a real symlink; Windows needs a privilege to make
+// one, so this runs on the ubuntu and macos legs of unit-posix.
+describe.skipIf(process.platform === 'win32')('csprojInWorktree', () => {
+  it('stays inside the worktree for a csproj picked through a symlink', async () => {
+    const repo = join(dir, 'real', 'client')
+    await fs.mkdir(join(repo, 'src'), { recursive: true })
+    await fs.writeFile(join(repo, 'src', 'Client.csproj'), '<Project />')
+    await fs.symlink(join(dir, 'real'), join(dir, 'link'))
+    const repoRoot = await fs.realpath(repo) // as gitToplevel gives it
+    const worktree = join(repoRoot, '.worktrees', 'feature')
+
+    const result = await csprojInWorktree(
+      repoRoot,
+      worktree,
+      join(dir, 'link', 'client', 'src', 'Client.csproj')
+    )
+
+    expect(result).toBe(join(worktree, 'src', 'Client.csproj'))
   })
 })

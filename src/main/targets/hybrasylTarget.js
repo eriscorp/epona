@@ -116,6 +116,17 @@ export function buildSpawnArgs(resolved, dotnetPath = 'dotnet') {
   throw new Error(`cannot build spawn args for resolved kind '${resolved.kind}'`)
 }
 
+// The picked csproj's path inside a branch worktree. gitToplevel gives the repo
+// root as a physical path. The csproj as picked can go through a symlink (/tmp
+// and /var on macOS, a ~/Repos on another volume), and relative() then climbed
+// out of the repo with `../..`: the result pointed back at the main checkout,
+// which ran the wrong code with no error, or at nothing (HTOO-647). realpath
+// makes both sides physical.
+export async function csprojInWorktree(repoRoot, worktreePath, csprojPath) {
+  const csprojReal = await fs.realpath(resolveAbs(csprojPath))
+  return join(worktreePath, relative(repoRoot, csprojReal))
+}
+
 // Decide which configured path to feed `resolvePath` based on the target's
 // mode. Returns null if the mode is unrecognised.
 function pathForMode(config) {
@@ -147,14 +158,30 @@ function pathForMode(config) {
 // process group and a stop signals the client it started too (HTOO-644), as
 // spawnDirect does for a server.
 export async function launch(config, profile, daClientPath) {
-  if (typeof daClientPath !== 'string' || daClientPath.length === 0) {
-    return {
-      success: false,
-      error:
-        process.platform === 'win32'
-          ? 'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
-          : 'Dark Ages folder not set — open the Legacy Client tab and pick the folder containing your Dark Ages data files.'
-    }
+  const notSet = {
+    success: false,
+    error:
+      process.platform === 'win32'
+        ? 'Dark Ages client path not set — use the Locate Client button on the toolbar to pick Dark Ages.exe.'
+        : 'Dark Ages folder not set — open the Legacy Client tab and pick the folder containing your Dark Ages data files.'
+  }
+  if (typeof daClientPath !== 'string' || daClientPath.length === 0) return notSet
+
+  // DA_ASSET_PATH is universally needed: the client's fallback is
+  // `<binary>/..` which is wrong for both prebuilt-exe and `dotnet run`
+  // layouts.
+  //
+  // daClientPath is either a file (Windows: Dark Ages.exe) or a directory (how
+  // non-Windows users point Epona at their DA assets via "Locate Assets"). Use
+  // a directory as-is; for a file, use its containing directory. A path that
+  // does not exist is the same as no path: a Windows path carried to macOS or
+  // Linux has the dirname `.`, and the client then looked for its assets in its
+  // own folder with no error (HTOO-656).
+  let assetPath
+  try {
+    assetPath = (await fs.stat(daClientPath)).isDirectory() ? daClientPath : dirname(daClientPath)
+  } catch {
+    return notSet
   }
 
   const configured = pathForMode(config)
@@ -196,8 +223,7 @@ export async function launch(config, profile, daClientPath) {
       }
       worktreePath = await ensureWorktree(repoRoot, config.clientBranch)
       releaseFn = () => releaseWorktree(repoRoot, config.clientBranch)
-      const relCsproj = relative(repoRoot, resolveAbs(resolved.csprojPath))
-      resolved.csprojPath = join(worktreePath, relCsproj)
+      resolved.csprojPath = await csprojInWorktree(repoRoot, worktreePath, resolved.csprojPath)
       resolved.cwd = dirname(resolved.csprojPath)
     } catch (err) {
       try {
@@ -215,20 +241,8 @@ export async function launch(config, profile, daClientPath) {
     resolved.kind === 'repo' || resolved.kind === 'dll' ? await resolveDotnetPath() : 'dotnet'
   const { command, args, cwd } = buildSpawnArgs(resolved, dotnetPath)
 
-  // DA_ASSET_PATH is universally needed: the client's fallback is
-  // `<binary>/..` which is wrong for both prebuilt-exe and `dotnet run`
-  // layouts. DA_HOST / DA_HOST_PORT only override when the active profile
-  // is non-empty; without them the client falls back to its hardcoded host.
-  //
-  // daClientPath is either a file (Windows: Dark Ages.exe) or a directory (how
-  // non-Windows users point Epona at their DA assets via "Locate Assets"). Use
-  // a directory as-is; for a file, use its containing directory.
-  let assetPath = dirname(daClientPath)
-  try {
-    if ((await fs.stat(daClientPath)).isDirectory()) assetPath = daClientPath
-  } catch {
-    // Path is gone — keep dirname() and let the client's own fallback cope.
-  }
+  // DA_HOST / DA_HOST_PORT only override when the active profile is
+  // non-empty; without them the client falls back to its hardcoded host.
   // DA_NO_LAUNCHER: Epona IS the launcher, so the client should never show its own selector —
   // even for a hostname-less profile (which sets no DA_HOST and would otherwise drop into the
   // launcher). The client then resolves host from DA_HOST or its saved config, asset from
