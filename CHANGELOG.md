@@ -66,6 +66,11 @@ the rules above.
 - **A server on a branch builds with the XML that its instance names.** Before, a branch instance with no local XML could build with the settings file at the root of the server repo, which can point at another instance's XML.
 - **A local XML in a folder with `&` in its name works.** Before, the build ignored the local XML and gave no error.
 - **On macOS, a client that needs .NET finds it.** Before, a client app that does not include .NET stopped with "You must install .NET to run this application" when .NET came from Homebrew.
+- **On macOS, the Hybrasyl client can be `Brigid.app`.** Before, Epona refused an app bundle with "path is not a file", so binary mode could not run the macOS client from a Brigid release.
+- **Epona tells you when the client or a server does not start.** Before, a client that could not start, for example because .NET or the program's execute permission was missing, showed nothing, and a server that could not start could leave the Start Server button on "Starting…". Now an error says why. For a program that needs Rosetta, it says so.
+- **On macOS and Linux, Epona refuses a Windows `.exe` as the client, and tells you when the client is not executable.** Before, the `.exe` showed as a valid client and then did not start.
+- **A client on a branch runs the code from that branch when its folder is reached through a symbolic link.** Before, it could run the code from the main checkout with no error.
+- **Epona tells you when the Dark Ages folder does not exist.** Before, with settings copied from Windows, the client started without its assets and gave no error.
 - **On an Apple Silicon Mac, Epona tells you when a server build needs Rosetta.** Before, the build stopped with exit code 1 and no explanation. Now the log and the notice give the command that installs Rosetta.
 - **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
 - **A Stop Server button shows the error colour in the six Dark Ages themes.** Before, it looked the same as the other buttons.

@@ -201,6 +201,13 @@ Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected
 2. Start Epona from the application menu. **Expected:** the menu entry shows the square tile icon, and the taskbar shows the same icon for the running window, not a generic one.
 3. Remove it afterwards (`sudo apt remove epona`).
 
+### B9. The Hybrasyl client launch (both OS) — HTOO-593, HTOO-594, HTOO-656
+
+1. **macOS:** download `Brigid.app` from a Brigid release. On the Hybrasyl Client tab, in binary mode, pick `Brigid.app`. **Expected:** the path shows as a valid prebuilt binary, and Launch starts Brigid on the selected profile (HTOO-593).
+2. Copy the client program and remove its execute bit (`chmod -x`). Pick the copy. **Expected:** the message names `chmod +x`. Pick a Windows `.exe`. **Expected:** the message says that it is a Windows program (HTOO-594).
+3. Pick a client program that cannot start, for example an x86_64-only build on Apple Silicon with no Rosetta, or a script with no interpreter. Click Launch. **Expected:** an error that says why, not a launch that does nothing (HTOO-594).
+4. In `settings.json`, set `clientPath` to a Windows path such as `C:\DarkAges\Darkages.exe`, then start Epona and launch the client. **Expected:** "Dark Ages folder not set" (HTOO-656).
+
 ## Owed elsewhere — not on this page
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
