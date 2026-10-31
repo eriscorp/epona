@@ -235,6 +235,18 @@ The card asks for a fault that hides other faults to go first. Three of those co
 - F21 (HTOO-650): `build/entitlements.mac.plist` drops `allow-dyld-environment-variables` and keeps `disable-library-validation`. The three keys left are electron-builder's own default, and without the DYLD key the hardened runtime ignores `DYLD_*`, so the injection route is closed. Removing `disable-library-validation` too would buy nothing more, and its effect shows only on a signed, notarized build, at the tag. `scripts/entitlements.test.mjs` pins the keys. The template and the other apps carry the same DYLD key, and the house skeleton names it as standard.
 - F22 (HTOO-651): each build job in `release.yml` runs `npm run validate` (lint, format check, unit suite) after the install and before the build. `scripts/release-validate.test.mjs` pins it. The `ci.yml` comment now names the step.
 
+**Group 6** (HTOO-596 with F10 and F20, HTOO-648, HTOO-649, HTOO-659, HTOO-660, HTOO-658, HTOO-657, HTOO-655, HTOO-653):
+
+- HTOO-653 (F5): `createLineBuffer` decodes with a `StringDecoder`, flushed by `flush()`.
+- HTOO-649 (F17): off macOS `applyAppMenu` sets no menu, and `fullscreenable: false` applies on every OS, as W2 showed it must.
+- HTOO-658 (F16): `openFolder` returns `{ ok, path, error }` for Reveal settings and Reveal logs; the menu, Settings and Report Issue show a notice that names the folder.
+- HTOO-657 (F15): `downloadAndInstall` deletes the installer and its `.meta.json` after `verifyClientTree` passes; a failed install keeps both.
+- HTOO-655 (F9): `worktreeDirName` keeps the readable name for a lower-case branch of letters, digits, `.`, `-` and `/`, and adds 8 hex characters of a SHA-1 of the exact name for any other branch. Existing worktrees are adopted by branch, so an old folder is still found.
+- HTOO-648 (F14): the banner's logs path comes from the preload's `platform`, or `navigator.platform` with no bridge.
+- HTOO-659 (F18): on the Hybrasyl tab the caption is `hostname:port`; off Windows the profile dialog has no redirect checkbox and keeps the host editable.
+- HTOO-660 (F19): `useAssetDirStatus` shares the folder check through the runtime store; the toolbar shows "found" only when it passes.
+- HTOO-596 (F10, F20): per-OS words in `platformWords.js` and `portOwner.js`; an `ss` fallback for a missing `lsof`; a server apphost runs directly; a `.exe` is refused off Windows.
+
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.

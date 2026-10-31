@@ -208,6 +208,14 @@ Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected
 3. Pick a client program that cannot start, for example an x86_64-only build on Apple Silicon with no Rosetta, or a script with no interpreter. Click Launch. **Expected:** an error that says why, not a launch that does nothing (HTOO-594).
 4. In `settings.json`, set `clientPath` to a Windows path such as `C:\DarkAges\Darkages.exe`, then start Epona and launch the client. **Expected:** "Dark Ages folder not set" (HTOO-656).
 
+### B10. Keys, folders and status (both OS; steps 1 and 2 on Windows too) — HTOO-649, HTOO-658, HTOO-659, HTOO-660, HTOO-596
+
+1. On Linux and on Windows, open the Log Pane on the Hybrasyl Client tab. Press Ctrl+R, then Ctrl+Shift+I, then F11. **Expected:** nothing happens: the pane stays open, no DevTools opens, and the window keeps its size and place (HTOO-649).
+2. In Settings, click Reveal settings folder, and in Report Issue click the logs folder button. **Expected:** the folder opens. On a Linux desktop with no handler for folders (start Epona with `XDG_DATA_HOME`, `XDG_DATA_DIRS` and `XDG_CONFIG_DIRS` pointed at empty folders, as L6 did), a notice names the folder instead (HTOO-658).
+3. On the Hybrasyl Client tab, select a profile with the redirect off. **Expected:** the caption under the profile names its host and port, not "No redirect". Edit the profile: off Windows there is no redirect checkbox, and the host can be changed (HTOO-659).
+4. Point the Dark Ages folder at a folder with no `.dat` files. **Expected:** the toolbar says "Assets Not Found", as the Legacy tab's chip does (HTOO-660).
+5. On Linux with no `lsof` installed, start a server, end Epona with `kill -9`, open it again and press Stop. **Expected:** the server stops (Epona finds it with `ss`). The server panel's log-folder tooltip says Finder on macOS and "the file manager" on Linux (HTOO-596).
+
 ## Owed elsewhere — not on this page
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
