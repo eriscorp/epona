@@ -17,6 +17,11 @@ function appendCapped(arr, entry) {
 export const useRuntime = create((set) => ({
   hybrasylLog: [],
   instanceLogs: {}, // { [instanceId]: [{ stream, text }] }
+  // The newest Dark Ages folder check, with the path it is for
+  // (useAssetDirStatus.js, HTOO-660).
+  assetDir: null,
+
+  setAssetDir: (path, result) => set({ assetDir: { path, result } }),
 
   appendHybrasyl: (stream, text) =>
     set((s) => ({ hybrasylLog: appendCapped(s.hybrasylLog, { stream, text }) })),

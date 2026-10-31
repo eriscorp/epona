@@ -3,6 +3,7 @@ import { GiSettingsKnobs, GiMagnifyingGlass, GiHelp, GiBugNet } from 'react-icon
 import { chromeKind, navButtonSx } from './titleChrome'
 import { useSettings } from '../store/settingsStore.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
+import { useAssetDirStatus } from '../useAssetDirStatus.js'
 
 export default function NavToolbar({
   detectedVersion,
@@ -31,15 +32,17 @@ export default function NavToolbar({
   })
   // Windows shows the detected legacy-client version (memory-patch target).
   // Non-Windows points at a Dark Ages asset folder, which carries no version —
-  // so report whether assets have been located, and which folder.
+  // so report whether assets have been located, and which folder. "Located"
+  // is the Legacy tab's check of the folder, not a path that is set (HTOO-660).
+  const assets = useAssetDirStatus(clientPath, !isWindows)
   const assetsName = clientPath ? basenameOfPath(clientPath) : ''
   const status = isWindows
     ? detectedVersion
       ? { found: true, label: `Client: ${detectedVersion}` }
       : { found: false, label: 'No client detected' }
-    : clientPath
-      ? { found: true, label: `Assets: ${assetsName}` }
-      : { found: false, label: 'Assets Not Found' }
+    : !clientPath || assets?.ok === false
+      ? { found: false, label: 'Assets Not Found' }
+      : { found: assets?.ok === true, label: `Assets: ${assetsName}` }
   return (
     <Toolbar variant="dense" disableGutters sx={{ bgcolor: 'tertiary.main', minHeight: 40, px: 2 }}>
       {/* Text on the bar is tertiary.contrastText, the title bar's text colour

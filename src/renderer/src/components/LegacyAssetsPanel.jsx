@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback } from 'react'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Typography from '@mui/material/Typography'
 import PathPicker from './PathPicker'
 import DarkAgesInstallPanel from './DarkAgesInstallPanel'
 import { describeAssetDir } from '../../../shared/assetStatus.js'
+import { useAssetDirStatus } from '../useAssetDirStatus.js'
 
 // The Legacy Client tab on macOS and Linux.
 //
@@ -18,17 +19,8 @@ import { describeAssetDir } from '../../../shared/assetStatus.js'
 // Dark Ages.exe. One field with two meanings is deliberate (HTOO-296): the
 // file-or-directory normalisation lives in exactly one place, at launch.
 export default function LegacyAssetsPanel({ clientPath, onChange }) {
-  const [status, setStatus] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    window.sparkAPI.inspectAssetDir(clientPath).then((result) => {
-      if (!cancelled) setStatus(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [clientPath])
+  // Shared with the nav toolbar, so the two agree (HTOO-660).
+  const status = useAssetDirStatus(clientPath)
 
   const pick = useCallback(async () => {
     const path = await window.sparkAPI.pickDirectory(

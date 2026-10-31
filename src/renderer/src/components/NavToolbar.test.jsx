@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { ThemeProvider } from '@mui/material/styles'
 // Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
 import { themesByName } from '../themes/eponaThemes'
 import { blend, contrast } from '../lib/contrast'
 import { useSettings } from '../store/settingsStore.js'
+import { useRuntime } from '../store/runtimeStore.js'
 import NavToolbar from './NavToolbar'
 
 const THEME_NAMES = Object.keys(themesByName)
@@ -91,5 +92,42 @@ describe('the nav toolbar', () => {
     expect(
       getComputedStyle(screen.getByRole('button', { name: 'Report an issue' })).boxShadow
     ).not.toContain('inset')
+  })
+})
+
+// Off Windows the bar reports the Dark Ages folder. "Found" is the Legacy tab's
+// check of that folder, shared through the runtime store, not a path that is
+// set (HTOO-660).
+describe('the assets status on macOS and Linux (HTOO-660)', () => {
+  beforeEach(() => {
+    useRuntime.setState({ assetDir: null })
+  })
+  afterEach(() => {
+    cleanup()
+    delete window.sparkAPI
+  })
+
+  function mountAt(clientPath, result) {
+    window.sparkAPI = { platform: 'linux', inspectAssetDir: vi.fn().mockResolvedValue(result) }
+    useSettings.setState((s) => ({ settings: { ...s.settings, theme: 'hybrasyl' } }))
+    render(
+      <ThemeProvider theme={themesByName.hybrasyl}>
+        <NavToolbar clientPath={clientPath} />
+      </ThemeProvider>
+    )
+    return window.sparkAPI.inspectAssetDir
+  }
+
+  it('says not found for a folder that the check cannot find', async () => {
+    const inspect = mountAt('/home/me/DarkAges', { ok: false, reason: 'missing' })
+    expect(inspect).toHaveBeenCalledWith('/home/me/DarkAges')
+    expect(await screen.findByText('Assets Not Found')).toBeTruthy()
+  })
+
+  it('names the folder in bold once the check finds it', async () => {
+    mountAt('/home/me/DarkAges', { ok: true, datCount: 7 })
+    const status = screen.getByTestId('client-status')
+    expect(status.textContent).toBe('Assets: DarkAges')
+    await vi.waitFor(() => expect(getComputedStyle(status).fontWeight).toBe('700'))
   })
 })
