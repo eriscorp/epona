@@ -40,6 +40,18 @@ export function parseLsofOwner(stdout) {
   return null
 }
 
+// Pure parser for `ss -Hltnp 'sport = :<port>'` output, one listener per line:
+//
+//   LISTEN 0 512 0.0.0.0:2610 0.0.0.0:* users:(("Hybrasyl",pid=5954,fd=200))
+//
+// `ss` names the process only for the user's own processes, which a server that
+// Epona or the user started is. Returns the first PID, or null.
+export function parseSsOwner(stdout) {
+  const m = String(stdout ?? '').match(/\bpid=(\d+)/)
+  const pid = m ? Number.parseInt(m[1], 10) : NaN
+  return Number.isInteger(pid) && pid > 0 ? pid : null
+}
+
 function run(command, args, timeoutMs) {
   return new Promise((resolve) => {
     execFile(
@@ -59,7 +71,20 @@ export async function findPortOwner(port, timeoutMs = 3000) {
     return parseNetstatOwner(await run('netstat.exe', ['-ano', '-p', 'tcp'], timeoutMs), port)
   }
   // lsof exits non-zero with empty output when nothing matches — treated as null.
-  return parseLsofOwner(
+  const fromLsof = parseLsofOwner(
     await run('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], timeoutMs)
   )
+  if (fromLsof || process.platform !== 'linux') return fromLsof
+  // Arch and a minimal Fedora install no `lsof`; iproute2's `ss` is on every
+  // Linux. Without it, an adopted Stop said "Stop it from Task Manager" on
+  // Linux (HTOO-596).
+  return parseSsOwner(await run('ss', ['-Hltnp', `sport = :${port}`], timeoutMs))
+}
+
+// What to tell the user when no lookup names the owner of a port: the tool for
+// this OS.
+export function stopByHandHint(platform = process.platform) {
+  if (platform === 'win32') return 'Stop it from Task Manager.'
+  if (platform === 'darwin') return 'Stop it from Activity Monitor, or with `kill`.'
+  return 'Stop it with `kill`, or install lsof so that Epona can find it.'
 }

@@ -68,7 +68,7 @@ import { detectRemoteSessionNative } from './remoteSessionNative.js'
 import { createStatusMonitor } from './statusMonitor.js'
 import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
-import { findPortOwner } from './portOwner.js'
+import { findPortOwner, stopByHandHint } from './portOwner.js'
 import originalFs from 'original-fs'
 import { sweepPortableLeftovers } from './portableSweep.js'
 
@@ -1319,7 +1319,7 @@ app.whenReady().then(() => {
         adopted: true,
         error:
           `Something is listening on port ${inst.lobbyPort}, but Epona couldn't find which ` +
-          `process owns it. Stop it from Task Manager.`
+          `process owns it. ${stopByHandHint()}`
       }
     }
     const result = await killProcessTree(pid)
@@ -1372,7 +1372,7 @@ app.whenReady().then(() => {
     }
     // Untracked but its lobby port is listening: a server from an earlier Epona
     // run (or started by hand). Say so plainly — serverTarget's port preflight
-    // would otherwise report a generic "port already in use, kill dotnet.exe".
+    // would otherwise report a generic "port already in use".
     if (!existing && (await isPortInUse('127.0.0.1', instance.lobbyPort, 500))) {
       return {
         success: false,

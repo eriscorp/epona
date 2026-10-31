@@ -69,7 +69,10 @@ vi.mock('electron', () => harness.electron)
 vi.mock('./processKill.js', () => ({ killProcessTree }))
 vi.mock('./targets/serverTarget.js', () => ({ launch: launchServer }))
 vi.mock('./portProbe.js', () => ({ isPortInUse: async () => false }))
-vi.mock('./portOwner.js', () => ({ findPortOwner: async () => null }))
+vi.mock('./portOwner.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  findPortOwner: async () => null
+}))
 vi.mock('./processAlive.js', () => ({ isProcessAlive: () => true }))
 vi.mock('./gitExec.js', async (importOriginal) => ({
   ...(await importOriginal()),

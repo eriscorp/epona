@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   serverConfigPath,
+  leftoverServerHint,
   buildBinarySpawn,
   buildRepoSpawn,
   validateForLaunch
@@ -81,6 +82,12 @@ describe('buildBinarySpawn', () => {
       '--configFile',
       join('D:/ceridwen', 'xml', 'serverconfigs', 'config.xml')
     ])
+  })
+
+  it('runs a macOS or Linux apphost directly, not through dotnet (F10)', () => {
+    const spec = buildBinarySpawn({ ...BASE_INSTANCE, binaryPath: '/opt/hybrasyl/Hybrasyl' })
+    expect(spec.command).toBe('/opt/hybrasyl/Hybrasyl')
+    expect(spec.args[0]).toBe('--dataDir')
   })
 
   it('matches .exe case-insensitively', () => {
@@ -232,5 +239,26 @@ describe('validateForLaunch', () => {
     const result = validateForLaunch({ ...BASE_INSTANCE, configFileName: '' })
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/configFileName/)
+  })
+})
+
+describe('leftoverServerHint (HTOO-596)', () => {
+  it("names each OS's own tool", () => {
+    expect(leftoverServerHint('win32')).toMatch(/dotnet\.exe in Task Manager/)
+    expect(leftoverServerHint('darwin')).toMatch(/Activity Monitor/)
+    expect(leftoverServerHint('linux')).toMatch(/`kill`/)
+  })
+})
+
+describe('validateForLaunch for a .exe off Windows (HTOO-596)', () => {
+  it.skipIf(process.platform === 'win32')('refuses a Windows program', () => {
+    const result = validateForLaunch({ ...BASE_INSTANCE, binaryPath: '/x/Hybrasyl.exe' })
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/Windows program/) })
+  })
+
+  it.runIf(process.platform === 'win32')('accepts it on Windows', () => {
+    expect(validateForLaunch({ ...BASE_INSTANCE, binaryPath: 'D:/hyb/Hybrasyl.exe' })).toEqual({
+      ok: true
+    })
   })
 })

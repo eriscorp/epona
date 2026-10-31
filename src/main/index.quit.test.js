@@ -59,7 +59,10 @@ vi.mock('./targets/serverTarget.js', () => ({ launch: launchServer }))
 // Hermetic, as in index.instanceLifecycle.test.js. The status monitor must also
 // see the wrapper as alive, or a poll reaps the instance mid-test.
 vi.mock('./portProbe.js', () => ({ isPortInUse: async () => false }))
-vi.mock('./portOwner.js', () => ({ findPortOwner: async () => null }))
+vi.mock('./portOwner.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  findPortOwner: async () => null
+}))
 vi.mock('./processAlive.js', () => ({ isProcessAlive: () => true }))
 vi.mock('./worktreeManager.js', async (importOriginal) => ({
   ...(await importOriginal()),

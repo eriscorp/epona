@@ -37,6 +37,7 @@ import { useDotnetRuntime } from '../useDotnetRuntime'
 import { diagnoseAndExplain } from '../gitDiagnose'
 import { runtimeChip } from '../runtimeChip'
 import { redisInstallCommand } from '../installHints'
+import { fileManagerName, serverBinaryFilters, serverBinaryLabel } from '../platformWords'
 
 const TAB_SERVER = 0
 const TAB_XML = 1
@@ -271,7 +272,7 @@ export default function ServerInstancePanel({
   async function pickBinary() {
     const p = await window.sparkAPI.pickFile(
       'Select Hybrasyl server binary',
-      [{ name: 'Hybrasyl server (.dll or .exe)', extensions: ['dll', 'exe'] }],
+      serverBinaryFilters(window.sparkAPI.platform),
       selected?.binaryPath
     )
     if (p) updateSelected({ binaryPath: p })
@@ -372,7 +373,7 @@ export default function ServerInstancePanel({
 
       {!isRepoMode && (
         <PathPicker
-          label="Binary Path (.dll or .exe)"
+          label={serverBinaryLabel(window.sparkAPI.platform)}
           value={selected.binaryPath}
           onPick={pickBinary}
           disabled={isRunning}
@@ -544,7 +545,7 @@ export default function ServerInstancePanel({
         disabled={isRunning}
         placeholder="(not set)"
         extraAction={
-          <Tooltip title="Open log folder in Explorer">
+          <Tooltip title={`Open log folder in ${fileManagerName(window.sparkAPI.platform)}`}>
             <span>
               <IconButton size="small" disabled={!selected.logDir} onClick={openLogDir}>
                 <FolderOpenIcon fontSize="small" />

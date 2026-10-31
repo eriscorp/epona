@@ -62,14 +62,23 @@ function buildServerArgs(instance) {
 }
 
 // Pure: build the { command, args, env } the server should be spawned with
-// for a binary-mode instance. Accepts either a built .dll (wrapped by
-// `dotnet <dll>`) or a self-contained .exe (invoked directly).
+// for a binary-mode instance. A built .dll runs as `dotnet <dll>`. Anything
+// else runs directly: a .exe on Windows, or the apphost with no extension that
+// `dotnet publish` makes for macOS and Linux. That apphost ran as
+// `dotnet <apphost>`, which fails (F10 in HTOO-627).
 export function buildBinarySpawn(instance, dotnetPath = 'dotnet') {
   const env = buildEnv(instance)
   const args = buildServerArgs(instance)
-  const isExe = /\.exe$/i.test(instance.binaryPath)
-  if (isExe) return { command: instance.binaryPath, args, env }
+  if (!/\.dll$/i.test(instance.binaryPath)) return { command: instance.binaryPath, args, env }
   return { command: dotnetPath, args: [instance.binaryPath, ...args], env }
+}
+
+// What to tell the user about a server left over from an earlier launch: the
+// tool for this OS (HTOO-596).
+export function leftoverServerHint(platform = process.platform) {
+  if (platform === 'win32') return 'Stop it (or end dotnet.exe in Task Manager) and retry.'
+  if (platform === 'darwin') return 'Stop it (or quit dotnet in Activity Monitor) and retry.'
+  return 'Stop it (or end its dotnet process with `kill`) and retry.'
 }
 
 // Pure: build the { command, args, env } for a repo-mode instance. Always
@@ -164,6 +173,14 @@ export function validateForLaunch(instance) {
 
   if (instance.mode === 'binary') {
     if (!instance.binaryPath) return { ok: false, error: 'binaryPath is not set' }
+    // A Windows program cannot run here (HTOO-596).
+    if (process.platform !== 'win32' && /\.exe$/i.test(instance.binaryPath)) {
+      return {
+        ok: false,
+        error:
+          'The server binary is a Windows program. Pick Hybrasyl.dll, or the macOS or Linux build of the server.'
+      }
+    }
     return { ok: true }
   }
 
@@ -471,7 +488,7 @@ export async function launch(instance) {
       success: false,
       error:
         `Port ${instance.lobbyPort} is already in use — probably a leftover server ` +
-        `from an earlier launch. Stop it (or kill dotnet.exe in Task Manager) and retry.`
+        `from an earlier launch. ${leftoverServerHint()}`
     }
   }
 

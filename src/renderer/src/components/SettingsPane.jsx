@@ -52,6 +52,7 @@ import eponaLogo from '../assets/epona.webp'
 import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 import { detectProtectedLocation } from '../../../shared/protectedPaths.js'
+import { worldFolderPlaceholder } from '../platformWords'
 
 const THEMES = Object.entries(THEME_LABELS).map(([key, label]) => ({ key, label }))
 
@@ -828,7 +829,7 @@ function WorldDirDialog({ mode, worldDir: initial, onSave, onCancel }) {
               setPickError(null)
               setWorldDir((p) => ({ ...p, path: e.target.value }))
             }}
-            placeholder="C:\\Hybrasyl\\world"
+            placeholder={worldFolderPlaceholder(window.sparkAPI.platform)}
             inputProps={{ style: { fontFamily: 'monospace', fontSize: 11 } }}
           />
           <Button
