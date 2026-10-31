@@ -30,6 +30,16 @@ export function raceChildExit(child, timeoutMs) {
   return Promise.race([exited, new Promise((r) => setTimeout(r, timeoutMs))])
 }
 
+// A launch's cleanup, safe to call from more than one place. A server child's
+// exit, Stop and Reset can each reach it (HTOO-641): the first call runs it, and
+// each later call gets the same promise, so it runs once and every caller can
+// still await it. Reset awaits it before the relaunch, because the cleanup
+// releases the worktree and the build-props claim that the relaunch takes.
+export function runOnce(fn) {
+  let pending = null
+  return () => (pending ??= Promise.resolve().then(fn))
+}
+
 // Resolve an instance's worldDirectoryId to a concrete dataDir path that
 // serverTarget understands. Returns null if the world directory is missing
 // (deleted out from under the instance, or never set).
@@ -68,7 +78,7 @@ export function createInstanceManager({
   // return the IPC-safe response. Shared by instance:start and instance:reset.
   async function spawnAndTrackInstance(instance) {
     const result = await launchServer(instance)
-    const cleanup = result.cleanup ?? (async () => {})
+    const cleanup = runOnce(result.cleanup ?? (async () => {}))
     if (result.success && result.child) {
       instanceChildren.set(instance.id, { kind: 'child', value: result.child, cleanup })
       wireInstanceLogs(instance.id, result.child)

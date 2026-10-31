@@ -1,6 +1,6 @@
 # 01 — macOS and Linux deep dive (HTOO-627)
 
-Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); W2 is owed on the Windows box, and M7, L4 and W1 are in the end-of-release pass. Owner: Sabrael.
+Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); W2 has run on the Windows box. M7, L4 and W1 are in the end-of-release pass. Owner: Sabrael.
 
 This is the audit that HTOO-627 asks for: Epona's faults on macOS and Linux, found by reading the code, before the fix work package starts. The ten bugs of 2026-10-21 (HTOO-587 to HTOO-596) came from one macOS session and show what that user tried. This document finds the rest and sets the order of the fixes.
 
@@ -198,13 +198,15 @@ HTOO-587, HTOO-588 and HTOO-591: nothing missed.
 The card asks for a fault that hides other faults to go first. Three of those come first, in this order, because every later fix is checked through them.
 
 1. **What the user can see.** HTOO-590 (the pane on macOS and Linux) and F4 (status is always pushed after a Start, Stop, Reset or exit), with HTOO-589 (the renderer handles `childExit` and spawn `'error'`). After this, a failed start shows its output and a failed Stop shows "running".
-2. **The lifecycle.** F1 (cleanup on exit), HTOO-592 (group kill with a SIGTERM grace period, no cleanup after a timeout, a longer quit limit), F2 (the adopted Stop), F3 (the quit sweep). One PR if it stays reviewable: they share `index.js`, `instanceManager.js` and `processKill.js`, and the tests for one exercise the others.
+2. **The lifecycle.** F1 (cleanup on exit; **moved to group 1**, see below), HTOO-592 (group kill with a SIGTERM grace period, no cleanup after a timeout, a longer quit limit), F2 (the adopted Stop), F3 (the quit sweep). One PR if it stays reviewable: they share `index.js`, `instanceManager.js` and `processKill.js`, and the tests for one exercise the others.
 3. **The server launch.** HTOO-595 (`--config` and `.xml` case), HTOO-587 and HTOO-588 (the log folder), F6 (dotnet discovery and `DOTNET_ROOT`), HTOO-591 (Rosetta), F7 and F8 (build props) after their box checks.
 4. **The client launch.** HTOO-593 (`.app`, now high), HTOO-594 with F12 (spawn errors, `.exe`, `runBusy`), F11 (symlinks), F13.
 5. **Security and release.** F21 (entitlements) and F22 (tests on the tag). Both are small, and either can go earlier, but F21 is verified only on a signed build, so it rides the release's tag.
 6. **The interface.** HTOO-596 with F10 and F20, F14 (the banner), F17 (the default menu, after its box check), F18, F19, F16, F15, F9, F5.
 7. **Windows.** F29 (the server's output in the pane), after F5.
 8. **The docs.** F26, F27, and the new checks from F23 and F24, last, so that they describe the code as it ships.
+
+**F1 moved to group 1** (2026-10-31). `wireInstanceLogs`' `onExit` compared the tracked entry, `{ kind, value, cleanup }`, with the child, so it never deleted the entry: a server that exited on its own stayed tracked, and the next Stop ran its cleanup. HTOO-589 needs that untrack, and with the untrack and no cleanup on exit, the cleanup could never run. So group 1 takes F1 too: the exit untracks the entry and runs a run-once cleanup, which Stop and Reset await. Group 2 keeps HTOO-592, F2 and F3, and the box re-run of `lifecycle.mjs` after it still covers F1.
 
 ### Where the work is done, and when the boxes check it
 
@@ -286,6 +288,14 @@ Linux Mint 22.3 (Ubuntu 24.04 base), kernel 7.0, Cinnamon on X11, epona `main` a
 **Found on the way: every child inherits Epona's open files, so under the AppImage a build server keeps the mount alive after Epona quits.** Added to HTOO-661. After L5, closing Epona left the AppImage runtime running, and its mount still up. `fuser -m` named `VBCSCompiler`, the Roslyn build server that the server's `dotnet run` starts and that outlives it (re-parented to PID 1). Its open files include `resources/app.asar`, `icudtl.dat`, `v8_context_snapshot.bin`, `resources.pak`, the two `chrome_*_percent.pak` and `locales/en-US.pak`, all inside the mount. Chromium opens those without close-on-exec, and `spawn` does not close them, so each child, and each child of a child, keeps them. `dotnet build-server shutdown` released the mount, and the runtime exited within 3 s. Left alone, it lasts until the build server's idle timeout. On the `.deb` it is only a leak of descriptors into `/opt/Epona`. **Fix:** open the child's descriptors with close-on-exec, or start children through a helper that closes every descriptor above 2. Check the Windows side too, since a handle inherited there would lock `app.asar` against an update.
 
 **Found on the way: logs nested in `logs/logs`.** `config.xml`, `qa.xml` and the local `local.xml` in the world repo gave each log a `Destination` of `logs/<Name>-.log`. The server joins it onto `--logDir`, so with Epona's default `<world>/logs` the logs went to `<world>/logs/logs/`. Sabrael ruled that logs are not nested there. `config.xml` is fixed in world PR #192 (`local.xml` too, locally); `qa.xml` waits for a check of the QA server's `--logDir` (WLD-85).
+
+### Results on the Windows box (2026-10-31)
+
+Windows 11, 150% display scaling, a packaged `npm run build:unpack` of epona `main` at `3c95bdf` (unsigned), on a copy of Sabrael's settings under a scratch `LOCALAPPDATA`. Keys and clicks went through `user32` to the focused Epona window, with a screenshot after each step.
+
+| Check | Card | Result |
+| --- | --- | --- |
+| W2 | HTOO-649 | **Confirmed, all three keys, and F11 is worse than on Linux.** With the Log Pane open on the Hybrasyl tab: **Ctrl+R** reloads the renderer; the pane closes and the window shrinks from 1282 to 742 physical px (480 px). **Ctrl+Shift+I** opens DevTools in the packaged build, docked inside the window. **F11** moves the window to the top-left corner of the primary display, at its own size, without the shadow inset, and the title bar draws dark, so the wordmark and the window buttons barely show. A second F11 puts the window back, 1 px wider and taller (743 × 1212 against 742 × 1211). The fix needs `fullscreenable: false` on every platform, as well as `Menu.setApplicationMenu(null)`. |
 
 ## Checked and fine
 

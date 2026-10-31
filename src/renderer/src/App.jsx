@@ -21,9 +21,11 @@ import HelpDialog from './components/HelpDialog'
 import ReportIssueDialog from './components/ReportIssueDialog'
 import UpdateNotice from './components/UpdateNotice'
 import BridgeErrorBanner from './components/BridgeErrorBanner'
+import SnackbarHost from './components/SnackbarHost'
 import ThemeGallery from './pages/ThemeGallery'
 import { PANEL_BORDER_COLOR, MAIN_W, PANE_W, GALLERY_W } from './uiConstants.js'
 import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
+import { serverExitNotice } from './serverExitNotice.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
 import { useRuntime } from './store/runtimeStore.js'
@@ -70,6 +72,9 @@ export default function App() {
   // what used to leave the tab showing "Start Server" for a server that was very
   // much running. Shape: { [instanceId]: { running, pid, source, ambiguousPort } }.
   const [instanceStatus, setInstanceStatus] = useState({})
+  // A server that exited when nobody asked it to: { instanceId, message }
+  // (HTOO-590). Shown with the Log Pane closed, on any tab.
+  const [exitNotice, setExitNotice] = useState(null)
   // Non-null when the IPC bridge could not be reached at startup. Renders a
   // banner that itself uses no IPC — the existing Report Issue dialog and
   // "Reveal logs" are both invokes, so in exactly this state they are dead too.
@@ -120,9 +125,32 @@ export default function App() {
       appendInstance(instanceId, stream, line)
     )
     const offInstanceExit = window.sparkAPI.onInstanceChildExit(
-      ({ instanceId, pid, code, signal }) => {
+      ({ instanceId, pid, code, signal, unexpected }) => {
+        // Read the run's log before its exit line goes in.
+        if (unexpected) {
+          const instance = useSettings
+            .getState()
+            .settings.instances.find((i) => i.id === instanceId)
+          const lines = useRuntime.getState().instanceLogs[instanceId] ?? []
+          setExitNotice({
+            instanceId,
+            message: serverExitNotice({
+              name: instance?.name ?? 'Server instance',
+              code,
+              signal,
+              lines
+            })
+          })
+        }
         const label = signal ? `signal ${signal}` : `exit code ${code}`
         appendInstance(instanceId, 'exit', `— process ${pid} ended (${label}) —`)
+        // The process is gone, so the row is stopped now (HTOO-589). Main's
+        // forced status push follows; this saves the wait for it.
+        setInstanceStatus((prev) =>
+          prev[instanceId]?.running
+            ? { ...prev, [instanceId]: { id: instanceId, running: false, source: null } }
+            : prev
+        )
       }
     )
     // Seed from a forced pass, then follow main's pushes. Main only pushes when
@@ -181,11 +209,21 @@ export default function App() {
     update({ targetKind: TAB_ORDER[index] })
   }
 
+  // The server's output reaches Epona on macOS and Linux, where the server runs
+  // as Epona's child (HTOO-590). On Windows it runs in its own console window, so
+  // its output does not reach the pane yet (HTOO-652).
+  const serverLogPane = !isWindows
+
   // The console button on the Hybrasyl Client tab is enabled in repo mode only,
-  // and the menu's Log Pane item follows it. An open pane stays open on the other
+  // and the one on the Server tab where the server's output reaches Epona. The
+  // menu's Log Pane item follows them. An open pane stays open on the other
   // tabs, so the item is also enabled while the pane is open, to close it.
   const canToggleLogPane =
-    logPaneOpen || (activeTab === 1 && settings.targets.hybrasyl.mode === 'repo')
+    logPaneOpen ||
+    (activeTab === 1 && settings.targets.hybrasyl.mode === 'repo') ||
+    (activeTab === 2 &&
+      serverLogPane &&
+      settings.instances.some((i) => i.id === settings.activeInstance))
 
   // The macOS application menu (src/main/appMenu.js). Each command runs the same
   // handler as its button. Inert off macOS.
@@ -208,6 +246,14 @@ export default function App() {
       openReportIssue: () => setReportOpen(true)
     }
   )
+
+  // The notice's Show log: the Server tab, that instance, and the pane.
+  function showServerLog(instanceId) {
+    setExitNotice(null)
+    selectTab(TAB_ORDER.indexOf('server'))
+    update({ activeInstance: instanceId })
+    setLogPaneOpen(true)
+  }
 
   // Hook-based Legacy options only exist for client builds whose hook sites have
   // been mapped, so resolve which build will actually launch and ask it.
@@ -401,6 +447,9 @@ export default function App() {
                     onOpenSettings={() => setSettingsOpen(true)}
                     onSelect={(id) => update({ activeInstance: id })}
                     onInstancesChange={(next) => update({ instances: next })}
+                    logPaneAvailable={serverLogPane}
+                    logPaneOpen={logPaneOpen}
+                    onToggleLogPane={() => setLogPaneOpen((o) => !o)}
                     // Start/Stop/Reset write an optimistic row so the button flips on
                     // the round trip instead of waiting out the poll interval; main's
                     // next push overrides it either way.
@@ -474,6 +523,19 @@ export default function App() {
 
         <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
         <ReportIssueDialog open={reportOpen} onClose={() => setReportOpen(false)} />
+        <SnackbarHost
+          snack={
+            exitNotice && {
+              severity: 'error',
+              message: exitNotice.message,
+              duration: 15000,
+              action: serverLogPane
+                ? { label: 'Show log', onClick: () => showServerLog(exitNotice.instanceId) }
+                : undefined
+            }
+          }
+          onClose={() => setExitNotice(null)}
+        />
         {/* Mounted unconditionally and self-scheduling: it renders nothing until
             its own delayed check comes back with an undismissed newer release. */}
         <UpdateNotice />

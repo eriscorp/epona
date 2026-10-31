@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest'
+import { EventEmitter } from 'events'
 import { rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -59,11 +60,20 @@ const mocks = await vi.hoisted(async () => {
     launchServer: vitest.fn(),
     cleanup: vitest.fn(),
     isPortInUse: vitest.fn(),
-    findPortOwner: vitest.fn()
+    findPortOwner: vitest.fn(),
+    isProcessAlive: vitest.fn()
   }
 })
 
-const { harness, killProcessTree, launchServer, cleanup, isPortInUse, findPortOwner } = mocks
+const {
+  harness,
+  killProcessTree,
+  launchServer,
+  cleanup,
+  isPortInUse,
+  findPortOwner,
+  isProcessAlive
+} = mocks
 
 vi.mock('electron', () => harness.electron)
 vi.mock('./processKill.js', () => ({ killProcessTree }))
@@ -73,6 +83,10 @@ vi.mock('./targets/serverTarget.js', () => ({ launch: launchServer }))
 // loopback sockets on a schedule and depend on nothing else using port 2610.
 vi.mock('./portProbe.js', () => ({ isPortInUse }))
 vi.mock('./portOwner.js', () => ({ findPortOwner }))
+// The wrapper PIDs here are made up. Each Start, Stop and Reset forces a status
+// pass (HTOO-589), and with the real check that pass finds PID 4242 dead and
+// reaps the instance before the test can stop it. A real wrapper is alive.
+vi.mock('./processAlive.js', () => ({ isProcessAlive }))
 
 // The real settings manager reads and migrates a file; a stub keeps this test
 // about the lifecycle rather than about the settings schema. Instances have to be
@@ -113,6 +127,7 @@ beforeEach(async () => {
   cleanup.mockReset().mockResolvedValue(undefined)
   isPortInUse.mockReset().mockResolvedValue(false)
   findPortOwner.mockReset().mockResolvedValue(null)
+  isProcessAlive.mockReset().mockReturnValue(true)
 
   // `instanceChildren` is module state inside the booted index.js, and index.js
   // can only be imported once, so it persists across tests in this file. A test
@@ -292,5 +307,165 @@ describe('instance:stop for an instance Epona never launched', () => {
     expect(result.adopted).toBe(true)
     expect(result.error).toMatch(/2610/)
     expect(result.error).toMatch(/Task Manager/)
+  })
+})
+
+// A server child, as spawnDirect returns one on macOS and Linux. Like Node's
+// ChildProcess: an exit by signal leaves `exitCode` null, and a spawn that
+// failed has no pid and emits only 'error'.
+function fakeServerChild({ pid = 5150 } = {}) {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  if (pid !== null) child.pid = pid
+  child.exitCode = null
+  child.exit = (code, signal = null) => {
+    child.exitCode = code
+    child.emit('exit', code, signal)
+  }
+  child.kill = vi.fn(() => {
+    setImmediate(() => child.exit(null, 'SIGTERM'))
+    return true
+  })
+  return child
+}
+
+async function startChildInstance(child) {
+  launchServer.mockResolvedValue({ success: true, child, cleanup })
+  const result = await harness.invoke('instance:start', { id: 'inst-1' })
+  expect(result.success).toBe(true)
+}
+
+const flush = () => new Promise((r) => setImmediate(r))
+const sent = (channel) =>
+  harness.windows
+    .at(-1)
+    .webContents.send.mock.calls.filter(([c]) => c === channel)
+    .map(([, payload]) => payload)
+
+describe('a server child (macOS and Linux)', () => {
+  it('that exits on its own is untracked, and its cleanup runs (HTOO-641)', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+
+    child.exit(1)
+    await flush()
+
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    // Nobody asked it to stop, so the renderer shows a notice (HTOO-590).
+    expect(sent('instance:childExit')).toEqual([
+      { instanceId: 'inst-1', pid: 5150, code: 1, signal: null, unexpected: true }
+    ])
+    // Untracked: Stop finds nothing to stop, and Start launches again rather than
+    // overwriting the old entry and leaking its cleanup.
+    await expect(harness.invoke('instance:stop', 'inst-1')).resolves.toEqual({
+      success: true,
+      wasRunning: false
+    })
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('that failed to spawn is untracked, so Start works again (HTOO-589)', async () => {
+    const child = fakeServerChild({ pid: null })
+    await startChildInstance(child)
+
+    child.emit('error', new Error('spawn dotnet ENOENT'))
+    await flush()
+
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(sent('instance:log')).toContainEqual({
+      instanceId: 'inst-1',
+      stream: 'stderr',
+      line: '[spawn error] spawn dotnet ENOENT'
+    })
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ instanceId: 'inst-1', code: null, signal: null, unexpected: true })
+    ])
+    const again = fakeServerChild()
+    await startChildInstance(again)
+    expect(launchServer).toHaveBeenCalledTimes(2)
+  })
+
+  it('stopped by Stop runs its cleanup once, from the exit', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+
+    const result = await harness.invoke('instance:stop', 'inst-1')
+
+    expect(result).toEqual({ success: true, wasRunning: true })
+    expect(child.kill).toHaveBeenCalled()
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    // The user asked for it: no notice.
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ instanceId: 'inst-1', signal: 'SIGTERM', unexpected: false })
+    ])
+  })
+
+  it('that exits with code 0 on its own is not unexpected', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    child.exit(0)
+    await flush()
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ code: 0, unexpected: false })
+    ])
+  })
+
+  it('reset finishes the cleanup before it relaunches', async () => {
+    // The cleanup releases the worktree and the build-props claim, which the
+    // relaunch takes again. A relaunch that ran first would be refused.
+    const order = []
+    let release
+    cleanup.mockImplementation(() => {
+      order.push('cleanup started')
+      return new Promise((r) => (release = r)).then(() => order.push('cleanup done'))
+    })
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    launchServer.mockImplementation(async () => {
+      order.push('relaunch')
+      return { success: true, child: fakeServerChild({ pid: 6160 }), cleanup }
+    })
+
+    const reset = harness.invoke('instance:reset', { id: 'inst-1' })
+    await flush()
+    await flush()
+    expect(order).toEqual(['cleanup started'])
+    release()
+
+    await expect(reset).resolves.toMatchObject({ success: true })
+    expect(order).toEqual(['cleanup started', 'cleanup done', 'relaunch'])
+  })
+})
+
+describe('the status push after Start, Stop and Reset (HTOO-589, F4)', () => {
+  it('sends the status after a Stop even when nothing changed', async () => {
+    // A Stop on an adopted server can report success and kill nothing
+    // (HTOO-642). The renderer then writes an optimistic "stopped" row. The
+    // truth, "running", is the same as before the Stop, so a push only on change
+    // never corrected the row.
+    isPortInUse.mockResolvedValue(true)
+    findPortOwner.mockResolvedValue(9191)
+    await harness.invoke('instance:getStatus') // the monitor's last snapshot: running
+    harness.windows.at(-1).webContents.send.mockClear()
+
+    const result = await harness.invoke('instance:stop', 'inst-1')
+
+    expect(result).toMatchObject({ success: true, adopted: true })
+    await vi.waitFor(() => expect(sent('instance:status')).not.toEqual([]))
+    expect(sent('instance:status').at(-1)).toEqual([
+      expect.objectContaining({ id: 'inst-1', running: true, source: 'adopted' })
+    ])
+  })
+
+  it('sends the status after a Start that failed', async () => {
+    isPortInUse.mockResolvedValue(true) // the port is taken, so Start refuses
+    await harness.invoke('instance:getStatus')
+    harness.windows.at(-1).webContents.send.mockClear()
+
+    const result = await harness.invoke('instance:start', { id: 'inst-1' })
+
+    expect(result.success).toBe(false)
+    await vi.waitFor(() => expect(sent('instance:status')).not.toEqual([]))
   })
 })

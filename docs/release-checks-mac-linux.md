@@ -156,7 +156,7 @@ On each of the eight themes (Settings → Theme): the stoplights sit centred in 
 
 1. **Epona menu:** About Epona opens the About dialog with the Settings pane closed. Check for Updates… opens Settings with the About section expanded; its button says that Epona is up to date, or names a newer version (HTOO-382). Settings… (⌘,) opens the Settings pane.
 2. **File:** Locate Assets… (⌘O) opens the folder picker. Reveal Settings Folder and Reveal Logs Folder open Finder at the settings folder and its `logs` folder.
-3. **View:** Log Pane is available on the Hybrasyl Client tab in repo mode, and greyed out elsewhere, except while the pane is open: then it is available on every tab and closes the pane.
+3. **View:** Log Pane is available on the Hybrasyl Client tab in repo mode and on the Hybrasyl Server tab when an instance is selected, and greyed out on the Legacy Client tab, except while the pane is open: then it is available on every tab and closes the pane. On the Server tab the pane shows the selected instance's output (HTOO-590). Start an instance that cannot start (for example, one whose Server Config names a config that does not exist): a notice names the server and shows its last error line, and Show log opens the pane on that instance. The Start Server button comes back.
 4. **Go:** ⌘1, ⌘2 and ⌘3 switch to Legacy Client, Hybrasyl Client and Hybrasyl Server, and the Go menu marks the tab on screen.
 5. **Help:** Recommended Installs…, Report an Issue… and What's New open their dialogs.
 6. **Over a dialog:** open Report an Issue, then press ⌘2. Nothing changes.

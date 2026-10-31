@@ -942,13 +942,30 @@ app.whenReady().then(() => {
     }
   }
 
+  // A server child's exit, or a failed spawn (childLines.js), untracks it and
+  // runs its launch cleanup. `unexpected` tells the renderer to show a notice
+  // (HTOO-590): a tracked child that Stop or Reset did not end, which exited
+  // with a code other than 0, by a signal, or never started. The map holds the tracked entry, `{ kind, value,
+  // cleanup }`, so the test is on `value`: comparing the entry to the child was
+  // never true, and the entry stayed until a Stop (HTOO-641). The cleanup is
+  // run-once (instanceManager.js), so a Stop or Reset that is waiting on this exit
+  // awaits the same run rather than starting a second.
   function wireInstanceLogs(instanceId, child) {
     pipeChildLines(child, {
       onStdoutLine: (line) => safeSend('instance:log', { instanceId, stream: 'stdout', line }),
       onStderrLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line }),
       onExit: (code, signal) => {
-        if (instanceChildren.get(instanceId) === child) instanceChildren.delete(instanceId)
-        safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal })
+        const entry = instanceChildren.get(instanceId)
+        const ours = entry?.value === child
+        if (ours) instanceChildren.delete(instanceId)
+        const unexpected = ours && !entry.stopping && code !== 0
+        safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal, unexpected })
+        statusMonitor?.force()
+        if (ours) {
+          entry.cleanup().catch((err) => {
+            console.warn(`instance ${instanceId} cleanup failed:`, err.message)
+          })
+        }
       },
       onErrorLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line })
     })
@@ -1255,11 +1272,37 @@ app.whenReady().then(() => {
       return { success: false, adopted: true, error: `kill failed: ${result.error.message}` }
     }
     notifyPidExit(instanceId, pid)
-    void statusMonitor?.refresh()
     return { success: true, wasRunning: true, adopted: true, pid }
   }
 
-  ipc.handle('instance:start', async (_, supplied) => {
+  // Start, Stop and Reset each end with a forced status push, whatever their
+  // result (HTOO-589, F4 in HTOO-627). The renderer writes an optimistic row for
+  // each; the push replaces it with the truth even when the truth did not change,
+  // so a Stop that left the server running shows "running" at once.
+  function withStatusPush(handler) {
+    return async (...args) => {
+      try {
+        return await handler(...args)
+      } finally {
+        statusMonitor?.force()
+      }
+    }
+  }
+
+  ipc.handle(
+    'instance:start',
+    withStatusPush((_, supplied) => startInstance(supplied))
+  )
+  ipc.handle(
+    'instance:stop',
+    withStatusPush((_, instanceId) => stopInstance(instanceId))
+  )
+  ipc.handle(
+    'instance:reset',
+    withStatusPush((_, supplied) => resetInstance(supplied))
+  )
+
+  async function startInstance(supplied) {
     reprobeGit() // A manual action, as in client:launch.
     const resolved = await resolveSuppliedInstance(supplied)
     if (resolved.error) return { success: false, error: resolved.error }
@@ -1284,9 +1327,9 @@ app.whenReady().then(() => {
       }
     }
     return spawnAndTrackInstance(instance)
-  })
+  }
 
-  ipc.handle('instance:stop', async (_, instanceId) => {
+  async function stopInstance(instanceId) {
     const tracked = instanceChildren.get(instanceId)
     if (!tracked) return stopAdoptedInstance(instanceId)
 
@@ -1305,7 +1348,8 @@ app.whenReady().then(() => {
         return { success: true, wasRunning: false }
       }
       // Await actual exit before returning so a fast Stop→Start can't see the
-      // child still tracked.
+      // child still tracked. `stopping` tells the exit that the user asked for it.
+      tracked.stopping = true
       await raceChildExit(tracked.value, 5000)
       await runCleanup()
       return { success: true, wasRunning: true }
@@ -1324,17 +1368,14 @@ app.whenReady().then(() => {
     }
     untrackPidInstance(instanceId, pid)
     await runCleanup()
-    // Re-derive now rather than waiting out the poll interval, so the button
-    // settles immediately after the round trip.
-    void statusMonitor?.refresh()
     return { success: true, wasRunning: true }
-  })
+  }
 
   // Reset = stop + relaunch in one IPC round-trip. Awaits process death
   // before relaunching so the new server doesn't race the old one on the
   // port bind. The renderer keeps the running flag set across the gap so
   // the UI doesn't flicker mid-restart.
-  ipc.handle('instance:reset', async (_, supplied) => {
+  async function resetInstance(supplied) {
     reprobeGit() // A manual action, as in client:launch.
     // Same disk-wins resolution as instance:start.
     const resolved = await resolveSuppliedInstance(supplied)
@@ -1345,6 +1386,7 @@ app.whenReady().then(() => {
 
     if (tracked.kind === 'child') {
       // Cap so a stuck process can't deadlock the UI.
+      tracked.stopping = true
       if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 5000)
     } else {
       const pid = tracked.value
@@ -1360,7 +1402,7 @@ app.whenReady().then(() => {
     }
 
     return spawnAndTrackInstance(instance)
-  })
+  }
 
   // Collect human-readable labels for any repo-mode launches still running, so
   // confirmStopRepoLaunches can list them in the quit confirmation. Binary

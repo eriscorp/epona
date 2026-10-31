@@ -36,6 +36,51 @@ describe('createStatusMonitor', () => {
     expect(onStatus).toHaveBeenCalledTimes(1)
   })
 
+  it('force() sends the next snapshot even when it has not changed (HTOO-589)', async () => {
+    // The renderer wrote an optimistic "stopped" row, but the server is still
+    // running: the truth is the same as the last snapshot, and must be sent.
+    const inUse = new Map([[2610, true]])
+    const { monitor, onStatus } = setup({ instances: [{ id: 'a', lobbyPort: 2610 }], inUse })
+    await monitor.refresh()
+    expect(onStatus).toHaveBeenCalledTimes(1)
+
+    monitor.force()
+    await vi.waitFor(() => expect(onStatus).toHaveBeenCalledTimes(2))
+    expect(onStatus.mock.calls[1][0]).toEqual(onStatus.mock.calls[0][0])
+    // Only the next one: after it, an unchanged snapshot is quiet again.
+    await monitor.refresh()
+    expect(onStatus).toHaveBeenCalledTimes(2)
+  })
+
+  it('force() during a pass runs one more pass after it', async () => {
+    // The pass in flight probed the port before the change landed. Its answer
+    // is stale, so one more pass must run and send the truth.
+    const answers = [false, true] // the in-flight pass, then the rerun
+    let release
+    const instances = [{ id: 'a', lobbyPort: 2610 }]
+    const onStatus = vi.fn()
+    const monitor = createStatusMonitor({
+      settingsManager: {
+        load: () => new Promise((r) => (release = () => r({ instances })))
+      },
+      instanceChildren: new Map(),
+      isPortInUse: async () => answers.shift() ?? true,
+      isProcessAlive: () => false,
+      onStatus,
+      intervalMs: 1000
+    })
+    const first = monitor.refresh()
+    monitor.force() // during the pass: no second pass starts yet
+    release()
+    await first
+    expect(onStatus).toHaveBeenCalledTimes(1)
+    expect(onStatus.mock.calls[0][0][0]).toMatchObject({ running: false })
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    release() // the rerun's settings load
+    await vi.waitFor(() => expect(onStatus).toHaveBeenCalledTimes(2))
+    expect(onStatus.mock.calls[1][0][0]).toMatchObject({ running: true })
+  })
+
   it('pushes again once a port starts listening', async () => {
     const inUse = new Map()
     const { monitor, onStatus } = setup({ instances: [{ id: 'a', lobbyPort: 2610 }], inUse })
