@@ -45,6 +45,20 @@ describe('createLineBuffer', () => {
     expect(onLine).toHaveBeenCalledWith('café')
   })
 
+  it('keeps a character that a chunk boundary splits (HTOO-653)', () => {
+    // 'é' is two bytes, C3 A9. Decoded one chunk at a time, each half became
+    // U+FFFD.
+    const onLine = vi.fn()
+    const buf = createLineBuffer(onLine)
+    const bytes = Buffer.from('/Users/zoë/world\n', 'utf-8')
+    const cut = bytes.indexOf(0xc3) + 1
+
+    buf.push(bytes.subarray(0, cut))
+    buf.push(bytes.subarray(cut))
+
+    expect(onLine).toHaveBeenCalledWith('/Users/zoë/world')
+  })
+
   it('emits nothing on flush when the buffer is empty', () => {
     const onLine = vi.fn()
     const buf = createLineBuffer(onLine)
