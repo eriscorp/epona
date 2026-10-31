@@ -1,6 +1,6 @@
 # 01 — macOS and Linux deep dive (HTOO-627)
 
-Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); W2 is owed on the Windows box, and M7, L4 and W1 are in the end-of-release pass. Owner: Sabrael.
+Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); W2 has run on the Windows box. M7, L4 and W1 are in the end-of-release pass. Owner: Sabrael.
 
 This is the audit that HTOO-627 asks for: Epona's faults on macOS and Linux, found by reading the code, before the fix work package starts. The ten bugs of 2026-10-21 (HTOO-587 to HTOO-596) came from one macOS session and show what that user tried. This document finds the rest and sets the order of the fixes.
 
@@ -286,6 +286,14 @@ Linux Mint 22.3 (Ubuntu 24.04 base), kernel 7.0, Cinnamon on X11, epona `main` a
 **Found on the way: every child inherits Epona's open files, so under the AppImage a build server keeps the mount alive after Epona quits.** Added to HTOO-661. After L5, closing Epona left the AppImage runtime running, and its mount still up. `fuser -m` named `VBCSCompiler`, the Roslyn build server that the server's `dotnet run` starts and that outlives it (re-parented to PID 1). Its open files include `resources/app.asar`, `icudtl.dat`, `v8_context_snapshot.bin`, `resources.pak`, the two `chrome_*_percent.pak` and `locales/en-US.pak`, all inside the mount. Chromium opens those without close-on-exec, and `spawn` does not close them, so each child, and each child of a child, keeps them. `dotnet build-server shutdown` released the mount, and the runtime exited within 3 s. Left alone, it lasts until the build server's idle timeout. On the `.deb` it is only a leak of descriptors into `/opt/Epona`. **Fix:** open the child's descriptors with close-on-exec, or start children through a helper that closes every descriptor above 2. Check the Windows side too, since a handle inherited there would lock `app.asar` against an update.
 
 **Found on the way: logs nested in `logs/logs`.** `config.xml`, `qa.xml` and the local `local.xml` in the world repo gave each log a `Destination` of `logs/<Name>-.log`. The server joins it onto `--logDir`, so with Epona's default `<world>/logs` the logs went to `<world>/logs/logs/`. Sabrael ruled that logs are not nested there. `config.xml` is fixed in world PR #192 (`local.xml` too, locally); `qa.xml` waits for a check of the QA server's `--logDir` (WLD-85).
+
+### Results on the Windows box (2026-10-31)
+
+Windows 11, 150% display scaling, a packaged `npm run build:unpack` of epona `main` at `3c95bdf` (unsigned), on a copy of Sabrael's settings under a scratch `LOCALAPPDATA`. Keys and clicks went through `user32` to the focused Epona window, with a screenshot after each step.
+
+| Check | Card | Result |
+| --- | --- | --- |
+| W2 | HTOO-649 | **Confirmed, all three keys, and F11 is worse than on Linux.** With the Log Pane open on the Hybrasyl tab: **Ctrl+R** reloads the renderer; the pane closes and the window shrinks from 1282 to 742 physical px (480 px). **Ctrl+Shift+I** opens DevTools in the packaged build, docked inside the window. **F11** moves the window to the top-left corner of the primary display, at its own size, without the shadow inset, and the title bar draws dark, so the wordmark and the window buttons barely show. A second F11 puts the window back, 1 px wider and taller (743 × 1212 against 742 × 1211). The fix needs `fullscreenable: false` on every platform, as well as `Menu.setApplicationMenu(null)`. |
 
 ## Checked and fine
 
