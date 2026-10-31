@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
-import { dirname, relative, join, resolve as resolveAbs } from 'path'
+import { basename, dirname, relative, join, resolve as resolveAbs } from 'path'
 import { gitToplevel } from '../gitOps.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { resolveDotnetPath, dotnetRootEnv } from '../dotnet.js'
@@ -19,6 +19,9 @@ export async function resolvePath(configuredPath) {
   } catch {
     return { kind: 'invalid', reason: `path does not exist: ${configuredPath}` }
   }
+  if (stat.isDirectory() && process.platform === 'darwin' && /\.app\/?$/i.test(configuredPath)) {
+    return resolveAppBundle(configuredPath)
+  }
   if (!stat.isFile()) {
     return { kind: 'invalid', reason: `path is not a file: ${configuredPath}` }
   }
@@ -32,6 +35,15 @@ export async function resolvePath(configuredPath) {
     return { kind: 'dll', dllPath: configuredPath, cwd: dirname(configuredPath) }
   }
   if (lower.endsWith('.exe')) {
+    // A Windows program cannot run here. It showed as a valid prebuilt binary
+    // and then failed to start with no report (F12 in HTOO-627).
+    if (process.platform !== 'win32') {
+      return {
+        kind: 'invalid',
+        reason:
+          'this is a Windows program; pick the macOS or Linux build of the client, or its .dll'
+      }
+    }
     return { kind: 'exe', exePath: configuredPath, cwd: dirname(configuredPath) }
   }
   // On macOS/Linux the published client is an apphost with no extension (e.g.
@@ -47,8 +59,39 @@ export async function resolvePath(configuredPath) {
     reason:
       process.platform === 'win32'
         ? 'path must be a .exe, .dll, or .csproj file'
-        : 'path must be an executable, .dll, or .csproj file'
+        : // A client unzipped from a GitHub artifact loses its execute bit (HTOO-594).
+          'path must be an executable, .dll, or .csproj file. If it is the client program, make it executable: chmod +x <file>'
   }
+}
+
+// A macOS app bundle, such as Brigid.app: run Contents/MacOS/<CFBundleExecutable>
+// (HTOO-593). Brigid ships for macOS only as a bundle. `open -a` would drop the
+// DA_* variables that the client reads, so the program is spawned directly.
+// Without a CFBundleExecutable in an XML Info.plist, the bundle's base name.
+async function resolveAppBundle(configuredPath) {
+  const bundle = configuredPath.replace(/\/+$/, '')
+  let name = basename(bundle).replace(/\.app$/i, '')
+  try {
+    const plist = await fs.readFile(join(bundle, 'Contents', 'Info.plist'), 'utf-8')
+    const m = plist.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/)
+    if (m) name = m[1].trim()
+  } catch {
+    /* no readable Info.plist: keep the base name */
+  }
+  const exePath = join(bundle, 'Contents', 'MacOS', name)
+  let stat
+  try {
+    stat = await fs.stat(exePath)
+  } catch {
+    return { kind: 'invalid', reason: `the app bundle has no program at Contents/MacOS/${name}` }
+  }
+  if (!stat.isFile() || (stat.mode & 0o111) === 0) {
+    return {
+      kind: 'invalid',
+      reason: `Contents/MacOS/${name} in the app bundle is not executable: chmod +x it`
+    }
+  }
+  return { kind: 'exe', exePath, cwd: dirname(exePath) }
 }
 
 // Pure: shape the command/args/cwd for child_process.spawn based on a resolved
