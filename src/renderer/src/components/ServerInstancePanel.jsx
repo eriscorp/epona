@@ -115,7 +115,12 @@ export default function ServerInstancePanel({
   onStart,
   onStop,
   onReset,
-  onOpenSettings
+  onOpenSettings,
+  // The Log Pane for the selected instance (HTOO-590). False on Windows, where
+  // the server's output goes to its own console window.
+  logPaneAvailable = false,
+  logPaneOpen = false,
+  onToggleLogPane
 }) {
   // null when idle; otherwise the verb shown on the busy button.
   const [busyLabel, setBusyLabel] = useState(null)
@@ -693,9 +698,23 @@ export default function ServerInstancePanel({
             </IconButton>
           </span>
         </Tooltip>
-        <Tooltip title="Server output goes to its own console window (interactive shutdown needs a TTY)">
+        <Tooltip
+          title={
+            !logPaneAvailable
+              ? 'Server output goes to its own console window (interactive shutdown needs a TTY)'
+              : logPaneOpen
+                ? 'Hide console'
+                : 'Show console'
+          }
+        >
           <span>
-            <IconButton size="small" disabled>
+            <IconButton
+              data-testid="server-log-toggle"
+              size="small"
+              disabled={!logPaneAvailable || !selected}
+              onClick={onToggleLogPane}
+              color={logPaneOpen ? 'primary' : 'default'}
+            >
               <TerminalIcon fontSize="inherit" />
             </IconButton>
           </span>

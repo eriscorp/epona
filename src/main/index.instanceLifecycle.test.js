@@ -352,8 +352,9 @@ describe('a server child (macOS and Linux)', () => {
     await flush()
 
     expect(cleanup).toHaveBeenCalledTimes(1)
+    // Nobody asked it to stop, so the renderer shows a notice (HTOO-590).
     expect(sent('instance:childExit')).toEqual([
-      expect.objectContaining({ instanceId: 'inst-1', pid: 5150, code: 1, signal: null })
+      { instanceId: 'inst-1', pid: 5150, code: 1, signal: null, unexpected: true }
     ])
     // Untracked: Stop finds nothing to stop, and Start launches again rather than
     // overwriting the old entry and leaking its cleanup.
@@ -378,7 +379,7 @@ describe('a server child (macOS and Linux)', () => {
       line: '[spawn error] spawn dotnet ENOENT'
     })
     expect(sent('instance:childExit')).toEqual([
-      expect.objectContaining({ instanceId: 'inst-1', code: null, signal: null })
+      expect.objectContaining({ instanceId: 'inst-1', code: null, signal: null, unexpected: true })
     ])
     const again = fakeServerChild()
     await startChildInstance(again)
@@ -394,6 +395,20 @@ describe('a server child (macOS and Linux)', () => {
     expect(result).toEqual({ success: true, wasRunning: true })
     expect(child.kill).toHaveBeenCalled()
     expect(cleanup).toHaveBeenCalledTimes(1)
+    // The user asked for it: no notice.
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ instanceId: 'inst-1', signal: 'SIGTERM', unexpected: false })
+    ])
+  })
+
+  it('that exits with code 0 on its own is not unexpected', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    child.exit(0)
+    await flush()
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ code: 0, unexpected: false })
+    ])
   })
 
   it('reset finishes the cleanup before it relaunches', async () => {

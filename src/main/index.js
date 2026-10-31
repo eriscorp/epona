@@ -943,7 +943,9 @@ app.whenReady().then(() => {
   }
 
   // A server child's exit, or a failed spawn (childLines.js), untracks it and
-  // runs its launch cleanup. The map holds the tracked entry, `{ kind, value,
+  // runs its launch cleanup. `unexpected` tells the renderer to show a notice
+  // (HTOO-590): a tracked child that Stop or Reset did not end, which exited
+  // with a code other than 0, by a signal, or never started. The map holds the tracked entry, `{ kind, value,
   // cleanup }`, so the test is on `value`: comparing the entry to the child was
   // never true, and the entry stayed until a Stop (HTOO-641). The cleanup is
   // run-once (instanceManager.js), so a Stop or Reset that is waiting on this exit
@@ -956,7 +958,8 @@ app.whenReady().then(() => {
         const entry = instanceChildren.get(instanceId)
         const ours = entry?.value === child
         if (ours) instanceChildren.delete(instanceId)
-        safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal })
+        const unexpected = ours && !entry.stopping && code !== 0
+        safeSend('instance:childExit', { instanceId, pid: child.pid, code, signal, unexpected })
         statusMonitor?.force()
         if (ours) {
           entry.cleanup().catch((err) => {
@@ -1345,7 +1348,8 @@ app.whenReady().then(() => {
         return { success: true, wasRunning: false }
       }
       // Await actual exit before returning so a fast Stop→Start can't see the
-      // child still tracked.
+      // child still tracked. `stopping` tells the exit that the user asked for it.
+      tracked.stopping = true
       await raceChildExit(tracked.value, 5000)
       await runCleanup()
       return { success: true, wasRunning: true }
@@ -1382,6 +1386,7 @@ app.whenReady().then(() => {
 
     if (tracked.kind === 'child') {
       // Cap so a stuck process can't deadlock the UI.
+      tracked.stopping = true
       if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 5000)
     } else {
       const pid = tracked.value

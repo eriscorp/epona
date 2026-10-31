@@ -250,3 +250,101 @@ describe('the macOS application menu', () => {
     expect(menu.setMenuState).not.toHaveBeenCalled()
   })
 })
+
+describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
+  const INSTANCE = {
+    ...defaultSettings.instances[0],
+    id: 'inst-1',
+    name: 'Local',
+    mode: 'binary',
+    binaryPath: '/opt/hybrasyl/Hybrasyl',
+    worldDirectoryId: null,
+    lobbyPort: 2610,
+    loginPort: 2611,
+    worldPort: 2612
+  }
+
+  // Main's two event streams for server instances, captured so a test can send
+  // a log line and an exit as main would.
+  async function renderServerTab(platform, { running = false } = {}) {
+    savedSettings.targetKind = 'server'
+    savedSettings.instances = [INSTANCE]
+    savedSettings.activeInstance = 'inst-1'
+    const emit = {}
+    const on = (name) =>
+      vi.fn((cb) => {
+        emit[name] = (payload) => act(() => cb(payload))
+        return () => {}
+      })
+    await renderApp(platform, {
+      onInstanceLog: on('log'),
+      onInstanceChildExit: on('exit'),
+      onInstanceStatus: on('status')
+    })
+    await waitFor(() => expect(screen.getByTestId('page-server')).toBeTruthy())
+    // Main's status push. makeSparkAPI's own getInstanceStatus answers [].
+    if (running) {
+      emit.status([{ id: 'inst-1', running: true, source: 'tracked' }])
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Stop Server' })).toBeTruthy())
+    }
+    return emit
+  }
+
+  afterEach(() => {
+    delete savedSettings.instances
+    delete savedSettings.activeInstance
+  })
+
+  it.each(['darwin', 'linux'])(
+    '%s: the console button opens the pane for the instance',
+    async (platform) => {
+      await renderServerTab(platform)
+      const toggle = screen.getByTestId('server-log-toggle')
+      expect(toggle.disabled).toBe(false)
+      await userEvent.click(toggle)
+      // The pane's header names the instance.
+      await waitFor(() => expect(screen.getAllByText('Local').length).toBeGreaterThan(1))
+    }
+  )
+
+  it('win32: the console button stays off, because the server has its own console', async () => {
+    await renderServerTab('win32')
+    expect(screen.getByTestId('server-log-toggle').disabled).toBe(true)
+  })
+
+  it('shows Start Server again as soon as the server exits', async () => {
+    const emit = await renderServerTab('linux', { running: true })
+    emit.exit({ instanceId: 'inst-1', pid: 5150, code: 0, signal: null, unexpected: false })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Server' })).toBeTruthy())
+  })
+
+  it('an unexpected exit shows a notice with the last error line, and Show log opens the pane', async () => {
+    const emit = await renderServerTab('linux', { running: true })
+    emit.log({ instanceId: 'inst-1', stream: 'stderr', line: '[FTL] no configuration named local' })
+    emit.log({ instanceId: 'inst-1', stream: 'stdout', line: 'Usage: Hybrasyl [options]' })
+    emit.exit({ instanceId: 'inst-1', pid: 5150, code: 1, signal: null, unexpected: true })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(
+      'Server "Local" stopped (exit code 1): [FTL] no configuration named local'
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Show log' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    // The pane is open on the instance, with the run's lines in it.
+    expect(screen.getByText('Usage: Hybrasyl [options]')).toBeTruthy()
+  })
+
+  it('a Stop the user asked for shows no notice', async () => {
+    const emit = await renderServerTab('linux', { running: true })
+    emit.exit({ instanceId: 'inst-1', pid: 5150, code: 143, signal: null, unexpected: false })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Server' })).toBeTruthy())
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('win32: the notice has no Show log, because there is no pane for the server', async () => {
+    const emit = await renderServerTab('win32', { running: true })
+    emit.exit({ instanceId: 'inst-1', pid: 5150, code: 1, signal: null, unexpected: true })
+    await screen.findByRole('alert')
+    expect(screen.queryByRole('button', { name: 'Show log' })).toBeNull()
+  })
+})
