@@ -18,6 +18,8 @@ Everything Epona has consciously declined, with the reason and the **trigger** t
 
 `src/renderer/src/themes/` holds six hand-written theme objects, and collapsing them into a generator has now been proposed by three separate review passes and declined every time. They only _look_ alike. `danaan` in particular carries per-component overrides that no token set expresses, and a factory that took every one of them as a parameter would be longer than the six files and harder to read than any of them.
 
+Since HTOO-572 the six files are also the template's house files, copied as they are. A factory in Epona would end that copy, and every palette fix would again be done once per app.
+
 **There is no trigger.** This is not deferred work. It is on the record here so the fourth proposal costs a paragraph instead of a build.
 
 ---

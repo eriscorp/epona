@@ -38,14 +38,15 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined'
+import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined'
 import AboutDialog from './AboutDialog'
 import WhatsNewDialog from './WhatsNewDialog'
 import UpdateCheckButton from './UpdateCheckButton'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
 import { useMenuRequest } from '../useMenuRequest'
-import { DEPTH } from './titleChrome'
-import { THEME_LABELS } from '../themes'
+import { LOGO_FILTER } from './titleChrome'
+import { THEME_LABELS } from '../../../shared/themeNames.js'
 import eponaLogo from '../assets/epona.webp'
 import { PANEL_BORDER, PANE_W } from '../uiConstants.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
@@ -107,7 +108,14 @@ function SettingsSection({ panel, title, expanded, onToggle, action, detailsSx, 
   )
 }
 
-export default function SettingsPane({ settings, versions, onClose, onChange, onReportIssue }) {
+export default function SettingsPane({
+  settings,
+  versions,
+  onClose,
+  onChange,
+  onReportIssue,
+  onOpenThemeGallery
+}) {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [whatsNewOpen, setWhatsNewOpen] = useState(false)
   // The macOS menu's About and What's New open this pane and leave a request,
@@ -294,6 +302,17 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               ))}
             </Select>
           </FormControl>
+          {/* The house theme gallery (HTOO-572): each control in each theme, with
+              its measured contrast, for review by eye. */}
+          <Button
+            size="small"
+            startIcon={<PaletteOutlinedIcon />}
+            onClick={onOpenThemeGallery}
+            data-testid="theme-gallery-open"
+            sx={{ mt: 1 }}
+          >
+            Theme gallery
+          </Button>
         </SettingsSection>
 
         {/* Legacy Client — path + memory-patch version target */}
@@ -547,16 +566,15 @@ export default function SettingsPane({ settings, versions, onClose, onChange, on
               src={eponaLogo}
               alt=""
               aria-hidden
-              sx={{ width: 40, height: 40, borderRadius: 0.5, filter: `drop-shadow(${DEPTH})` }}
+              sx={{ width: 40, height: 40, borderRadius: 0.5, filter: LOGO_FILTER.keyline }}
             />
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                 Epona{version ? ` v${version}` : ''}
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, mt: 0.25 }}>
-                {/* color="inherit" + always-underline keeps links readable on every
-                    theme. MUI Link uses primary.main, which is below 4.5:1 against
-                    paper on chadul, danaan, grinneal and spark (HTOO-355). */}
+                {/* color="inherit" + always-underline draws the links in the body text
+                    colour, which reads on every surface of every theme (HTOO-355, HTOO-572). */}
                 <Link
                   href="https://www.hybrasyl.com"
                   target="_blank"

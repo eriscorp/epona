@@ -7,8 +7,10 @@ import { launchEpona, getMainWindow } from './helpers.js'
 //
 // The two platforms differ on purpose (the house macOS chrome): macOS keeps the
 // native stoplights inset into an empty bar, padded 78px so nothing sits under
-// them; Windows and Linux draw the logo, the name and two window buttons, padded
-// 12px as before.
+// them; Windows and Linux draw the logo, the name and two window buttons. The
+// bar is the house title-bar v1 module (HTOO-572), which pads 24px each side
+// (it was 12px before the module). The window has a fixed size, so there is no
+// Maximize button.
 
 const isMac = process.platform === 'darwin'
 
@@ -19,7 +21,7 @@ test.describe('Title bar', () => {
     await electronApp?.close()
   })
 
-  test('has the platform chrome, at the padding it always had', async () => {
+  test('has the platform chrome, at the house padding', async () => {
     ;({ electronApp } = await launchEpona())
     const page = await getMainWindow(electronApp)
     const bar = page.getByTestId('title-bar')
@@ -42,13 +44,14 @@ test.describe('Title bar', () => {
     expect(geometry.dragRegion).toBe('drag')
 
     if (isMac) {
-      expect(geometry).toMatchObject({ pl: '78px', pr: '12px', imgLeft: null })
+      expect(geometry).toMatchObject({ pl: '78px', pr: '24px', imgLeft: null })
       await expect(bar.getByText('Epona', { exact: true })).toHaveCount(0)
       await expect(bar.getByRole('button')).toHaveCount(0)
     } else {
-      expect(geometry).toMatchObject({ pl: '12px', pr: '12px', imgLeft: 12 })
+      expect(geometry).toMatchObject({ pl: '24px', pr: '24px', imgLeft: 24 })
       await expect(bar.getByText('Epona', { exact: true })).toBeVisible()
       await expect(bar.getByRole('button')).toHaveCount(2)
+      await expect(bar.getByRole('button', { name: 'Maximize' })).toHaveCount(0)
     }
   })
 })

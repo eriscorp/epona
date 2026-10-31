@@ -1,13 +1,13 @@
 import { Toolbar, IconButton, Tooltip, Divider, Box, Typography } from '@mui/material'
 import { GiSettingsKnobs, GiMagnifyingGlass, GiHelp, GiBugNet } from 'react-icons/gi'
-import { toolbarBtnSx, gamifiedBtnSx } from './toolbarStyles'
-import { chromeTier } from './titleChrome'
+import { chromeKind, navButtonSx } from './titleChrome'
 import { useSettings } from '../store/settingsStore.js'
 import { basenameOfPath } from '../../../shared/pathBasename.js'
 
 export default function NavToolbar({
   detectedVersion,
   clientPath,
+  settingsOpen = false,
   onLocateClient,
   onToggleSettings,
   onOpenHelp,
@@ -15,19 +15,24 @@ export default function NavToolbar({
 }) {
   const isWindows = window.sparkAPI.platform === 'win32'
   const theme = useSettings((s) => s.settings?.theme)
-  // Match the title bar: the dark fantasy themes get the stroked/lifted house
-  // glyphs; the light and plain themes keep the soft base stroke.
-  const btnSx = { ...(chromeTier(theme) === 'gamified' ? gamifiedBtnSx : toolbarBtnSx), mx: -0.5 }
+  // A second bar under the title bar. It paints tertiary.main, so the two bars
+  // read as two (HTOO-629). Its buttons take the house nav-bar chrome
+  // (titleChrome.js, HTOO-572): the bar's text colour, the house hover, and the
+  // one current-page mark, here on Settings while its pane is open. The bar is
+  // not faded with opacity: a faded bar draws its text and icons below the
+  // ratios the house measures.
+  // NavToolbar.test.jsx measures the caption and the icons in each theme.
+  const kind = chromeKind(theme)
+  // The game glyphs keep the size they had on this bar.
+  const btnSx = (current = false) => ({
+    ...navButtonSx(kind, current),
+    '& svg': { fontSize: '1.4em' },
+    mx: -0.5
+  })
   // Windows shows the detected legacy-client version (memory-patch target).
   // Non-Windows points at a Dark Ages asset folder, which carries no version —
   // so report whether assets have been located, and which folder.
   const assetsName = clientPath ? basenameOfPath(clientPath) : ''
-  // The "not found" line is text.disabled everywhere except hybrasyl, whose
-  // disabled slate (#607888) sits on this toolbar's secondary.main teal
-  // (#1e5e56) at almost no contrast and reads as muddy. Its info cyan
-  // (#6de7f7) is legible there, and "info" is the right register anyway: a
-  // client that has not been located yet is a notice, not a fault.
-  const notFoundColor = theme === 'hybrasyl' ? 'info.main' : 'text.disabled'
   const status = isWindows
     ? detectedVersion
       ? { found: true, label: `Client: ${detectedVersion}` }
@@ -36,33 +41,28 @@ export default function NavToolbar({
       ? { found: true, label: `Assets: ${assetsName}` }
       : { found: false, label: 'Assets Not Found' }
   return (
-    <Toolbar
-      variant="dense"
-      disableGutters
-      sx={{ bgcolor: 'secondary.main', minHeight: 40, opacity: 0.85, px: 2 }}
-    >
-      {status.found ? (
-        <Typography
-          data-testid="client-status"
-          variant="caption"
-          sx={{ color: 'text.button', opacity: 0.9, letterSpacing: '0.1em' }}
-        >
-          <strong>{status.label}</strong>
-        </Typography>
-      ) : (
-        <Typography
-          data-testid="client-status"
-          variant="caption"
-          sx={{ color: notFoundColor, opacity: 0.9 }}
-        >
-          {status.label}
-        </Typography>
-      )}
+    <Toolbar variant="dense" disableGutters sx={{ bgcolor: 'tertiary.main', minHeight: 40, px: 2 }}>
+      {/* Text on the bar is tertiary.contrastText, the title bar's text colour
+          (HTOO-572). text.button is for headings on the page: on this bar it
+          measured 1.19:1 in mundanes, 1.66:1 in danaan and 4.23:1 in grinneal.
+          The "not found" line drew text.disabled (info.main in hybrasyl), below
+          4.5:1 in five themes. A located client is bold; a missing one is
+          regular weight. */}
+      <Typography
+        data-testid="client-status"
+        variant="caption"
+        sx={{
+          color: 'tertiary.contrastText',
+          ...(status.found && { fontWeight: 'bold', letterSpacing: '0.1em' })
+        }}
+      >
+        {status.label}
+      </Typography>
 
       <Box sx={{ flexGrow: 1 }} />
 
       <Tooltip title={isWindows ? 'Locate Client' : 'Locate Assets'}>
-        <IconButton sx={btnSx} onClick={onLocateClient}>
+        <IconButton sx={btnSx()} onClick={onLocateClient}>
           <GiMagnifyingGlass />
         </IconButton>
       </Tooltip>
@@ -74,7 +74,12 @@ export default function NavToolbar({
       />
 
       <Tooltip title="Settings">
-        <IconButton data-testid="settings-toggle" sx={btnSx} onClick={onToggleSettings}>
+        <IconButton
+          data-testid="settings-toggle"
+          aria-pressed={settingsOpen}
+          sx={btnSx(settingsOpen)}
+          onClick={onToggleSettings}
+        >
           <GiSettingsKnobs />
         </IconButton>
       </Tooltip>
@@ -82,13 +87,13 @@ export default function NavToolbar({
       <Tooltip
         title={isWindows ? 'Recommended installs (winget commands)' : 'Recommended installs'}
       >
-        <IconButton sx={btnSx} onClick={onOpenHelp}>
+        <IconButton sx={btnSx()} onClick={onOpenHelp}>
           <GiHelp />
         </IconButton>
       </Tooltip>
 
       <Tooltip title="Report an issue">
-        <IconButton sx={btnSx} onClick={onReportIssue}>
+        <IconButton sx={btnSx()} onClick={onReportIssue}>
           <GiBugNet />
         </IconButton>
       </Tooltip>

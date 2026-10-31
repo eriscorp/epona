@@ -75,6 +75,10 @@ export const settingsSchema = z.object({
   hideWalls: z.boolean(),
   // Optional so a settings.json written before this option existed still parses.
   groundItemHints: z.boolean().optional().default(false),
+  // A string, not an enum of shared/themeNames.js. An unknown name must not make
+  // `settings:save` throw: that stops all persistence (the `version` trap above).
+  // The renderer falls back to Hybrasyl for an unknown name, and withDefaults()
+  // maps a retired name (spark) to its replacement on load.
   theme: z.string(),
   activeProfile: z.string(),
   profiles: z.array(profileSchema),

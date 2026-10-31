@@ -734,6 +734,9 @@ export default function ServerInstancePanel({
             {activeTab === TAB_NETWORK && networkTab}
           </Box>
 
+          {/* The contained buttons take the theme's label colour (HTOO-572).
+              text.button is for headings on the page: on the accent fill it
+              measured 2.41–3.40:1, and on the error fill 2.04–3.40:1. */}
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isRunning ? (
               <>
@@ -770,7 +773,6 @@ export default function ServerInstancePanel({
                   disabled={busy}
                   onClick={handleStop}
                   startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
-                  sx={{ color: 'text.button' }}
                 >
                   {busyLabel ?? (isAdopted ? 'Stop External Server' : 'Stop Server')}
                 </Button>
@@ -782,7 +784,6 @@ export default function ServerInstancePanel({
                 disabled={busy}
                 onClick={handleStart}
                 startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}
-                sx={{ color: 'text.button' }}
               >
                 {busyLabel ?? 'Start Server'}
               </Button>

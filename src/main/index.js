@@ -350,7 +350,7 @@ function createWindow() {
   // would reject whatever the renderer sends during hydration.
   registerTrustedWindow(mainWindow)
 
-  // Strip backdrop-filter in a remote session. Four of the six themes put
+  // Strip backdrop-filter in a remote session. Six of the eight themes put
   // `backdropFilter: blur(2px)` on MuiPaper.root, and MuiPaper backs Card,
   // Dialog, Accordion and Menu — so most surfaces make Chromium read back what
   // is behind them and blur it on every repaint, including every frame of a
@@ -501,7 +501,7 @@ app.whenReady().then(() => {
       if (closeConfirmed || quitCleanupDone || process.platform === 'darwin') {
         // A BrowserWindow keeps a native background behind the renderer, and
         // Chromium's default for it is opaque white — no one `backgroundColor`
-        // can be right for six themes of which two are light — while the
+        // can be right for eight themes of which three are light — while the
         // renderer's compositor tears down. That background is what paints for
         // the last frame or two before the window leaves the screen, which
         // reads as a white flash on quit. Hiding the window takes it off screen

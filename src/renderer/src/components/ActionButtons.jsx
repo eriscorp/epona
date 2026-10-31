@@ -45,14 +45,16 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
 
   return (
     <>
+      {/* The contained buttons take the theme's label colour (HTOO-572). text.button
+          is for headings on the page: on the accent fill of danaan, mundanes and
+          dubhaimid it measured 2.41–3.40:1. */}
       <Box sx={{ display: 'flex', gap: 1, mt: 'auto' }}>
         <Button
           variant="contained"
           fullWidth
           disabled={testing}
           onClick={handleTest}
-          startIcon={testing ? <CircularProgress size={14} /> : null}
-          sx={{ color: 'text.button' }}
+          startIcon={testing ? <CircularProgress size={14} color="inherit" /> : null}
         >
           {testing ? 'Testing…' : 'Test Connection'}
         </Button>
@@ -62,7 +64,6 @@ export default function ActionButtons({ targetKind = 'legacy', settings, getActi
           disabled={launching}
           onClick={handleLaunch}
           startIcon={launching ? <CircularProgress size={14} color="inherit" /> : null}
-          sx={{ color: 'text.button' }}
         >
           {launching ? 'Launching…' : 'Launch Client'}
         </Button>

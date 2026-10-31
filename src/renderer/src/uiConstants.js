@@ -17,3 +17,7 @@ export const PANEL_BORDER_COLOR = 'rgba(255, 255, 255, 0.15)'
 // both App.jsx and SettingsPane.jsx, with nothing keeping the two in sync.
 export const MAIN_W = 480
 export const PANE_W = 360
+
+// The theme gallery's window width (HTOO-572): the widest layout the panes
+// already use, so the gallery's sections sit two to a row.
+export const GALLERY_W = MAIN_W + 2 * PANE_W

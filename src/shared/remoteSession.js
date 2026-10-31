@@ -91,7 +91,7 @@ export function shouldDisableHardwareAcceleration(proc = process, systemRemoteSe
 }
 
 // backdrop-filter is the single most expensive thing in the UI once compositing
-// is on the CPU. Four of the six themes put `backdropFilter: blur(2px)` on
+// is on the CPU. Six of the eight themes put `backdropFilter: blur(2px)` on
 // MuiPaper.root, and MuiPaper backs Card, Dialog, Accordion and Menu — so most
 // surfaces force Chromium to read back everything behind them and blur it, on
 // every repaint, including every frame of a window drag. With a GPU that is

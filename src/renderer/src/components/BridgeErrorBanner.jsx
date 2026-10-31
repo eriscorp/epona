@@ -24,8 +24,11 @@ export default function BridgeErrorBanner({ error }) {
       sx={{
         px: 1.5,
         py: 1,
+        // A `.dark` status fill picks its own label (the house rule, HTOO-572):
+        // contrastText is picked against main and can be dark on a dark `.dark`.
+        // palette.test.js holds getContrastText(error.dark) to 4.5:1.
         bgcolor: 'error.dark',
-        color: 'common.white',
+        color: (theme) => theme.palette.getContrastText(theme.palette.error.dark),
         flexShrink: 0
       }}
     >

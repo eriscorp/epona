@@ -4,8 +4,9 @@ import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
-import { themesByName } from './themes'
-import TitleBar from './components/TitleBar'
+// Epona renders the house themes with its own text sizes (themes/eponaThemes.js).
+import { themesByName } from './themes/eponaThemes'
+import AppTitleBar from './components/AppTitleBar'
 import NavToolbar from './components/NavToolbar'
 import ProfileSelector from './components/ProfileSelector'
 import OptionsPanel from './components/OptionsPanel'
@@ -20,7 +21,8 @@ import HelpDialog from './components/HelpDialog'
 import ReportIssueDialog from './components/ReportIssueDialog'
 import UpdateNotice from './components/UpdateNotice'
 import BridgeErrorBanner from './components/BridgeErrorBanner'
-import { PANEL_BORDER_COLOR, MAIN_W, PANE_W } from './uiConstants.js'
+import ThemeGallery from './pages/ThemeGallery'
+import { PANEL_BORDER_COLOR, MAIN_W, PANE_W, GALLERY_W } from './uiConstants.js'
 import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
 import { defaultSettings } from '../../shared/defaultSettings.js'
 import { useSettings } from './store/settingsStore.js'
@@ -60,6 +62,9 @@ export default function App() {
   const [reportOpen, setReportOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(() => startupTabIndex(defaultSettings.targetKind))
   const [logPaneOpen, setLogPaneOpen] = useState(false)
+  // The house theme gallery (HTOO-572), opened from Settings → Theme. It takes
+  // the main panel in place of the tabs, in a wider window.
+  const [galleryOpen, setGalleryOpen] = useState(false)
   // Server running-state comes from the main process, which polls tracked-process
   // liveness and probes each instance's lobby port. Keeping our own guess here is
   // what used to leave the tab showing "Start Server" for a server that was very
@@ -137,9 +142,18 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const width = MAIN_W + (settingsOpen ? PANE_W : 0) + (logPaneOpen ? PANE_W : 0)
+    const width =
+      (galleryOpen ? GALLERY_W : MAIN_W) + (settingsOpen ? PANE_W : 0) + (logPaneOpen ? PANE_W : 0)
     window.sparkAPI.resizeWindow(width, WINDOW_H)
-  }, [logPaneOpen, settingsOpen])
+  }, [galleryOpen, logPaneOpen, settingsOpen])
+
+  // The gallery closes the side panes: it has its own theme picker, and it needs
+  // the width.
+  function openGallery() {
+    setSettingsOpen(false)
+    setLogPaneOpen(false)
+    setGalleryOpen(true)
+  }
 
   function getActiveProfile() {
     return settings.profiles.find((p) => p.id === settings.activeProfile) || settings.profiles[0]
@@ -160,7 +174,9 @@ export default function App() {
   }
 
   // The tab bar's change handler. The Go menu (macOS) runs the same one.
+  // A tab chosen from the Go menu also closes the theme gallery, which hides the tabs.
   function selectTab(index) {
+    setGalleryOpen(false)
     setActiveTab(index)
     update({ targetKind: TAB_ORDER[index] })
   }
@@ -265,12 +281,13 @@ export default function App() {
             overflow: 'hidden'
           }}
         >
-          <TitleBar />
+          <AppTitleBar />
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
           <BridgeErrorBanner error={bridgeError} />
           <NavToolbar
             detectedVersion={detectedVersion}
             clientPath={settings.clientPath}
+            settingsOpen={settingsOpen}
             onLocateClient={handleLocateClient}
             onToggleSettings={() => setSettingsOpen((o) => !o)}
             onOpenHelp={() => setHelpOpen(true)}
@@ -278,145 +295,151 @@ export default function App() {
           />
           <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
-          <Tabs
-            value={activeTab}
-            onChange={(_, v) => selectTab(v)}
-            variant="fullWidth"
-            sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
-          >
-            {/* Literal values, not a .map: see A2 in docs/plans/00a-backlog.md.
-                Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
-                TAB_ORDER key. e2e/nav-pages.spec.js reads the tab list and clicks
-                each one, so a tab added here needs both ids. */}
-            <Tab value={0} label={GO_TABS[0].label} data-testid="tab-legacy" />
-            <Tab value={1} label={GO_TABS[1].label} data-testid="tab-hybrasyl" />
-            <Tab value={2} label={GO_TABS[2].label} data-testid="tab-server" />
-          </Tabs>
-          <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
+          {galleryOpen ? (
+            <ThemeGallery onBack={() => setGalleryOpen(false)} />
+          ) : (
+            <>
+              <Tabs
+                value={activeTab}
+                onChange={(_, v) => selectTab(v)}
+                variant="fullWidth"
+                sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
+              >
+                {/* Literal values, not a .map: see A2 in docs/plans/00a-backlog.md.
+                    Each tab and its panel carry `tab-<kind>` and `page-<kind>`, the
+                    TAB_ORDER key. e2e/nav-pages.spec.js reads the tab list and clicks
+                    each one, so a tab added here needs both ids. */}
+                <Tab value={0} label={GO_TABS[0].label} data-testid="tab-legacy" />
+                <Tab value={1} label={GO_TABS[1].label} data-testid="tab-hybrasyl" />
+                <Tab value={2} label={GO_TABS[2].label} data-testid="tab-server" />
+              </Tabs>
+              <Divider sx={{ borderColor: PANEL_BORDER_COLOR }} />
 
-          {activeTab === 0 && (
-            <Box
-              data-testid="page-legacy"
-              sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}
-            >
-              {isWindows ? (
-                <>
+              {activeTab === 0 && (
+                <Box
+                  data-testid="page-legacy"
+                  sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}
+                >
+                  {isWindows ? (
+                    <>
+                      <ProfileSelector
+                        profiles={settings.profiles}
+                        activeProfile={settings.activeProfile}
+                        onChange={(id) => update({ activeProfile: id })}
+                      />
+                      <OptionsPanel
+                        settings={settings}
+                        onChange={update}
+                        availablePatches={availablePatches}
+                      />
+                      <ActionButtons
+                        targetKind="legacy"
+                        settings={settings}
+                        getActiveProfile={getActiveProfile}
+                      />
+                      <Divider />
+                      {/* The unpacker is not macOS/Linux-only. It reads the installer
+                          with zlib and works identically here, so a Windows user with
+                          no client can get one without leaving the app. Below the
+                          launch controls because launching is what this tab is for and
+                          what most visits want. */}
+                      <DarkAgesInstallPanel
+                        clientPath={settings.clientPath}
+                        onChange={update}
+                        isWindows
+                      />
+                    </>
+                  ) : (
+                    <LegacyAssetsPanel clientPath={settings.clientPath} onChange={update} />
+                  )}
+                </Box>
+              )}
+
+              {activeTab === 1 && (
+                <Box
+                  data-testid="page-hybrasyl"
+                  sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}
+                >
+                  <HybrasylClientPanel
+                    hybrasyl={settings.targets.hybrasyl}
+                    onChange={update}
+                    logPaneOpen={logPaneOpen}
+                    onToggleLogPane={() => setLogPaneOpen((o) => !o)}
+                    activeInstanceLogDir={activeInstance?.logDir || ''}
+                  />
                   <ProfileSelector
                     profiles={settings.profiles}
                     activeProfile={settings.activeProfile}
                     onChange={(id) => update({ activeProfile: id })}
                   />
-                  <OptionsPanel
-                    settings={settings}
-                    onChange={update}
-                    availablePatches={availablePatches}
-                  />
                   <ActionButtons
-                    targetKind="legacy"
+                    targetKind="hybrasyl"
                     settings={settings}
                     getActiveProfile={getActiveProfile}
                   />
-                  <Divider />
-                  {/* The unpacker is not macOS/Linux-only. It reads the installer
-                      with zlib and works identically here, so a Windows user with
-                      no client can get one without leaving the app. Below the
-                      launch controls because launching is what this tab is for and
-                      what most visits want. */}
-                  <DarkAgesInstallPanel
-                    clientPath={settings.clientPath}
-                    onChange={update}
-                    isWindows
-                  />
-                </>
-              ) : (
-                <LegacyAssetsPanel clientPath={settings.clientPath} onChange={update} />
+                </Box>
               )}
-            </Box>
-          )}
 
-          {activeTab === 1 && (
-            <Box
-              data-testid="page-hybrasyl"
-              sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}
-            >
-              <HybrasylClientPanel
-                hybrasyl={settings.targets.hybrasyl}
-                onChange={update}
-                logPaneOpen={logPaneOpen}
-                onToggleLogPane={() => setLogPaneOpen((o) => !o)}
-                activeInstanceLogDir={activeInstance?.logDir || ''}
-              />
-              <ProfileSelector
-                profiles={settings.profiles}
-                activeProfile={settings.activeProfile}
-                onChange={(id) => update({ activeProfile: id })}
-              />
-              <ActionButtons
-                targetKind="hybrasyl"
-                settings={settings}
-                getActiveProfile={getActiveProfile}
-              />
-            </Box>
-          )}
-
-          {activeTab === 2 && (
-            <Box
-              data-testid="page-server"
-              sx={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1.5,
-                p: 2,
-                overflow: 'hidden'
-              }}
-            >
-              <ServerInstancePanel
-                instances={settings.instances}
-                selectedId={settings.activeInstance}
-                statusById={instanceStatus}
-                worldDirectories={settings.worldDirectories}
-                activeWorldDirectory={settings.activeWorldDirectory}
-                onOpenSettings={() => setSettingsOpen(true)}
-                onSelect={(id) => update({ activeInstance: id })}
-                onInstancesChange={(next) => update({ instances: next })}
-                // Start/Stop/Reset write an optimistic row so the button flips on
-                // the round trip instead of waiting out the poll interval; main's
-                // next push overrides it either way.
-                onStart={async (instance) => {
-                  const result = await window.sparkAPI.startInstance(instance)
-                  if (result.success) {
-                    setInstanceStatus((prev) => ({
-                      ...prev,
-                      [instance.id]: { id: instance.id, running: true, source: 'tracked' }
-                    }))
-                  }
-                  return result
-                }}
-                onStop={async (instanceId) => {
-                  const result = await window.sparkAPI.stopInstance(instanceId)
-                  if (result.success) {
-                    setInstanceStatus((prev) => ({
-                      ...prev,
-                      [instanceId]: { id: instanceId, running: false, source: null }
-                    }))
-                  }
-                  return result
-                }}
-                onReset={async (instance) => {
-                  const result = await window.sparkAPI.resetInstance(instance)
-                  setInstanceStatus((prev) => ({
-                    ...prev,
-                    [instance.id]: {
-                      id: instance.id,
-                      running: result.success,
-                      source: result.success ? 'tracked' : null
-                    }
-                  }))
-                  return result
-                }}
-              />
-            </Box>
+              {activeTab === 2 && (
+                <Box
+                  data-testid="page-server"
+                  sx={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1.5,
+                    p: 2,
+                    overflow: 'hidden'
+                  }}
+                >
+                  <ServerInstancePanel
+                    instances={settings.instances}
+                    selectedId={settings.activeInstance}
+                    statusById={instanceStatus}
+                    worldDirectories={settings.worldDirectories}
+                    activeWorldDirectory={settings.activeWorldDirectory}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onSelect={(id) => update({ activeInstance: id })}
+                    onInstancesChange={(next) => update({ instances: next })}
+                    // Start/Stop/Reset write an optimistic row so the button flips on
+                    // the round trip instead of waiting out the poll interval; main's
+                    // next push overrides it either way.
+                    onStart={async (instance) => {
+                      const result = await window.sparkAPI.startInstance(instance)
+                      if (result.success) {
+                        setInstanceStatus((prev) => ({
+                          ...prev,
+                          [instance.id]: { id: instance.id, running: true, source: 'tracked' }
+                        }))
+                      }
+                      return result
+                    }}
+                    onStop={async (instanceId) => {
+                      const result = await window.sparkAPI.stopInstance(instanceId)
+                      if (result.success) {
+                        setInstanceStatus((prev) => ({
+                          ...prev,
+                          [instanceId]: { id: instanceId, running: false, source: null }
+                        }))
+                      }
+                      return result
+                    }}
+                    onReset={async (instance) => {
+                      const result = await window.sparkAPI.resetInstance(instance)
+                      setInstanceStatus((prev) => ({
+                        ...prev,
+                        [instance.id]: {
+                          id: instance.id,
+                          running: result.success,
+                          source: result.success ? 'tracked' : null
+                        }
+                      }))
+                      return result
+                    }}
+                  />
+                </Box>
+              )}
+            </>
           )}
         </Box>
 
@@ -445,6 +468,7 @@ export default function App() {
             onClose={() => setSettingsOpen(false)}
             onChange={update}
             onReportIssue={() => setReportOpen(true)}
+            onOpenThemeGallery={openGallery}
           />
         )}
 
