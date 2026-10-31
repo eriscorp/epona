@@ -1,6 +1,6 @@
 # 01 — macOS and Linux deep dive (HTOO-627)
 
-Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The machine checks are next. Owner: Sabrael.
+Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); M4, M7, L4, W1 and W2 are owed. Owner: Sabrael.
 
 This is the audit that HTOO-627 asks for: Epona's faults on macOS and Linux, found by reading the code, before the fix work package starts. The ten bugs of 2026-10-21 (HTOO-587 to HTOO-596) came from one macOS session and show what that user tried. This document finds the rest and sets the order of the fixes.
 
@@ -16,7 +16,7 @@ This is the audit that HTOO-627 asks for: Epona's faults on macOS and Linux, fou
 - **29 new findings**: 3 high, 11 medium, 15 low or low to medium. 9 of them need a box check before they are called faults.
 - **Additions to 7 of the 10 existing cards.** HTOO-593 goes from medium to high: Brigid ships on macOS only as `Brigid.app`, so binary mode cannot run the official macOS client.
 - **The process lifecycle is the weakest area.** Three faults there hide each other. A directly spawned server that exits on its own never runs its cleanup (F1). Stop on an adopted server can report success and kill nothing (F2). And the status monitor sends an update only when its snapshot changes, while the renderer writes an optimistic "stopped" row, so neither fault ever shows in the UI (F4).
-- **The release pipeline tests nothing.** `release.yml` runs no lint and no tests on any of its three jobs, and `ci.yml` says it does (F29). No check ever starts the signed dmg or the AppImage that users download (F30).
+- **The release pipeline tests nothing.** `release.yml` runs no lint and no tests on any of its three jobs, and `ci.yml` says it does (F22). No check ever starts the signed dmg or the AppImage that users download (F23).
 
 ## Findings
 
@@ -58,7 +58,9 @@ Each finding gives the place, what goes wrong and where, the severity, and the f
 - When nothing matches, the fallback is the bare `dotnet` (`dotnet.js:58`). A Finder- or desktop-launched app does not have the shell's PATH, so the spawn fails with `ENOENT` (HTOO-589, HTOO-594).
 - An apphost looks for the runtime through `DOTNET_ROOT` or the global install location. Epona sets neither, for a client apphost in binary mode or for the server apphost that `dotnet run` starts. With .NET only in `~/.dotnet`, the build succeeds and the launch fails with "You must install .NET to run this application", and in binary mode the client's output is ignored, so nobody sees the message.
 
-**Fix:** probe each existing candidate with `--list-runtimes` and `--list-sdks` and take the first one that has .NET 10. When the resolved path is absolute and `DOTNET_ROOT` is unset, set `DOTNET_ROOT` to its real directory in the child's environment. **Box:** Linux with .NET 8 from apt and .NET 10 in `~/.dotnet`; a Mac with .NET 10 only in `~/.dotnet`, Epona started from Finder.
+**Fix:** probe each existing candidate with `--list-runtimes` and `--list-sdks` and take the first one that has .NET 10. When the resolved path is absolute and `DOTNET_ROOT` is unset, set `DOTNET_ROOT` to its real directory in the child's environment. **Box:** a Mac with .NET 10 from Homebrew only, Epona started from Finder (M4).
+
+**Supported installs only** (Sabrael, 2026-10-31). Epona supports the .NET install its hint names, and a mixed install that the hint does not produce is not a fault. On Linux the hint is `sudo apt install dotnet-sdk-10.0`. That install is found first, and apt writes `/etc/dotnet/install_location`, so an apphost finds the runtime with no `DOTNET_ROOT`: L2 is closed. On macOS the hint is `brew install dotnet`, and the hinted install is where F6 plausibly bites. Homebrew writes no `install_location` and tells the user to export `DOTNET_ROOT`, which a Finder-launched app never sees. Discovery also tries `/usr/local/share/dotnet` before Homebrew, so an older pkg install there wins over a brew .NET 10. F6 stays, as a macOS card.
 
 **F7 (HTOO-646). A branch worktree with no XML branch builds with the repo root's `Directory.Build.props`.** Medium. All OSes. _Follows from MSBuild's rules; box to confirm._ Epona writes `Directory.Build.props` into a worktree only when the instance has an XML branch (`src/main/buildProps.js`). A worktree lives at `<repo>/.worktrees/<branch>/`, so with no file of its own, MSBuild walks up and imports the one at the repo root. That file is either Epona's, written for an in-place instance with a local XML branch, or a hand-written one from the server's `Directory.Build.props.example` (`UseLocalProtocol`). The branch instance then builds silently against another instance's XML or Protocol.
 
@@ -96,7 +98,7 @@ Each finding gives the place, what goes wrong and where, the severity, and the f
 
 ### Area 5 — The interface
 
-**F17 (HTOO-649). Off macOS, Electron's default menu stays in place, so Ctrl+R reloads, Ctrl+Shift+I opens DevTools, and F11 goes full screen.** Medium. Linux and Windows. _Code confirmed; box for the keys._ `src/main/index.js:556-582`. `applyAppMenu` returns early when the platform is not darwin, and nothing calls `Menu.setApplicationMenu(null)`. The comment says the default menu "does not show". It does not, because the window is frameless, but its accelerators plausibly stay registered. Ctrl+R throws away the log pane and the renderer state, which is why `appMenu.js:88-92` leaves reload off the Mac menu. DevTools opens in a packaged build. F11 works because `fullscreenable: false` is set on macOS only. Nothing in `src/` intercepts these keys.
+**F17 (HTOO-649). Off macOS, Electron's default menu stays in place, so Ctrl+R reloads, Ctrl+Shift+I opens DevTools, and F11 goes full screen.** Medium. Linux and Windows. _Code confirmed; box for the keys._ `src/main/index.js:556-582`. `applyAppMenu` returns early when the platform is not darwin, and nothing calls `Menu.setApplicationMenu(null)`. The comment says the default menu "does not show". It does not, because the window is frameless, but its accelerators plausibly stay registered. Ctrl+R throws away the log pane and the renderer state, which is why `appMenu.js:88-92` leaves reload off the Mac menu. DevTools opens in a packaged build. F11 is live because `fullscreenable: false` is set on macOS only; on Linux (Cinnamon, X11) the window keeps its fixed size, but the page is drawn wider than the window and cut off until F11 is pressed again (L3). Nothing in `src/` intercepts these keys.
 
 **Fix:** off darwin, call `Menu.setApplicationMenu(null)`; Chromium handles copy and paste in text fields on its own. **Box:** on Linux and on Windows, press Ctrl+R with the log pane open, then Ctrl+Shift+I, then F11.
 
@@ -209,15 +211,15 @@ The card asks for a fault that hides other faults to go first. Three of those co
 Sabrael approved this on 2026-10-31.
 
 - **The fixes are built on the Windows box.** It has the full gate, e2e, the `da-win32` rebuild and signing, and the Windows work (F29, F17). `npm run validate:linux` runs the unit suite on real Linux through WSL. Each PR records its Windows checks and leaves the macOS and Linux rows owed, as the release plan says.
-- **Before the work starts, the Linux box runs L1, L2 and L3.** They decide whether HTOO-592's orphan, HTOO-645 and HTOO-649 are real on Linux, and so what the package holds.
-- **After group 2 (the lifecycle) merges, the Mac and the Linux box run `01-box-checks/lifecycle.mjs`.** Mocked tests on Windows cannot show process groups and signals, and HTOO-642 is a fault that a passing unit test did not catch. The script must print `SUMMARY: PASS`.
-- **Everything else waits for the end-of-release pass**, with the two scripts and the tables below.
+- **Before the work starts, each box runs every check it can, as the baseline** (Sabrael, 2026-10-31). That is every check below except M7 and W1, which need a tag or a fix, and L4, which needs a stock Ubuntu 24.04 machine. L5 and L7 use a local `npm run build:linux` AppImage.
+- **After a fix group merges, the boxes run again the script that covers it.** `01-box-checks/lifecycle.mjs` after group 2 (the lifecycle), on the Mac and the Linux box: mocked tests on Windows cannot show process groups and signals, and HTOO-642 is a fault that a passing unit test did not catch. `01-box-checks/build-and-git.sh` after group 3 (the server launch). Each must print `SUMMARY: PASS`.
+- **The end-of-release pass runs the whole table again** on both boxes, against the release's own dmg and AppImage, and adds M7, L4 and W1.
 
 The scripts print PASS or FAIL against the fixed behaviour, and exit 1 on a FAIL. On `main` at `a1a2d16` they print M1 FAIL, M3 PASS and M6 FAIL (the `R&D` folder). M2 and M5 test git and MSBuild, which no fix changes, so they print FACT; unit tests in epona check the HTOO-644 and HTOO-646 fixes.
 
 ## Checks for the Mac and the Linux box
 
-Each one settles a finding marked **box**. They run on the Mac and the Linux box in Sabrael's office **before the fixes start** (Sabrael, 2026-10-31). A check that does not confirm its finding closes that card. M7, L4 and W1 need a released build or a fix, so they stay in the end-of-release pass.
+Each one settles a finding marked **box**. They run on the Mac and the Linux box in Sabrael's office before the fixes start, and again after them, as [the schedule above](#where-the-work-is-done-and-when-the-boxes-check-it) sets out. A check that does not confirm its finding closes that card. M7, L4 and W1 need a released build, a stock Ubuntu machine or a fix, so they run only in the end-of-release pass.
 
 ### Mac
 
@@ -226,7 +228,7 @@ Each one settles a finding marked **box**. They run on the Mac and the Linux box
 | M1 | F2 | Start a repo-mode instance, quit Epona, then run `ps -o pid,ppid,pgid,command -p $(lsof -t -iTCP:<lobbyPort> -sTCP:LISTEN)`. Note whether the PID and the PGID differ. Relaunch Epona, press Stop on the adopted row, and check whether the port still listens. |
 | M2 | F3 | Launch the client in repo mode on a pinned branch. Quit Epona and confirm. Check `ps` for the client, and whether `.worktrees/<branch>` still exists. |
 | M3 | HTOO-592 | Start a repo-mode server and stop it. Check `ps` for a surviving Hybrasyl process and `lsof -iTCP:2610-2612`. |
-| M4 | F6 | With .NET 10 only in `~/.dotnet` (no pkg, no Homebrew), start Epona from Finder. Check the runtime chip, then start a repo-mode instance. |
+| M4 | F6 | Install .NET 10 the way Epona's hint says, `brew install dotnet`, with no pkg install in `/usr/local/share/dotnet`, and do not export `DOTNET_ROOT`. Start Epona from Finder. Check the runtime chip, start a repo-mode instance, and launch a binary-mode client apphost. A "You must install .NET" failure confirms the `DOTNET_ROOT` half. |
 | M5 | F7 | Put a `Directory.Build.props` with `UseLocalProtocol` at the server repo root. Start a branch instance with no XML branch, and run `dotnet msbuild hybrasyl/Hybrasyl.csproj -getProperty:UseLocalProtocol` in its worktree. |
 | M6 | F8 | Start a repo instance with an XML branch. Run `grep -A2 '"Hybrasyl.Xml"' <worktree>/hybrasyl/obj/project.assets.json`. It must say `"type": "project"`. |
 | M7 | F21, F23 | On the next tag: download the dmg from the release, then run `spctl -a -vv --type open --context context:primary-signature` and `xcrun stapler validate`. Install it to `/Applications`, launch it, and run `codesign -d --entitlements - /Applications/Epona.app`. |
@@ -236,7 +238,7 @@ Each one settles a finding marked **box**. They run on the Mac and the Linux box
 | Check | For | Steps |
 | --- | --- | --- |
 | L1 | F2, HTOO-592 | M1 and M3 on Linux. |
-| L2 | F6 | With .NET 8 from apt and .NET 10 in `~/.dotnet`, start Epona from the desktop menu. Check the runtime chip, then start a repo-mode instance. |
+| L2 | F6 | **Closed, not run.** It needed .NET 8 from apt beside .NET 10 in `~/.dotnet`, which Epona's hint (`sudo apt install dotnet-sdk-10.0`) does not support (Sabrael, 2026-10-31). The hinted install works: see the Linux results. |
 | L3 | F17 | In the packaged app, open the Log Pane in repo mode. Press Ctrl+R, then Ctrl+Shift+I, then F11. Note what each does. Repeat on the Windows box. |
 | L4 | F23, F24 | On a stock Ubuntu 24.04: `sysctl kernel.apparmor_restrict_unprivileged_userns`, then `chmod +x` the release's AppImage and launch it. Note whether it needed `libfuse2` (`libfuse2t64`) and whether it hit a sandbox error. Run A2 there too. |
 | L5 | F25 | Under the AppImage, start the client and a server. Run `tr '\0' '\n' < /proc/<child pid>/environ \| grep -E 'LD_LIBRARY_PATH\|APPDIR'`. |
@@ -263,6 +265,25 @@ macOS 27, Apple Silicon, epona `main` at `a1a2d16`, server `6ed8d59a`, .NET 10.0
 | M5 | HTOO-646 | **Confirmed.** A project under `<repo>/.worktrees/<branch>/` imports the repo root's `Directory.Build.props`: it sees `UseLocalProtocol=true`. |
 | M6 | HTOO-654 | **Half cleared.** MSBuild on macOS resolves Epona's backslash `LocalXmlProjectPath` (restore gives `Hybrasyl.Xml` as `project`, and the build succeeds), so the backslashes are cosmetic. The escaping half is **confirmed**: under a folder named `R&D`, restore reports no error and silently drops the reference. |
 | M7 | HTOO-650, HTOO-643 | Waits for the next tag. |
+
+### Results on the Linux box (2026-10-31)
+
+Linux Mint 22.3 (Ubuntu 24.04 base), kernel 7.0, Cinnamon on X11, epona `main` at `b72f5d7`, server `6ed8d59a`, .NET 10.0.113 from apt in `/usr/lib/dotnet`. `kernel.apparmor_restrict_unprivileged_userns` is 0. The same two scripts ran for L1 and the Linux half of M2, M5 and M6. L3 and L6 ran on a fresh `--linux --dir` package (2.9.0, fuses verified), and L5 and L7 on a local AppImage, with keys and clicks sent through XTEST to the focused Epona window.
+
+| Check | Card | Result |
+| --- | --- | --- |
+| L1 (M1) | HTOO-642 | **Confirmed.** As on the Mac: the listener (the `Hybrasyl` apphost, PID 5954) is a child of `dotnet run` and in its group, PPID and PGID 5774, with `VBCSCompiler` in the same group. `killProcessTree(5954)` returns `{ ok: true }`, and the server keeps listening. |
+| L1 (M3) | HTOO-592 | **Not reproduced on Linux.** `dotnet run` exits with code 143 within 135 ms of Stop's SIGTERM, and the port is free within 1 s. No orphan. The card's other parts stand, as on the Mac. |
+| M2 | HTOO-644 | **Confirmed.** Same as the Mac: the worktree is removed, and the process keeps running. |
+| M5 | HTOO-646 | **Confirmed.** The worktree project sees `UseLocalProtocol=true` from the repo root. |
+| M6 | HTOO-654 | **Same as the Mac.** The backslash path resolves on Linux (`project`); under `R&D` the reference is silently dropped (`none`). |
+| L2 | HTOO-645 | **Closed:** an unsupported install (see F6). This box has the hinted install, .NET 10 from apt: `resolveDotnetPath()` returns `/usr/bin/dotnet`, the runtime chip reads ".NET 10 runtime + SDK", and in L1 the server's apphost found its runtime with no `DOTNET_ROOT`. |
+| L3 | HTOO-649 | **Confirmed, all three keys.** With the Log Pane open on the Hybrasyl tab: **Ctrl+R** reloads the renderer; the pane closes and the window shrinks back to 480 px (nothing in `src/` handles the key). **Ctrl+Shift+I** opens DevTools, docked inside the 480 px window, in the packaged build. **F11** does not go full screen: the window keeps its size, and the WM sets no `_NET_WM_STATE_FULLSCREEN`. But Electron drops the frameless window's shadow inset, so the page is drawn wider than the window and the toolbar is cut off on the right until F11 is pressed again. W2 is still owed. |
+| L5 | HTOO-661 | **Confirmed, with less effect than feared, and a new fault (below).** Run as a local `npm run build:linux` AppImage, which launched with no extra packages: Mint ships `libfuse2`. Start Server from the UI. The server process (`Hybrasyl`) has `LD_LIBRARY_PATH=/tmp/.mount_epona-…/usr/lib`, `APPDIR`, `APPIMAGE`, `GSETTINGS_SCHEMA_DIR`, and `PATH` and `XDG_DATA_DIRS` prefixed with the mount, and so do `dotnet run` and `VBCSCompiler`. That folder holds only GUI libraries (`libappindicator`, `libnotify`, `libXss`, `libXtst` and two more), and the server mapped none of them. The client was not started, because its saved branch is missing on this box. |
+| L6 | HTOO-658 | **Confirmed.** Epona started with `XDG_DATA_HOME`, `XDG_DATA_DIRS` and `XDG_CONFIG_DIRS` pointed at empty folders, so `xdg-mime query default inode/directory` prints nothing. Settings → About → "Reveal settings folder": `gio` prints "Failed to find default application for content type 'inode/directory'" on Epona's stderr, and the window shows nothing. |
+| L7 | HTOO-663 | **Partial.** On X11 the AppImage's taskbar entry is the square tile, but only because the `.deb` from B8 is installed: its `epona.desktop` has `StartupWMClass=epona`, which the window's `WM_CLASS` matches. The window's own `_NET_WM_ICON` is the star. The case F28 is about, an AppImage with no installed desktop file, needs the `.deb` removed first. This box has no Wayland session. |
+
+**Found on the way: every child inherits Epona's open files, so under the AppImage a build server keeps the mount alive after Epona quits.** Added to HTOO-661. After L5, closing Epona left the AppImage runtime running, and its mount still up. `fuser -m` named `VBCSCompiler`, the Roslyn build server that the server's `dotnet run` starts and that outlives it (re-parented to PID 1). Its open files include `resources/app.asar`, `icudtl.dat`, `v8_context_snapshot.bin`, `resources.pak`, the two `chrome_*_percent.pak` and `locales/en-US.pak`, all inside the mount. Chromium opens those without close-on-exec, and `spawn` does not close them, so each child, and each child of a child, keeps them. `dotnet build-server shutdown` released the mount, and the runtime exited within 3 s. Left alone, it lasts until the build server's idle timeout. On the `.deb` it is only a leak of descriptors into `/opt/Epona`. **Fix:** open the child's descriptors with close-on-exec, or start children through a helper that closes every descriptor above 2. Check the Windows side too, since a handle inherited there would lock `app.asar` against an update.
 
 **Found on the way: logs nested in `logs/logs`.** `config.xml`, `qa.xml` and the local `local.xml` in the world repo gave each log a `Destination` of `logs/<Name>-.log`. The server joins it onto `--logDir`, so with Epona's default `<world>/logs` the logs went to `<world>/logs/logs/`. Sabrael ruled that logs are not nested there. `config.xml` is fixed in world PR #192 (`local.xml` too, locally); `qa.xml` waits for a check of the QA server's `--logDir` (WLD-85).
 
