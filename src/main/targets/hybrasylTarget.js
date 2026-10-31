@@ -99,6 +99,9 @@ function pathForMode(config) {
 // Windows-specific: no `detached: true`, which would otherwise attach the
 // child to a new console group (dodges windowsHide and disconnects our pipes).
 // Children survive Epona's exit by default on Windows, which is what we want.
+// On macOS and Linux a repo launch is `detached`, so `dotnet run` leads its own
+// process group and a stop signals the client it started too (HTOO-644), as
+// spawnDirect does for a server.
 export async function launch(config, profile, daClientPath) {
   if (typeof daClientPath !== 'string' || daClientPath.length === 0) {
     return {
@@ -204,6 +207,7 @@ export async function launch(config, profile, daClientPath) {
       // making it appear hidden (the bug this fixes) — so don't. A `dll` launch therefore shows
       // a stray dotnet console; unavoidable without an apphost exe.
       windowsHide: isRepo,
+      detached: isRepo && process.platform !== 'win32',
       env
     })
     // For repo launches with a worktree, the cleanup releases the worktree

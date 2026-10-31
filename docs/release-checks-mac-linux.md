@@ -171,6 +171,8 @@ This check needs a Hybrasyl server instance in repo mode that starts on the Mac 
 3. Start the instance. Press ⌘W. **Expected:** the window closes with no question, and the server keeps running. Click the Dock icon: the window opens again. Quit from the Dock menu with no window open: Epona asks in a dialog of its own.
 4. Hide Epona (⌘H), then Quit from the Dock menu. **Expected:** Epona comes to the front and asks.
 5. With the window open, move it to another display or change the display scale. **Expected:** the window keeps its size and fits the display. Do this once more after a ⌘W and a Dock click.
+6. Start the instance, and launch the Hybrasyl client in repo mode on a pinned branch. Press ⌘Q, then Quit. **Expected:** the question lists both. Within about 5 seconds the client closes and Epona exits. `ps` shows no process from either launch, and `.worktrees/<branch>` is gone. Do this step on Linux too (HTOO-644).
+7. Start the instance, then end Epona with `kill -9`. Open Epona again and press Stop on the instance. **Expected:** the instance shows as stopped, and `lsof -iTCP:<lobbyPort> -sTCP:LISTEN` shows nothing. Do this step on Linux too (HTOO-642).
 
 ### B5. Missing Command Line Tools (macOS, only if such a Mac is available) — HTOO-512
 

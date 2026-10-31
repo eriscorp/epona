@@ -58,6 +58,9 @@ the rules above.
 - **The Start Server button comes back when a server stops by itself.** Before, on macOS and Linux, the button could stay on Stop Server with no server behind it, and a server that did not start could not be started again until Epona restarted.
 - **After a Start, Stop or Reset, the server shows its real state.** Before, a Stop that did not end the server showed the server as stopped, and the next Start failed.
 - **Epona cleans up after a server that stops by itself.** Before, on macOS and Linux, the server's worktree and its build settings stayed in use until the next Stop.
+- **On macOS and Linux, Stop ends a server that Epona did not start.** Before, Stop on a server that was left running by a crash or a force quit could report success while the server kept its ports.
+- **Stop, Reset and Quit give a server time to shut down.** Epona asks the server to stop and waits up to 5 seconds. Then it ends the server by force. When a server does not stop, Stop and Reset show an error, and Epona keeps the server's worktree.
+- **Quit stops the Hybrasyl client that runs in repo mode.** Before, the quit question said that Quit stopped the client, but the client kept running. On macOS and Linux, Quit then deleted the client's worktree while the client used it. Quit also removes the build settings that a repo-mode launch writes, and it stops all launches at the same time.
 - **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
 - **A Stop Server button shows the error colour in the six Dark Ages themes.** Before, it looked the same as the other buttons.
 
