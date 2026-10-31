@@ -198,13 +198,15 @@ HTOO-587, HTOO-588 and HTOO-591: nothing missed.
 The card asks for a fault that hides other faults to go first. Three of those come first, in this order, because every later fix is checked through them.
 
 1. **What the user can see.** HTOO-590 (the pane on macOS and Linux) and F4 (status is always pushed after a Start, Stop, Reset or exit), with HTOO-589 (the renderer handles `childExit` and spawn `'error'`). After this, a failed start shows its output and a failed Stop shows "running".
-2. **The lifecycle.** F1 (cleanup on exit), HTOO-592 (group kill with a SIGTERM grace period, no cleanup after a timeout, a longer quit limit), F2 (the adopted Stop), F3 (the quit sweep). One PR if it stays reviewable: they share `index.js`, `instanceManager.js` and `processKill.js`, and the tests for one exercise the others.
+2. **The lifecycle.** F1 (cleanup on exit; **moved to group 1**, see below), HTOO-592 (group kill with a SIGTERM grace period, no cleanup after a timeout, a longer quit limit), F2 (the adopted Stop), F3 (the quit sweep). One PR if it stays reviewable: they share `index.js`, `instanceManager.js` and `processKill.js`, and the tests for one exercise the others.
 3. **The server launch.** HTOO-595 (`--config` and `.xml` case), HTOO-587 and HTOO-588 (the log folder), F6 (dotnet discovery and `DOTNET_ROOT`), HTOO-591 (Rosetta), F7 and F8 (build props) after their box checks.
 4. **The client launch.** HTOO-593 (`.app`, now high), HTOO-594 with F12 (spawn errors, `.exe`, `runBusy`), F11 (symlinks), F13.
 5. **Security and release.** F21 (entitlements) and F22 (tests on the tag). Both are small, and either can go earlier, but F21 is verified only on a signed build, so it rides the release's tag.
 6. **The interface.** HTOO-596 with F10 and F20, F14 (the banner), F17 (the default menu, after its box check), F18, F19, F16, F15, F9, F5.
 7. **Windows.** F29 (the server's output in the pane), after F5.
 8. **The docs.** F26, F27, and the new checks from F23 and F24, last, so that they describe the code as it ships.
+
+**F1 moved to group 1** (2026-10-31). `wireInstanceLogs`' `onExit` compared the tracked entry, `{ kind, value, cleanup }`, with the child, so it never deleted the entry: a server that exited on its own stayed tracked, and the next Stop ran its cleanup. HTOO-589 needs that untrack, and with the untrack and no cleanup on exit, the cleanup could never run. So group 1 takes F1 too: the exit untracks the entry and runs a run-once cleanup, which Stop and Reset await. Group 2 keeps HTOO-592, F2 and F3, and the box re-run of `lifecycle.mjs` after it still covers F1.
 
 ### Where the work is done, and when the boxes check it
 
