@@ -435,5 +435,17 @@ export async function launch(instance) {
     }
   }
 
+  // The server refuses a log folder that does not exist: it prints one stderr
+  // line above its usage text and exits, in repo mode after a full build
+  // (HTOO-587). Make the folder, as the client's log auto-save does.
+  try {
+    await fs.mkdir(instance.logDir, { recursive: true })
+  } catch (err) {
+    return {
+      success: false,
+      error: `Could not create the log folder ${instance.logDir}: ${err.message}`
+    }
+  }
+
   return instance.mode === 'repo' ? launchRepo(instance) : launchBinary(instance)
 }

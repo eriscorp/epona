@@ -750,7 +750,8 @@ app.whenReady().then(() => {
       // out what the picked folder should contain. Ignored on other platforms.
       message: typeof message === 'string' && message.length > 0 ? message : undefined,
       defaultPath,
-      properties: ['openDirectory']
+      // macOS: a New Folder button, so a log folder can be made here (HTOO-587).
+      properties: ['openDirectory', 'createDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
   })
@@ -875,7 +876,18 @@ app.whenReady().then(() => {
         ? payload.defaultFileName
         : `log-${logTimestamp()}.log`
     const settings = await settingsManager.load()
-    const defaultDir = activeInstanceLogDir(settings)
+    // A log folder that does not exist yet sent the macOS save panel to the
+    // nearest folder that does, the world repo's root, and the log went into
+    // the repo (HTOO-588). Make it first; when that fails, offer no folder.
+    let defaultDir = activeInstanceLogDir(settings)
+    if (defaultDir) {
+      try {
+        await fs.mkdir(defaultDir, { recursive: true })
+      } catch (err) {
+        console.warn('log folder for Save Log could not be created:', err.message)
+        defaultDir = null
+      }
+    }
     const result = await pickerDialog.showSaveDialog(mainWindow, {
       title: 'Save Log',
       defaultPath: defaultDir ? join(defaultDir, defaultFileName) : defaultFileName,

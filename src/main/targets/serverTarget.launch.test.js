@@ -36,7 +36,9 @@ vi.mock('fs', async (importActual) => {
     ...actual,
     promises: {
       ...actual.promises,
-      readFile: vi.fn()
+      readFile: vi.fn(),
+      // The instance's log folder (HTOO-587). Real, it would make D:/hyb-logs.
+      mkdir: vi.fn().mockResolvedValue(undefined)
     }
   }
 })
@@ -192,5 +194,41 @@ describe('launch (repo mode cleanup invariants)', () => {
     ).toEqual({ ok: true })
     // Nothing was written, so nothing should be removed either.
     expect(removeBuildProps).not.toHaveBeenCalled()
+  })
+})
+
+describe('launch (the log folder, HTOO-587)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    _resetClaimsForTests()
+  })
+
+  it('creates the log folder before the setup', async () => {
+    // The server refuses a log folder that does not exist, after the build.
+    ensureWorktree
+      .mockResolvedValueOnce('D:/repos/server/.wt/develop')
+      .mockResolvedValueOnce('D:/repos/xml/.wt/main')
+    fs.readFile.mockResolvedValueOnce('<Project>UseLocalXml=true</Project>')
+    // Stop before the spawn, as above.
+    writeBuildProps.mockRejectedValueOnce(new Error('stop here'))
+
+    await launch(REPO_WITH_XML)
+
+    expect(fs.mkdir).toHaveBeenCalledWith('D:/hyb-logs', { recursive: true })
+    expect(fs.mkdir.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureWorktree.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('names the folder and stops when it cannot create it', async () => {
+    fs.mkdir.mockRejectedValueOnce(new Error('EACCES: permission denied'))
+
+    const result = await launch(REPO_WITH_XML)
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Could not create the log folder D:/hyb-logs: EACCES: permission denied'
+    })
+    expect(ensureWorktree).not.toHaveBeenCalled()
   })
 })
