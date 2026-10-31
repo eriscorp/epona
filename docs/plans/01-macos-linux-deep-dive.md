@@ -230,6 +230,11 @@ The card asks for a fault that hides other faults to go first. Three of those co
 - HTOO-647: `csprojInWorktree` realpaths the csproj before `relative()`.
 - HTOO-656: a Dark Ages path that does not exist gives the "not set" error, and the check runs before any worktree is made.
 
+**Group 5** (HTOO-650, HTOO-651):
+
+- F21 (HTOO-650): `build/entitlements.mac.plist` drops `allow-dyld-environment-variables` and keeps `disable-library-validation`. The three keys left are electron-builder's own default, and without the DYLD key the hardened runtime ignores `DYLD_*`, so the injection route is closed. Removing `disable-library-validation` too would buy nothing more, and its effect shows only on a signed, notarized build, at the tag. `scripts/entitlements.test.mjs` pins the keys. The template and the other apps carry the same DYLD key, and the house skeleton names it as standard.
+- F22 (HTOO-651): each build job in `release.yml` runs `npm run validate` (lint, format check, unit suite) after the install and before the build. `scripts/release-validate.test.mjs` pins it. The `ci.yml` comment now names the step.
+
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.

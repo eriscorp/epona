@@ -129,6 +129,12 @@ jobs:
       - name: Rebuild native addon
         run: npm run rebuild
 
+      # The tag's own check (HTOO-651): lint, format and the unit suite, on
+      # each OS. ci.yml runs only when someone dispatches it, so without this
+      # the POSIX half of the suite could miss a release entirely.
+      - name: Validate
+        run: npm run validate
+
       - name: Build app
         run: npm run build
 
@@ -291,6 +297,12 @@ jobs:
           done
           exit 1
 
+      # The tag's own check (HTOO-651): lint, format and the unit suite, on
+      # each OS. ci.yml runs only when someone dispatches it, so without this
+      # the POSIX half of the suite could miss a release entirely.
+      - name: Validate
+        run: npm run validate
+
       - name: Build app
         run: npm run build
 
@@ -352,6 +364,12 @@ jobs:
             if [ "$attempt" -lt 3 ]; then sleep $((attempt * 20)); fi
           done
           exit 1
+
+      # The tag's own check (HTOO-651): lint, format and the unit suite, on
+      # each OS. ci.yml runs only when someone dispatches it, so without this
+      # the POSIX half of the suite could miss a release entirely.
+      - name: Validate
+        run: npm run validate
 
       - name: Build app
         run: npm run build
