@@ -53,6 +53,11 @@ the rules above.
 
 ### Fixed
 
+- **On macOS and Linux, the Hybrasyl Server tab shows the server's output.** The console button beside the instance list opens the Log Pane for the selected instance. Before, the button was always off, and a failed build or a startup error showed nothing.
+- **Epona tells you when a server stops by itself.** When a server exits with an error, or does not start, a notice gives the server's name and its last error line. On macOS and Linux, Show log opens the Log Pane on that server.
+- **The Start Server button comes back when a server stops by itself.** Before, on macOS and Linux, the button could stay on Stop Server with no server behind it, and a server that did not start could not be started again until Epona restarted.
+- **After a Start, Stop or Reset, the server shows its real state.** Before, a Stop that did not end the server showed the server as stopped, and the next Start failed.
+- **Epona cleans up after a server that stops by itself.** Before, on macOS and Linux, the server's worktree and its build settings stayed in use until the next Stop.
 - **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
 - **A Stop Server button shows the error colour in the six Dark Ages themes.** Before, it looked the same as the other buttons.
 
