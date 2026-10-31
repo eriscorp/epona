@@ -22,7 +22,8 @@ export const POLL_INTERVAL_MS = 3000
 //   instanceChildren  — the launcher's Map<instanceId, { kind, value, cleanup }>
 //   isPortInUse       — (host, port, timeoutMs) => Promise<boolean>
 //   isProcessAlive    — (pid) => boolean
-//   onStatus          — (snapshot) => void, called only when the snapshot changes
+//   onStatus          — (snapshot) => void, called when the snapshot changes,
+//                       and on the next pass after force()
 //   onReap            — async (instanceId, entry) => void, for pid entries whose
 //                       process is gone (release worktrees, notify the renderer)
 export function createStatusMonitor({
@@ -38,6 +39,9 @@ export function createStatusMonitor({
   let timer = null
   let inFlight = false
   let last = null
+  // force() during a pass: that pass may have read the state before the change,
+  // so one more pass runs after it.
+  let rerun = false
 
   async function tick() {
     // One pass at a time: a slow probe round must not stack up behind itself.
@@ -96,6 +100,10 @@ export function createStatusMonitor({
       return last
     } finally {
       inFlight = false
+      if (rerun) {
+        rerun = false
+        void tick()
+      }
     }
   }
 
@@ -114,6 +122,17 @@ export function createStatusMonitor({
     // Force a pass and return its snapshot — used by the instance:getStatus
     // handler so a freshly mounted renderer doesn't wait for the next tick.
     refresh: tick,
+    // Send the next snapshot even if it is the same as the last one, and run a
+    // pass for it now. Called after every Start, Stop, Reset and server exit
+    // (HTOO-589, F4 in HTOO-627). The renderer writes an optimistic row after a
+    // Start, Stop or Reset. When the truth is the same as the snapshot before
+    // that action (a Stop that left the server running), no change is seen, and
+    // without this the row stays wrong until something else changes.
+    force() {
+      last = null
+      if (inFlight) rerun = true
+      else void tick()
+    },
     // Last computed snapshot ([] before the first pass completes).
     current: () => last ?? []
   }
