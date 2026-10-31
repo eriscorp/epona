@@ -61,6 +61,12 @@ the rules above.
 - **On macOS and Linux, Stop ends a server that Epona did not start.** Before, Stop on a server that was left running by a crash or a force quit could report success while the server kept its ports.
 - **Stop, Reset and Quit give a server time to shut down.** Epona asks the server to stop and waits up to 5 seconds. Then it ends the server by force. When a server does not stop, Stop and Reset show an error, and Epona keeps the server's worktree.
 - **Quit stops the Hybrasyl client that runs in repo mode.** Before, the quit question said that Quit stopped the client, but the client kept running. On macOS and Linux, Quit then deleted the client's worktree while the client used it. Quit also removes the build settings that a repo-mode launch writes, and it stops all launches at the same time.
+- **A server starts with the Server Config that you select.** Before, Epona gave the server the file name, and the server looks for a config by the name in the file. A config with no name, such as `config.xml`, or a name with different capital letters, such as `local.xml` with the name `Local`, did not start.
+- **Epona makes the server's log folder when it does not exist.** Before, the server stopped at once with only its usage text, in repo mode after a full build. Save Log also makes the folder, so a log does not go into the world repo. On macOS, the folder picker has a New Folder button.
+- **A server on a branch builds with the XML that its instance names.** Before, a branch instance with no local XML could build with the settings file at the root of the server repo, which can point at another instance's XML.
+- **A local XML in a folder with `&` in its name works.** Before, the build ignored the local XML and gave no error.
+- **On macOS, a client that needs .NET finds it.** Before, a client app that does not include .NET stopped with "You must install .NET to run this application" when .NET came from Homebrew.
+- **On an Apple Silicon Mac, Epona tells you when a server build needs Rosetta.** Before, the build stopped with exit code 1 and no explanation. Now the log and the notice give the command that installs Rosetta.
 - **The labels of the Test Connection, Launch Client, Start Server and Stop Server buttons are easy to read in every theme.** Before, these buttons drew their label in the heading colour, which was hard to read on a filled button.
 - **A Stop Server button shows the error colour in the six Dark Ages themes.** Before, it looked the same as the other buttons.
 
