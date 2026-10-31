@@ -13,10 +13,14 @@ import {
 } from '../buildProps.js'
 import { resolveDotnetPath } from '../dotnet.js'
 
-// Strip a case-insensitive .xml suffix; the server's `--config` flag wants
-// the bare name (e.g. "local"), not the filename ("local.xml").
-export function stripXmlExt(name) {
-  return typeof name === 'string' ? name.replace(/\.xml$/i, '') : ''
+// The server config the user picked, as a path for `--configFile`. `--config`
+// takes a config's Name attribute, not its file name, and matches it with case:
+// `config.xml` with no Name is "default", and `local.xml` with Name="Local" is
+// "Local", so the file name failed to start both (HTOO-595). `--configFile`
+// loads the one file. The server has had it since the same commit as the
+// camelCase flags (`9b169383`), so every server that takes `--logDir` takes it.
+export function serverConfigPath(instance) {
+  return join(instance.dataDir, 'xml', 'serverconfigs', instance.configFileName)
 }
 
 // Build the env object we pass to the spawned server. Only emits HYB_REDIS_*
@@ -41,8 +45,8 @@ function buildEnv(instance) {
 //                   has its own validator, so we must pass it explicitly.
 // The instance's `dataDir` field is what the user picks (a ceridwen-style
 // layout containing `xml/`, `scripts/`, `mapfiles/`, …) and maps directly to
-// --dataDir. --worldDataDir is then `<dataDir>/xml`. --config <name> takes
-// the bare config name (no .xml) and resolves under <worldDataDir>/serverconfigs/.
+// --dataDir. --worldDataDir is then `<dataDir>/xml`. --configFile takes the
+// picked file under <worldDataDir>/serverconfigs/ (serverConfigPath).
 function buildServerArgs(instance) {
   return [
     '--dataDir',
@@ -51,8 +55,8 @@ function buildServerArgs(instance) {
     join(instance.dataDir, 'xml'),
     '--logDir',
     instance.logDir,
-    '--config',
-    stripXmlExt(instance.configFileName)
+    '--configFile',
+    serverConfigPath(instance)
   ]
 }
 
@@ -125,9 +129,26 @@ async function csprojSupportsLocalXml(serverWorktreePath) {
 
 // Name an instance's XML selection the way the user set it. An empty string is
 // the "use the XML repo in place" option rather than a branch, and calling that
-// a branch in an error message sends the reader looking for one.
+// a branch in an error message sends the reader looking for one. null is no
+// local XML: the build uses the published package.
 export function describeXmlBranch(xmlBranch) {
+  if (xmlBranch === null) return 'the published Hybrasyl.Xml package'
   return xmlBranch ? `XML branch "${xmlBranch}"` : 'the XML checkout in place'
+}
+
+// The refusal when another running instance holds this server worktree's
+// Directory.Build.props for a different XML. `wanted` is this instance's
+// label, as describeXmlBranch takes it.
+function buildPropsConflict(conflict, wanted) {
+  return {
+    success: false,
+    error:
+      `Another running instance already points this server worktree at ` +
+      `${describeXmlBranch(conflict.xmlBranchLabel)}, and this one needs ` +
+      `${describeXmlBranch(wanted)}. They share one ` +
+      `Directory.Build.props because they share a server branch. Stop the ` +
+      `other instance, or put both on the same XML branch.`
+  }
 }
 
 // Friendly-message preflight: is every field the launcher actually needs
@@ -264,7 +285,8 @@ async function launchRepo(instance) {
   //    picked repo path.
   let serverWorktreePath
   let releaseServer = async () => {}
-  if (instance.serverBranch && !instance.serverNoGit) {
+  const onBranchWorktree = Boolean(instance.serverBranch && !instance.serverNoGit)
+  if (onBranchWorktree) {
     serverWorktreePath = await ensureWorktree(instance.serverRepoPath, instance.serverBranch)
     releaseServer = () => releaseWorktree(instance.serverRepoPath, instance.serverBranch)
   } else {
@@ -342,18 +364,24 @@ async function launchRepo(instance) {
       if (!claim.ok) {
         await releaseXml()
         await releaseServer()
-        return {
-          success: false,
-          error:
-            `Another running instance already points this server worktree at ` +
-            `${describeXmlBranch(claim.conflict.xmlBranchLabel)}, and this one needs ` +
-            `${describeXmlBranch(instance.xmlBranch)}. They share one ` +
-            `Directory.Build.props because they share a server branch. Stop the ` +
-            `other instance, or put both on the same XML branch.`
-        }
+        return buildPropsConflict(claim.conflict, instance.xmlBranch)
       }
       didClaimBuildProps = true
       await writeBuildProps(serverWorktreePath, xmlCsproj)
+      didWriteBuildProps = true
+    } else if (onBranchWorktree) {
+      // No local XML, in a worktree Epona made: write the file that sets
+      // nothing, or MSBuild imports the repo root's (HTOO-646). Claimed like a
+      // redirect, so that a second instance on this branch cannot point the
+      // worktree at a local XML while this one runs. An in-place launch builds
+      // the user's own checkout, and its root file is theirs to keep.
+      const claim = claimBuildProps(serverWorktreePath, null, instance.id, null)
+      if (!claim.ok) {
+        await releaseServer()
+        return buildPropsConflict(claim.conflict, null)
+      }
+      didClaimBuildProps = true
+      await writeBuildProps(serverWorktreePath, null)
       didWriteBuildProps = true
     }
 
@@ -428,6 +456,18 @@ export async function launch(instance) {
       error:
         `Port ${instance.lobbyPort} is already in use — probably a leftover server ` +
         `from an earlier launch. Stop it (or kill dotnet.exe in Task Manager) and retry.`
+    }
+  }
+
+  // The server refuses a log folder that does not exist: it prints one stderr
+  // line above its usage text and exits, in repo mode after a full build
+  // (HTOO-587). Make the folder, as the client's log auto-save does.
+  try {
+    await fs.mkdir(instance.logDir, { recursive: true })
+  } catch (err) {
+    return {
+      success: false,
+      error: `Could not create the log folder ${instance.logDir}: ${err.message}`
     }
   }
 

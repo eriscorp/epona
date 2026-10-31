@@ -11,6 +11,8 @@ import {
 } from './buildProps.js'
 
 let workDir
+const realPlatform = process.platform
+const actAs = (platform) => Object.defineProperty(process, 'platform', { value: platform })
 
 beforeEach(async () => {
   workDir = await fs.mkdtemp(join(tmpdir(), 'epona-buildprops-'))
@@ -18,6 +20,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  Object.defineProperty(process, 'platform', { value: realPlatform })
   if (workDir) await fs.rm(workDir, { recursive: true, force: true })
 })
 
@@ -32,7 +35,8 @@ describe('writeBuildProps', () => {
     expect(content).toMatch(/^<Project>/)
   })
 
-  it('converts forward-slash paths to backslashes', async () => {
+  it('converts forward-slash paths to backslashes on Windows', async () => {
+    actAs('win32')
     const result = await writeBuildProps(
       workDir,
       'E:/Dark Ages Dev/Repos/xml/.worktrees/develop/src/Hybrasyl.Xml.csproj'
@@ -58,7 +62,39 @@ describe('writeBuildProps', () => {
     expect(stat2.mtimeMs).toBe(stat1.mtimeMs)
   })
 
+  it('keeps forward slashes off Windows (HTOO-654)', async () => {
+    actAs('darwin')
+    await writeBuildProps(workDir, '/Users/me/xml/src/Hybrasyl.Xml.csproj')
+    const content = await fs.readFile(join(workDir, 'Directory.Build.props'), 'utf-8')
+    expect(content).toContain(
+      '<LocalXmlProjectPath>/Users/me/xml/src/Hybrasyl.Xml.csproj</LocalXmlProjectPath>'
+    )
+  })
+
+  it('escapes the path, so a folder named R&D does not drop the reference (HTOO-654)', async () => {
+    // Unescaped, `&` made the file malformed, and restore dropped the
+    // ProjectReference with no error.
+    actAs('linux')
+    await writeBuildProps(workDir, "/home/me/R&D/<x>/it's/Hybrasyl.Xml.csproj")
+    const content = await fs.readFile(join(workDir, 'Directory.Build.props'), 'utf-8')
+    expect(content).toContain(
+      '<LocalXmlProjectPath>/home/me/R&amp;D/&lt;x&gt;/it&apos;s/Hybrasyl.Xml.csproj</LocalXmlProjectPath>'
+    )
+  })
+
+  it('writes a file that sets nothing for null, the NuGet package (HTOO-646)', async () => {
+    // MSBuild stops at the first Directory.Build.props above the project, so
+    // this file keeps the repo root's out of a branch worktree.
+    const result = await writeBuildProps(workDir, null)
+    expect(result.written).toBe(true)
+    const content = await fs.readFile(join(workDir, 'Directory.Build.props'), 'utf-8')
+    expect(content).toMatch(/^<Project>/)
+    expect(content).not.toContain('PropertyGroup')
+    expect(content).not.toContain('Import')
+  })
+
   it('rewrites when content changes (different XML path)', async () => {
+    actAs('win32')
     await writeBuildProps(workDir, 'D:/old.csproj')
     const result = await writeBuildProps(workDir, 'D:/new.csproj')
     expect(result.written).toBe(true)
@@ -148,6 +184,17 @@ describe('claimBuildProps / releaseBuildProps', () => {
     claimBuildProps(WT, XML_A, 'inst-1', 'feature-a')
     releaseBuildProps(WT, 'inst-1')
     expect(claimBuildProps(WT, XML_B, 'inst-2', 'feature-b')).toEqual({ ok: true })
+  })
+
+  it('treats the NuGet package (null) as a target of its own (HTOO-646)', () => {
+    // A branch instance with no local XML owns a file that sets nothing. A
+    // second instance that wants a local XML in the same worktree conflicts.
+    claimBuildProps(WT, null, 'inst-1', null)
+    expect(claimBuildProps(WT, null, 'inst-2', null)).toEqual({ ok: true })
+    expect(claimBuildProps(WT, XML_A, 'inst-3', 'feature-a')).toMatchObject({
+      ok: false,
+      conflict: { ownerId: 'inst-1', xmlBranchLabel: null }
+    })
   })
 
   it('treats an unknown release as the last one', () => {

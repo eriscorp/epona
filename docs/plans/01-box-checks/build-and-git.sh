@@ -7,7 +7,8 @@
 # M6 tests Epona's own writeBuildProps and prints PASS or FAIL against the fixed
 # behaviour; the script exits 1 on a FAIL. M2 and M5 test git and MSBuild, which no
 # Epona fix changes, so they print FACT: the behaviour the HTOO-644 and HTOO-646 fixes
-# must allow for. Those fixes are checked by unit tests in epona.
+# must allow for. M5 then checks the HTOO-646 fix, Epona's empty props file in the
+# worktree, and prints PASS or FAIL. Unit tests in epona check the HTOO-644 fix.
 # On `main` at a1a2d16 (before the fixes), on macOS: M6 FAIL; M2 and M5 confirm the faults.
 set -u
 EPONA="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -33,6 +34,10 @@ echo '<Project><PropertyGroup><UseLocalProtocol>true</UseLocalProtocol></Propert
 echo "$proj" > "$T/m5/repo/.worktrees/feature__x/hybrasyl/Hybrasyl.csproj"
 v=$(cd "$T/m5/repo/.worktrees/feature__x" && dotnet msbuild hybrasyl/Hybrasyl.csproj -getProperty:UseLocalProtocol 2>&1 | tail -1)
 echo "M5 FACT (HTOO-646): a worktree project sees UseLocalProtocol='$v' from the repo root ('true': Epona must write its own props in every worktree)"
+node --input-type=module -e "const {writeBuildProps}=await import('$EPONA/src/main/buildProps.js'); await writeBuildProps(process.argv[1], null)" "$T/m5/repo/.worktrees/feature__x" 2>/dev/null
+v=$(cd "$T/m5/repo/.worktrees/feature__x" && dotnet msbuild hybrasyl/Hybrasyl.csproj -getProperty:UseLocalProtocol 2>&1 | tail -1)
+if [ -z "$v" ]; then s=PASS; else s=FAIL; FAILS+=("M5"); fi
+echo "M5 $s (HTOO-646): with Epona's props in the worktree, UseLocalProtocol='$v' (must be empty)"
 
 # M6 — Epona's LocalXmlProjectPath must resolve, under a plain folder and under one named R&D.
 for case in plain 'R&D'; do

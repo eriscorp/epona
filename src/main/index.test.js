@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { readFileSync, rmSync, mkdtempSync, mkdirSync } from 'fs'
+import { readFileSync, rmSync, mkdtempSync, mkdirSync, writeFileSync, statSync } from 'fs'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { fileURLToPath, pathToFileURL } from 'url'
@@ -178,6 +178,28 @@ describe('the file and folder pickers', () => {
       const calls = [...showOpenDialog.mock.calls, ...showSaveDialog.mock.calls]
       expect(calls, channel).toHaveLength(1)
       expect(String(calls[0][1].defaultPath).startsWith(docs), channel).toBe(true)
+    }
+  })
+
+  it('make the log folder before Save Log offers it (HTOO-588)', async () => {
+    // A log folder that did not exist sent the macOS save panel to the world
+    // repo's root, the nearest folder that did, and the log went into the repo.
+    const settingsFile = join(sandbox, 'Erisco', 'Epona', 'settings.json')
+    const logDir = join(sandbox, 'world', 'logs')
+    mkdirSync(dirname(settingsFile), { recursive: true })
+    writeFileSync(
+      settingsFile,
+      JSON.stringify({ instances: [{ id: 'i1', name: 'Local', logDir }], activeInstance: 'i1' })
+    )
+    const { showSaveDialog } = harness.electron.dialog
+    showSaveDialog.mockClear()
+    try {
+      await harness.invoke('log:save', { content: 'x', defaultFileName: 'server.log' })
+
+      expect(statSync(logDir).isDirectory()).toBe(true)
+      expect(showSaveDialog.mock.calls[0][1].defaultPath).toBe(join(logDir, 'server.log'))
+    } finally {
+      rmSync(settingsFile, { force: true })
     }
   })
 })

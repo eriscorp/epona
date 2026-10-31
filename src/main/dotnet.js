@@ -1,6 +1,10 @@
+import { execFile } from 'child_process'
 import { promises as fs } from 'fs'
-import { join } from 'path'
+import { dirname, isAbsolute, join } from 'path'
 import { homedir } from 'os'
+import { promisify } from 'util'
+
+const execFileAsync = promisify(execFile)
 
 // Resolve a usable `dotnet` executable path.
 //
@@ -59,7 +63,48 @@ export async function resolveDotnetPath() {
   return cached
 }
 
+// The runtime root from `dotnet --list-runtimes`: two folders above the path on
+// a Microsoft.NETCore.App line, .NET 10 first. With Homebrew's `dotnet` formula
+// that is `…/libexec`. The formula's `bin/dotnet` is a script that sets
+// DOTNET_ROOT and runs `libexec/dotnet`, so the folder of `realpath(dotnet)` is
+// `bin`, and an apphost given that root still finds no runtime (M4, HTOO-645).
+export function runtimeRootFromListRuntimes(stdout) {
+  const roots = []
+  for (const line of String(stdout ?? '').split(/\r?\n/)) {
+    const m = line.trim().match(/^Microsoft\.NETCore\.App (\d+)\.\S+ \[(.+)\]$/)
+    if (m) roots.push({ major: Number(m[1]), root: dirname(dirname(m[2])) })
+  }
+  return (roots.find((r) => r.major === 10) ?? roots[0])?.root ?? null
+}
+
+let cachedRoot
+
+// DOTNET_ROOT for an apphost that Epona starts directly, off Windows. An
+// apphost finds its runtime through DOTNET_ROOT or the global install location,
+// and Homebrew's formula writes no install location. Finder and the Dock give
+// Epona no shell profile, so a framework-dependent client in binary mode exited
+// with "You must install .NET to run this application" (HTOO-645). Returns {}
+// on Windows, when DOTNET_ROOT is set already, and when `dotnet` was not found
+// at an absolute path.
+export async function dotnetRootEnv() {
+  if (process.platform === 'win32' || process.env.DOTNET_ROOT) return {}
+  if (cachedRoot === undefined) {
+    cachedRoot = null
+    const dotnet = await resolveDotnetPath()
+    if (isAbsolute(dotnet)) {
+      try {
+        const { stdout } = await execFileAsync(dotnet, ['--list-runtimes'])
+        cachedRoot = runtimeRootFromListRuntimes(stdout)
+      } catch {
+        /* no runtime list: the apphost reports its own error */
+      }
+    }
+  }
+  return cachedRoot ? { DOTNET_ROOT: cachedRoot } : {}
+}
+
 // Test seam: drop the memoized result so a test can re-probe.
 export function _resetDotnetPathCache() {
   cached = undefined
+  cachedRoot = undefined
 }

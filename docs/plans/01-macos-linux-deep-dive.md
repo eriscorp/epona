@@ -215,6 +215,14 @@ The card asks for a fault that hides other faults to go first. Three of those co
 - The quit sweep stops the repo-mode client (through a hook from `whenReady`) and every server in parallel, runs each launch's cleanup after its own kill, and only then releases the worktrees. A repo-mode client is `detached` on POSIX, so its group holds the client that `dotnet run` starts.
 - The M3 step of `lifecycle.mjs` calls `stopChild`, and passes only when the listener is gone and the port is free at the moment Stop returns.
 
+**Group 3** (HTOO-595, HTOO-587, HTOO-588, HTOO-646, HTOO-654, HTOO-645, HTOO-591):
+
+- HTOO-595: Epona passes the picked file to `--configFile`, not a name to `--config`. The file's `Name`, its case and the case of `.xml` do not matter. The server took `--configFile` in the same commit as `--logDir` (`9b169383`). The `.XML` case note on the card needs no change: the server loads the one file.
+- HTOO-587 and HTOO-588: the launch creates the log folder after its preflights and names the folder when it cannot. Save Log creates it before the dialog. The folder picker has `createDirectory`.
+- F7 (HTOO-646): a branch worktree with no local XML gets a `Directory.Build.props` that sets nothing, and a claim like a redirect's. An in-place launch writes nothing. F8 (HTOO-654): the path is XML-escaped, with backslashes on Windows only. `build-and-git.sh` M5 now checks Epona's file and prints PASS or FAIL. On Windows, real MSBuild gave M5 and M6 PASS.
+- F6 (HTOO-645): a binary-mode apphost off Windows gets `DOTNET_ROOT` from `dotnet --list-runtimes`, .NET 10 first, when `DOTNET_ROOT` is unset and `dotnet` has an absolute path. `m4-dotnet.mjs` M4.2 spawns with it.
+- HTOO-591: on macOS, an output line with "Bad CPU type in executable" or MSB6003 with `(86)` adds one stderr line, `[epona] The build needs Rosetta…`, which the exit notice quotes. No probe before the launch, so a build that needs no x86_64 tool still starts.
+
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.

@@ -27,6 +27,7 @@ import { launch as launchServer } from './targets/serverTarget.js'
 import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverConfigs.js'
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
+import { buildHint } from './buildHints.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { reprobeGit } from './gitExec.js'
 import {
@@ -750,7 +751,8 @@ app.whenReady().then(() => {
       // out what the picked folder should contain. Ignored on other platforms.
       message: typeof message === 'string' && message.length > 0 ? message : undefined,
       defaultPath,
-      properties: ['openDirectory']
+      // macOS: a New Folder button, so a log folder can be made here (HTOO-587).
+      properties: ['openDirectory', 'createDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
   })
@@ -875,7 +877,18 @@ app.whenReady().then(() => {
         ? payload.defaultFileName
         : `log-${logTimestamp()}.log`
     const settings = await settingsManager.load()
-    const defaultDir = activeInstanceLogDir(settings)
+    // A log folder that does not exist yet sent the macOS save panel to the
+    // nearest folder that does, the world repo's root, and the log went into
+    // the repo (HTOO-588). Make it first; when that fails, offer no folder.
+    let defaultDir = activeInstanceLogDir(settings)
+    if (defaultDir) {
+      try {
+        await fs.mkdir(defaultDir, { recursive: true })
+      } catch (err) {
+        console.warn('log folder for Save Log could not be created:', err.message)
+        defaultDir = null
+      }
+    }
     const result = await pickerDialog.showSaveDialog(mainWindow, {
       title: 'Save Log',
       defaultPath: defaultDir ? join(defaultDir, defaultFileName) : defaultFileName,
@@ -972,9 +985,20 @@ app.whenReady().then(() => {
   // run-once (instanceManager.js), so a Stop or Reset that is waiting on this exit
   // awaits the same run rather than starting a second.
   function wireInstanceLogs(instanceId, child) {
+    // Advice for a build failure the output does not explain (buildHints.js),
+    // once per hint per run.
+    const hinted = new Set()
+    const send = (stream) => (line) => {
+      safeSend('instance:log', { instanceId, stream, line })
+      const hint = buildHint(line)
+      if (hint && !hinted.has(hint)) {
+        hinted.add(hint)
+        safeSend('instance:log', { instanceId, stream: 'stderr', line: hint })
+      }
+    }
     pipeChildLines(child, {
-      onStdoutLine: (line) => safeSend('instance:log', { instanceId, stream: 'stdout', line }),
-      onStderrLine: (line) => safeSend('instance:log', { instanceId, stream: 'stderr', line }),
+      onStdoutLine: send('stdout'),
+      onStderrLine: send('stderr'),
       onExit: (code, signal) => {
         const entry = instanceChildren.get(instanceId)
         const ours = entry?.value === child

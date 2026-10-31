@@ -36,10 +36,12 @@ return [
   join(instance.dataDir, 'xml'),
   '--logDir',
   instance.logDir,
-  '--config',
-  stripXmlExt(instance.configFileName)
+  '--configFile',
+  serverConfigPath(instance) // <dataDir>/xml/serverconfigs/<picked file>
 ]
 ```
+
+Epona passes the picked file to `--configFile`, not a name to `--config` (HTOO-595). `--config` selects a config by its `Name` attribute, with case, and the file name is not the name: `config.xml` with no `Name` is `default`, and `local.xml` with `Name="Local"` is `Local`. The server names a config loaded by `--configFile` `override`.
 
 Why CLI over env vars:
 

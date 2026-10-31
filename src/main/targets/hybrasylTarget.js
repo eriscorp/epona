@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { dirname, relative, join, resolve as resolveAbs } from 'path'
 import { gitToplevel } from '../gitOps.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
-import { resolveDotnetPath } from '../dotnet.js'
+import { resolveDotnetPath, dotnetRootEnv } from '../dotnet.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -194,6 +194,9 @@ export async function launch(config, profile, daClientPath) {
     env.DA_HOST = profile.hostname
     env.DA_HOST_PORT = String(profile.port)
   }
+  // A directly spawned apphost gets the runtime root that `dotnet run` and
+  // `dotnet <dll>` find for themselves (HTOO-645). Nothing on Windows.
+  if (resolved.kind === 'exe') Object.assign(env, await dotnetRootEnv())
 
   try {
     const child = spawn(command, args, {

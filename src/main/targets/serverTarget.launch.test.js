@@ -30,13 +30,21 @@ vi.mock('../serverConfigs.js', () => ({
   listServerConfigs: vi.fn(),
   isHybrasylDataDir: vi.fn()
 }))
+// No test here may reach the spawn: on Windows that starts real PowerShell.
+// The dotnet lookup comes after the build-props step and inside launchRepo's
+// try, so a failure there ends a launch that got that far.
+vi.mock('../dotnet.js', () => ({
+  resolveDotnetPath: vi.fn().mockRejectedValue(new Error('stop before the spawn'))
+}))
 vi.mock('fs', async (importActual) => {
   const actual = await importActual()
   return {
     ...actual,
     promises: {
       ...actual.promises,
-      readFile: vi.fn()
+      readFile: vi.fn(),
+      // The instance's log folder (HTOO-587). Real, it would make D:/hyb-logs.
+      mkdir: vi.fn().mockResolvedValue(undefined)
     }
   }
 })
@@ -192,5 +200,86 @@ describe('launch (repo mode cleanup invariants)', () => {
     ).toEqual({ ok: true })
     // Nothing was written, so nothing should be removed either.
     expect(removeBuildProps).not.toHaveBeenCalled()
+  })
+})
+
+describe('launch (the log folder, HTOO-587)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    _resetClaimsForTests()
+  })
+
+  it('creates the log folder before the setup', async () => {
+    // The server refuses a log folder that does not exist, after the build.
+    ensureWorktree
+      .mockResolvedValueOnce('D:/repos/server/.wt/develop')
+      .mockResolvedValueOnce('D:/repos/xml/.wt/main')
+    fs.readFile.mockResolvedValueOnce('<Project>UseLocalXml=true</Project>')
+    // Stop before the spawn, as above.
+    writeBuildProps.mockRejectedValueOnce(new Error('stop here'))
+
+    await launch(REPO_WITH_XML)
+
+    expect(fs.mkdir).toHaveBeenCalledWith('D:/hyb-logs', { recursive: true })
+    expect(fs.mkdir.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureWorktree.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('names the folder and stops when it cannot create it', async () => {
+    fs.mkdir.mockRejectedValueOnce(new Error('EACCES: permission denied'))
+
+    const result = await launch(REPO_WITH_XML)
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Could not create the log folder D:/hyb-logs: EACCES: permission denied'
+    })
+    expect(ensureWorktree).not.toHaveBeenCalled()
+  })
+})
+
+describe('launch (a branch worktree with no local XML, HTOO-646)', () => {
+  const NO_XML = { ...REPO_WITH_XML, xmlRepoPath: '', xmlBranch: null }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    _resetClaimsForTests()
+  })
+
+  it('writes the file that sets nothing, so the repo root file is not imported', async () => {
+    ensureWorktree.mockResolvedValueOnce('D:/repos/server/.wt/develop')
+    // Stop before the spawn, as above.
+    writeBuildProps.mockRejectedValueOnce(new Error('stop here'))
+
+    await launch(NO_XML)
+
+    expect(writeBuildProps).toHaveBeenCalledWith('D:/repos/server/.wt/develop', null)
+  })
+
+  it('writes nothing for an in-place launch: the root file is the user’s', async () => {
+    const result = await launch({ ...NO_XML, serverBranch: null })
+
+    // It got as far as the dotnet lookup, after the build-props step.
+    expect(result.error).toMatch(/stop before the spawn/)
+    expect(ensureWorktree).not.toHaveBeenCalled()
+    expect(writeBuildProps).not.toHaveBeenCalled()
+  })
+
+  it('refuses when a running instance has a local XML in the same worktree', async () => {
+    ensureWorktree.mockResolvedValueOnce('D:/repos/server/.wt/develop')
+    claimBuildProps(
+      'D:/repos/server/.wt/develop',
+      'D:/repos/xml/.wt/main/src/Hybrasyl.Xml.csproj',
+      'already-running',
+      'main'
+    )
+
+    const result = await launch(NO_XML)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/XML branch "main", and this one needs the published/)
+    expect(writeBuildProps).not.toHaveBeenCalled()
+    expect(releaseWorktree).toHaveBeenCalledWith('D:/repos/server', 'develop')
   })
 })
