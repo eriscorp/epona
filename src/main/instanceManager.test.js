@@ -1,20 +1,25 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EventEmitter } from 'events'
 import {
   toSafeResult,
   isTrackedAlive,
-  raceChildExit,
+  stopChild,
   resolveInstanceForLaunch,
   runOnce,
   createInstanceManager
 } from './instanceManager.js'
 
-// A minimal stand-in for a Node ChildProcess: EventEmitter + kill(). Configure
-// how kill() behaves per test (emit exit, do nothing, or throw).
-function fakeChild(onKill) {
+// stopChild ends a child through killProcessTree; processKill.test.js runs that
+// against real processes.
+const { killProcessTree } = vi.hoisted(() => ({ killProcessTree: vi.fn() }))
+vi.mock('./processKill.js', () => ({ killProcessTree }))
+
+// A minimal stand-in for a Node ChildProcess: EventEmitter + kill().
+function fakeChild() {
   const child = new EventEmitter()
   child.exitCode = null
-  child.kill = onKill || (() => {})
+  child.signalCode = null
+  child.kill = () => {}
   return child
 }
 
@@ -41,28 +46,65 @@ describe('isTrackedAlive', () => {
   })
 })
 
-describe('raceChildExit', () => {
-  it('resolves when the child exits after kill', async () => {
-    const child = fakeChild(function () {
-      setImmediate(() => this.emit('exit', 0, null))
-    })
-    const killSpy = vi.spyOn(child, 'kill')
-    await raceChildExit(child, 1000)
-    expect(killSpy).toHaveBeenCalled()
+describe('stopChild', () => {
+  beforeEach(() => {
+    killProcessTree.mockReset()
   })
 
-  it('resolves via the timeout when the child never exits', async () => {
-    const child = fakeChild(() => {}) // kill is a no-op; no exit ever fires
-    const start = Date.now()
-    await raceChildExit(child, 20)
-    expect(Date.now() - start).toBeGreaterThanOrEqual(15)
+  // A child whose tree killProcessTree ends: it exits by SIGTERM, as Node reports.
+  function childEndedByKill(pid = 5150) {
+    const child = fakeChild()
+    child.pid = pid
+    killProcessTree.mockImplementation(async () => {
+      setImmediate(() => {
+        child.exitCode = null
+        child.signalCode = 'SIGTERM'
+        child.emit('exit', null, 'SIGTERM')
+      })
+      return { ok: true }
+    })
+    return child
+  }
+
+  it("ends the child's tree, not the child alone (HTOO-592)", async () => {
+    const child = childEndedByKill()
+    const kill = vi.spyOn(child, 'kill')
+
+    await expect(stopChild(child)).resolves.toEqual({ ok: true })
+
+    expect(killProcessTree).toHaveBeenCalledWith(5150, undefined)
+    expect(kill).not.toHaveBeenCalled()
   })
 
-  it('swallows a throwing kill and still resolves via timeout', async () => {
-    const child = fakeChild(() => {
-      throw new Error('already gone')
-    })
-    await expect(raceChildExit(child, 20)).resolves.toBeUndefined()
+  it("returns after the child's exit, so the exit handler has untracked it", async () => {
+    const child = childEndedByKill()
+    const exited = vi.fn()
+    child.on('exit', exited)
+
+    await stopChild(child, { graceMs: 100 })
+
+    expect(exited).toHaveBeenCalled()
+    expect(killProcessTree).toHaveBeenCalledWith(5150, { graceMs: 100 })
+  })
+
+  it('reports a tree that is still running, and does not wait for the exit', async () => {
+    const child = fakeChild()
+    child.pid = 5150
+    const error = new Error('process 5150 is still running after SIGKILL')
+    killProcessTree.mockResolvedValue({ ok: false, error })
+
+    await expect(stopChild(child)).resolves.toEqual({ ok: false, error })
+  })
+
+  it('does nothing for a child that has exited or never started', async () => {
+    const exited = Object.assign(fakeChild(), { pid: 1, exitCode: 0 })
+    const signalled = Object.assign(fakeChild(), { pid: 2, signalCode: 'SIGKILL' })
+    const neverStarted = fakeChild() // a failed spawn has no pid
+
+    for (const child of [exited, signalled, neverStarted]) {
+      await expect(stopChild(child)).resolves.toEqual({ ok: true })
+    }
+    expect(killProcessTree).not.toHaveBeenCalled()
   })
 })
 

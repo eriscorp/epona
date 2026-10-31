@@ -1,7 +1,10 @@
+import { killProcessTree } from './processKill.js'
+
 // Server-instance lifecycle helpers, factored out of index.js so they can be
 // unit-tested without an Electron/ipcMain harness. The stateful dependencies
 // (settingsManager, the instanceChildren map, wireInstanceLogs, launchServer)
-// are injected via createInstanceManager; the rest are pure.
+// are injected via createInstanceManager. The rest are pure, except stopChild,
+// which signals processes through processKill.js.
 
 // Strip the non-serialisable child/cleanup fields off a launch result before
 // it crosses the IPC boundary.
@@ -16,18 +19,27 @@ export function isTrackedAlive(tracked) {
   return tracked.kind === 'child' ? tracked.value.exitCode === null : true
 }
 
-// Kill a tracked child and wait for it to actually exit, capped by timeoutMs so
-// a hung process can't block the caller. Used by instance:stop / instance:reset
-// (5s) and the before-quit sweep (2s). wireInstanceLogs handles the map delete +
-// childExit emit when the exit fires.
-export function raceChildExit(child, timeoutMs) {
-  const exited = new Promise((resolve) => child.once('exit', resolve))
-  try {
-    child.kill()
-  } catch {
-    /* already gone */
+// How long to wait for a child's 'exit' after its tree is gone. Node reaps the
+// child on the next turns of the event loop, so this is a cap, not a delay.
+const EXIT_EVENT_WAIT_MS = 1000
+
+// End a child's process tree and wait for the child's 'exit', so the exit
+// handler (wireInstanceLogs, wireHybrasylChildLogs) has untracked it when this
+// returns. Resolves { ok: true }, or { ok: false, error } when the tree is still
+// running: the caller then must not run the launch's cleanup, because on macOS
+// and Linux nothing stops `git worktree remove` under a live server (HTOO-592).
+// Used by Stop, Reset, the quit sweep and the repo-mode client's relaunch.
+//
+// `child.kill()` sent SIGTERM to `dotnet run` only. killProcessTree signals the
+// child's process group (spawnDirect's `detached: true`) and waits for all of it.
+export async function stopChild(child, options) {
+  if (child.exitCode !== null || child.signalCode != null || child.pid === undefined) {
+    return { ok: true }
   }
-  return Promise.race([exited, new Promise((r) => setTimeout(r, timeoutMs))])
+  const exited = new Promise((resolve) => child.once('exit', resolve))
+  const result = await killProcessTree(child.pid, options)
+  if (result.ok) await Promise.race([exited, new Promise((r) => setTimeout(r, EXIT_EVENT_WAIT_MS))])
+  return result
 }
 
 // A launch's cleanup, safe to call from more than one place. A server child's

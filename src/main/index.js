@@ -52,7 +52,7 @@ import {
   createInstanceManager,
   toSafeResult,
   isTrackedAlive,
-  raceChildExit
+  stopChild
 } from './instanceManager.js'
 import { initSessionLog, captureError } from './sessionLog.js'
 import { installGlobalErrorHandlers } from './errorHandlers.js'
@@ -1215,8 +1215,8 @@ app.whenReady().then(() => {
   })
 
   // Instance lifecycle helpers live in instanceManager.js (unit-tested there);
-  // bind the stateful deps once. toSafeResult / isTrackedAlive / raceChildExit
-  // are pure and imported directly.
+  // bind the stateful deps once. toSafeResult, isTrackedAlive and stopChild
+  // take no state and are imported directly.
   const { resolveSuppliedInstance, spawnAndTrackInstance } = createInstanceManager({
     settingsManager,
     instanceChildren,
@@ -1350,7 +1350,13 @@ app.whenReady().then(() => {
       // Await actual exit before returning so a fast Stop→Start can't see the
       // child still tracked. `stopping` tells the exit that the user asked for it.
       tracked.stopping = true
-      await raceChildExit(tracked.value, 5000)
+      const result = await stopChild(tracked.value)
+      if (!result.ok) {
+        // Still running, so still tracked, and no cleanup: it would remove the
+        // worktree under the live server (HTOO-592). A second Stop retries.
+        // `stopping` stays set: when the server does end, the user asked for it.
+        return { success: false, error: `The server did not stop: ${result.error.message}` }
+      }
       await runCleanup()
       return { success: true, wasRunning: true }
     }
@@ -1385,9 +1391,17 @@ app.whenReady().then(() => {
     if (!tracked) return { success: false, error: 'instance is not running' }
 
     if (tracked.kind === 'child') {
-      // Cap so a stuck process can't deadlock the UI.
       tracked.stopping = true
-      if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 5000)
+      const result = await stopChild(tracked.value)
+      if (!result.ok) {
+        // Unlike a pid entry's failed kill, this one is fatal: the relaunch
+        // would race the old server for its ports, and the cleanup would remove
+        // the worktree under it (HTOO-592).
+        return {
+          success: false,
+          error: `The server did not stop, so it was not restarted: ${result.error.message}`
+        }
+      }
     } else {
       const pid = tracked.value
       // The kill result is deliberately not checked — see untrackPidInstance.
@@ -1599,7 +1613,7 @@ async function shutdownSweep() {
   for (const [id, tracked] of instanceChildren) {
     try {
       if (tracked.kind === 'child') {
-        if (tracked.value.exitCode === null) await raceChildExit(tracked.value, 2000)
+        await stopChild(tracked.value)
       } else {
         // PID-tracked: kill the wrapper + its tree (taskkill on Windows,
         // SIGKILL to the process group on POSIX).

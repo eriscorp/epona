@@ -122,7 +122,11 @@ beforeAll(async () => {
 })
 
 beforeEach(async () => {
-  killProcessTree.mockReset().mockResolvedValue({ ok: true })
+  // A kill ends a fake server child with that PID, as a real one ends by SIGTERM.
+  killProcessTree.mockReset().mockImplementation(async (pid) => {
+    liveChildren.get(pid)?.exit(null, 'SIGTERM')
+    return { ok: true }
+  })
   launchServer.mockReset().mockResolvedValue({ success: true, pid: PID, cleanup })
   cleanup.mockReset().mockResolvedValue(undefined)
   isPortInUse.mockReset().mockResolvedValue(false)
@@ -312,21 +316,25 @@ describe('instance:stop for an instance Epona never launched', () => {
 
 // A server child, as spawnDirect returns one on macOS and Linux. Like Node's
 // ChildProcess: an exit by signal leaves `exitCode` null, and a spawn that
-// failed has no pid and emits only 'error'.
+// failed has no pid and emits only 'error'. Stop ends it through
+// killProcessTree (HTOO-592), which the beforeEach mock maps to `exit`.
+const liveChildren = new Map()
+
 function fakeServerChild({ pid = 5150 } = {}) {
   const child = new EventEmitter()
   child.stdout = new EventEmitter()
   child.stderr = new EventEmitter()
   if (pid !== null) child.pid = pid
   child.exitCode = null
+  child.signalCode = null
   child.exit = (code, signal = null) => {
+    liveChildren.delete(pid)
     child.exitCode = code
-    child.emit('exit', code, signal)
+    child.signalCode = signal
+    setImmediate(() => child.emit('exit', code, signal))
   }
-  child.kill = vi.fn(() => {
-    setImmediate(() => child.exit(null, 'SIGTERM'))
-    return true
-  })
+  child.kill = vi.fn()
+  liveChildren.set(pid, child)
   return child
 }
 
@@ -393,12 +401,57 @@ describe('a server child (macOS and Linux)', () => {
     const result = await harness.invoke('instance:stop', 'inst-1')
 
     expect(result).toEqual({ success: true, wasRunning: true })
-    expect(child.kill).toHaveBeenCalled()
+    // The group, through killProcessTree; `child.kill()` reached `dotnet run` only.
+    expect(killProcessTree).toHaveBeenCalledWith(5150, undefined)
+    expect(child.kill).not.toHaveBeenCalled()
     expect(cleanup).toHaveBeenCalledTimes(1)
     // The user asked for it: no notice.
     expect(sent('instance:childExit')).toEqual([
       expect.objectContaining({ instanceId: 'inst-1', signal: 'SIGTERM', unexpected: false })
     ])
+  })
+
+  it('that Stop cannot end stays tracked, and its cleanup does not run (HTOO-592)', async () => {
+    // On macOS and Linux nothing stops `git worktree remove` under a live
+    // server, so a cleanup after a failed stop deleted the worktree it ran from.
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    killProcessTree.mockResolvedValue({ ok: false, error: new Error('still running') })
+
+    const result = await harness.invoke('instance:stop', 'inst-1')
+
+    expect(result).toEqual({ success: false, error: 'The server did not stop: still running' })
+    expect(cleanup).not.toHaveBeenCalled()
+    await expect(harness.invoke('instance:start', { id: 'inst-1' })).resolves.toMatchObject({
+      success: false,
+      error: expect.stringMatching(/already running/)
+    })
+    // Its exit after all is the user's Stop, not a crash: no notice.
+    child.exit(null, 'SIGKILL')
+    await flush()
+    await flush()
+    expect(sent('instance:childExit')).toEqual([
+      expect.objectContaining({ signal: 'SIGKILL', unexpected: false })
+    ])
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it('that Reset cannot end is not relaunched or cleaned up (HTOO-592)', async () => {
+    const child = fakeServerChild()
+    await startChildInstance(child)
+    launchServer.mockClear()
+    killProcessTree.mockResolvedValue({ ok: false, error: new Error('still running') })
+
+    const result = await harness.invoke('instance:reset', { id: 'inst-1' })
+
+    expect(result).toEqual({
+      success: false,
+      error: 'The server did not stop, so it was not restarted: still running'
+    })
+    expect(launchServer).not.toHaveBeenCalled()
+    expect(cleanup).not.toHaveBeenCalled()
+    child.exit(null, 'SIGKILL')
+    await flush()
   })
 
   it('that exits with code 0 on its own is not unexpected', async () => {

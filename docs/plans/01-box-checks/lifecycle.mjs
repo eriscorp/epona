@@ -15,8 +15,10 @@
 //
 // Each check prints PASS or FAIL against the behaviour the fix must have, and the
 // script exits 1 on any FAIL. On `main` at a1a2d16 (before the fixes): M1 FAIL, M3
-// PASS on macOS. Each step calls what Epona's Stop calls today; if the HTOO-642 or
-// HTOO-592 fix changes those calls, change the step to match.
+// PASS on macOS and Linux. Each step calls what Epona's Stop calls. Group 2 of the
+// fix order (HTOO-592, HTOO-642, HTOO-644) moved the tracked Stop from
+// raceChildExit to stopChild, and M3 now also needs the listener gone when Stop
+// returns, because Stop runs the launch's cleanup then.
 import { spawn, execFileSync } from 'child_process'
 import { createWriteStream } from 'fs'
 import { dirname, join, resolve } from 'path'
@@ -33,7 +35,7 @@ const PORT = Number(process.env.LOBBY_PORT ?? 2610)
 const { buildRepoSpawn } = await import(join(SRC, 'targets/serverTarget.js'))
 const { killProcessTree } = await import(join(SRC, 'processKill.js'))
 const { findPortOwner } = await import(join(SRC, 'portOwner.js'))
-const { raceChildExit } = await import(join(SRC, 'instanceManager.js'))
+const { stopChild } = await import(join(SRC, 'instanceManager.js'))
 const { isPortInUse } = await import(join(SRC, 'portProbe.js'))
 const { resolveDotnetPath } = await import(join(SRC, 'dotnet.js'))
 
@@ -152,26 +154,26 @@ if (await isPortInUse('127.0.0.1', PORT, 500)) {
   await hardStop(child)
 }
 
-// M3 / L1 — the tracked Stop: raceChildExit (SIGTERM to dotnet run, 5 s), as instance:stop does.
+// M3 / L1 — the tracked Stop: stopChild (SIGTERM to the group, a grace period, then
+// SIGKILL), as instance:stop does. Stop runs the launch's cleanup as soon as this
+// returns, so the listener must be gone by then, not merely soon after.
 {
   const { child, getExit } = await launch('M3')
   const owner = await findPortOwner(PORT)
   const t0 = Date.now()
-  await raceChildExit(child, 5000)
+  const result = await stopChild(child)
+  const ms = Date.now() - t0
+  const listenerGone = !alive(owner)
+  const portFree = !(await isPortInUse('127.0.0.1', PORT, 500))
   say(
-    `M3 raceChildExit returned after ${Date.now() - t0} ms; dotnet run exit:`,
+    `M3 stopChild = ${JSON.stringify(result)} after ${ms} ms; dotnet run exit:`,
     JSON.stringify(getExit())
   )
-  let freeAfter = null
-  for (let i = 0; i < 15 && freeAfter === null; i++) {
-    await sleep(1000)
-    if (!(await isPortInUse('127.0.0.1', PORT, 500))) freeAfter = Date.now() - t0
-  }
   verdict(
     'M3',
     'HTOO-592',
-    !alive(owner) && freeAfter !== null && freeAfter <= 5000,
-    `listener ${alive(owner) ? 'alive' : 'gone'}; port ${freeAfter === null ? 'still listening 15 s after Stop' : `free ${Math.round(freeAfter / 1000)} s after Stop`} (must be free within Stop's 5 s)`
+    result.ok && listenerGone && portFree,
+    `when Stop returned the listener was ${listenerGone ? 'gone' : 'alive'} and the port ${portFree ? 'free' : 'still listening'}`
   )
   await hardStop(child)
 }
