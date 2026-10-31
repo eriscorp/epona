@@ -9,8 +9,7 @@
 // releases are self-contained, so they cannot show the fault. Build it before the swap.
 // Environment: SERVER_REPO, WORLD_DIR, LOG_DIR, CONFIG, LOBBY_PORT as in lifecycle.mjs.
 // Each step prints PASS or FAIL against the fixed behaviour; the script exits 1 on a FAIL.
-import { spawn, execFileSync } from 'child_process'
-import { realpathSync } from 'fs'
+import { spawn } from 'child_process'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -23,7 +22,7 @@ const CONFIG = process.env.CONFIG ?? 'local.xml'
 const PORT = Number(process.env.LOBBY_PORT ?? 2610)
 const APPHOST = process.argv[2]
 
-const { resolveDotnetPath } = await import(join(SRC, 'dotnet.js'))
+const { resolveDotnetPath, dotnetRootEnv } = await import(join(SRC, 'dotnet.js'))
 const { checkDotnetRuntime } = await import(join(SRC, 'runtimeCheck.js'))
 const { resolvePath, buildSpawnArgs } = await import(join(SRC, 'targets/hybrasylTarget.js'))
 const { buildRepoSpawn } = await import(join(SRC, 'targets/serverTarget.js'))
@@ -57,30 +56,19 @@ verdict(
   `resolveDotnetPath() = ${dotnet}; runtime 10: ${rt.netCoreApp10}, SDK 10: ${rt.sdk10}`
 )
 
-// 2. A binary-mode client apphost, spawned as hybrasylTarget does (no DOTNET_ROOT added).
+// 2. A binary-mode client apphost, spawned as hybrasylTarget does: with the DOTNET_ROOT
+// that dotnetRootEnv gives it, the root `dotnet --list-runtimes` reports (HTOO-645).
+// Before the fix Epona added none, and the apphost exited 131.
 if (APPHOST) {
   const resolved = await resolvePath(APPHOST)
   const { command, args } = buildSpawnArgs(resolved, 'dotnet')
-  const r = await run(command, args, { ...process.env, DA_NO_LAUNCHER: '1' })
+  const added = await dotnetRootEnv()
+  const r = await run(command, args, { ...process.env, DA_NO_LAUNCHER: '1', ...added })
   verdict(
     'M4.2 binary-mode apphost',
     r.code === 0,
-    `kind ${resolved.kind}; exit ${r.code}: ${r.out.split('\n')[0].slice(0, 140)}`
+    `kind ${resolved.kind}; DOTNET_ROOT ${added.DOTNET_ROOT ?? '(none added)'}; exit ${r.code}: ${r.out.split('\n')[0].slice(0, 140)}`
   )
-
-  // The two DOTNET_ROOT values a fix could set: the card's dirname(realpath(dotnet)),
-  // and the root that `dotnet --list-runtimes` reports.
-  const fromRealpath = dirname(realpathSync(dotnet))
-  const listed = execFileSync(dotnet, ['--list-runtimes'], { encoding: 'utf8' })
-  const m = listed.match(/Microsoft\.NETCore\.App 10\.\S+ \[(.+)\]/)
-  const fromList = m ? resolve(m[1], '../..') : null
-  for (const [label, root] of [
-    ['dirname(realpath(dotnet))', fromRealpath],
-    ['--list-runtimes root', fromList]
-  ]) {
-    const r2 = await run(command, args, { ...process.env, DA_NO_LAUNCHER: '1', DOTNET_ROOT: root })
-    console.log(`  fix candidate ${label} = ${root}: exit ${r2.code}`)
-  }
 } else {
   console.log('M4.2 skipped: pass a framework-dependent apphost as the first argument')
 }
