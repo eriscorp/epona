@@ -407,7 +407,7 @@ export default function SettingsPane({
               >
                 <ListItemText
                   primary={p.name}
-                  secondary={p.redirect ? `${p.hostname}:${p.port}` : 'No redirect'}
+                  secondary={p.redirect || !isWindows ? `${p.hostname}:${p.port}` : 'No redirect'}
                   primaryTypographyProps={{ variant: 'body2' }}
                   secondaryTypographyProps={{ variant: 'caption' }}
                 />
@@ -691,6 +691,12 @@ export default function SettingsPane({
 
 function ProfileDialog({ mode, profile: initial, onSave, onCancel }) {
   const [profile, setProfile] = useState(initial)
+  // The redirect is the legacy client's memory patch, which runs on Windows
+  // only. Off Windows the Hybrasyl client always goes to the host, so the
+  // checkbox did nothing there, and it greyed out the host when unticked
+  // (HTOO-659).
+  const isWindows = window.sparkAPI.platform === 'win32'
+  const hostEditable = profile.redirect || !isWindows
   function patch(p) {
     setProfile((prev) => ({ ...prev, ...p }))
   }
@@ -714,7 +720,7 @@ function ProfileDialog({ mode, profile: initial, onSave, onCancel }) {
           size="small"
           label="Hostname"
           value={profile.hostname}
-          disabled={!profile.redirect}
+          disabled={!hostEditable}
           onChange={(e) => patch({ hostname: e.target.value })}
         />
         <TextField
@@ -723,20 +729,24 @@ function ProfileDialog({ mode, profile: initial, onSave, onCancel }) {
           label="Port"
           type="number"
           value={profile.port}
-          disabled={!profile.redirect}
+          disabled={!hostEditable}
           onChange={(e) => patch({ port: Number(e.target.value) })}
           inputProps={{ min: 1, max: 65535 }}
         />
-        <FormControlLabel
-          control={
-            <Checkbox
-              size="small"
-              checked={profile.redirect}
-              onChange={(e) => patch({ redirect: e.target.checked })}
-            />
-          }
-          label={<Typography variant="body2">Redirect to custom server</Typography>}
-        />
+        {isWindows && (
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={profile.redirect}
+                onChange={(e) => patch({ redirect: e.target.checked })}
+              />
+            }
+            label={
+              <Typography variant="body2">Redirect the legacy client to this server</Typography>
+            }
+          />
+        )}
       </DialogContent>
       <DialogActions>
         <Button size="small" onClick={onCancel}>

@@ -422,6 +422,7 @@ export default function App() {
                     profiles={settings.profiles}
                     activeProfile={settings.activeProfile}
                     onChange={(id) => update({ activeProfile: id })}
+                    targetKind="hybrasyl"
                   />
                   <ActionButtons
                     targetKind="hybrasyl"
