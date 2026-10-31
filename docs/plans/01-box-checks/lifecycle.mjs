@@ -12,6 +12,11 @@
 //   LOG_DIR       $WORLD_DIR/logs   CONFIG       local.xml   (a config whose Name matches, HTOO-595)
 //   LOBBY_PORT    2610
 // Needs Redis on localhost and the server's ports free.
+//
+// Each check prints PASS or FAIL against the behaviour the fix must have, and the
+// script exits 1 on any FAIL. On `main` at a1a2d16 (before the fixes): M1 FAIL, M3
+// PASS on macOS. Each step calls what Epona's Stop calls today; if the HTOO-642 or
+// HTOO-592 fix changes those calls, change the step to match.
 import { spawn, execFileSync } from 'child_process'
 import { createWriteStream } from 'fs'
 import { dirname, join, resolve } from 'path'
@@ -37,6 +42,11 @@ const serverLog = createWriteStream(outFile)
 const instance = { dataDir: WORLD_DIR, logDir: LOG_DIR, configFileName: CONFIG, redisHost: '' }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const say = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
+const failures = []
+const verdict = (check, card, pass, detail) => {
+  if (!pass) failures.push(check)
+  say(`${check} ${pass ? 'PASS' : 'FAIL'} (${card}): ${detail}`)
+}
 const alive = (pid) => {
   try {
     process.kill(pid, 0)
@@ -133,8 +143,11 @@ if (await isPortInUse('127.0.0.1', PORT, 500)) {
   say('M1 killProcessTree(owner) =', JSON.stringify(await killProcessTree(owner)))
   await sleep(3000)
   const still = await isPortInUse('127.0.0.1', PORT, 500)
-  say(
-    `M1 RESULT: after the adopted Stop the port is ${still ? 'STILL LISTENING' : 'free'}, listener ${alive(owner) ? 'ALIVE' : 'gone'}`
+  verdict(
+    'M1',
+    'HTOO-642',
+    !still && !alive(owner),
+    `after the adopted Stop the port is ${still ? 'still listening' : 'free'}, listener ${alive(owner) ? 'alive' : 'gone'}`
   )
   await hardStop(child)
 }
@@ -154,10 +167,14 @@ if (await isPortInUse('127.0.0.1', PORT, 500)) {
     await sleep(1000)
     if (!(await isPortInUse('127.0.0.1', PORT, 500))) freeAfter = Date.now() - t0
   }
-  say(
-    `M3 RESULT: listener ${alive(owner) ? 'ALIVE' : 'gone'}; port ${freeAfter === null ? 'STILL LISTENING 15 s after Stop' : `free ${Math.round(freeAfter / 1000)} s after Stop`}`
+  verdict(
+    'M3',
+    'HTOO-592',
+    !alive(owner) && freeAfter !== null && freeAfter <= 5000,
+    `listener ${alive(owner) ? 'alive' : 'gone'}; port ${freeAfter === null ? 'still listening 15 s after Stop' : `free ${Math.round(freeAfter / 1000)} s after Stop`} (must be free within Stop's 5 s)`
   )
   await hardStop(child)
 }
 say(`done; server output is in ${outFile}`)
-process.exit(0)
+console.log(`\nSUMMARY: ${failures.length ? `FAIL (${failures.join(', ')})` : 'PASS'}`)
+process.exit(failures.length ? 1 : 0)

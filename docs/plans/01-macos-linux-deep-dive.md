@@ -204,6 +204,17 @@ The card asks for a fault that hides other faults to go first. Three of those co
 7. **Windows.** F29 (the server's output in the pane), after F5.
 8. **The docs.** F26, F27, and the new checks from F23 and F24, last, so that they describe the code as it ships.
 
+### Where the work is done, and when the boxes check it
+
+Sabrael approved this on 2026-10-31.
+
+- **The fixes are built on the Windows box.** It has the full gate, e2e, the `da-win32` rebuild and signing, and the Windows work (F29, F17). `npm run validate:linux` runs the unit suite on real Linux through WSL. Each PR records its Windows checks and leaves the macOS and Linux rows owed, as the release plan says.
+- **Before the work starts, the Linux box runs L1, L2 and L3.** They decide whether HTOO-592's orphan, HTOO-645 and HTOO-649 are real on Linux, and so what the package holds.
+- **After group 2 (the lifecycle) merges, the Mac and the Linux box run `01-box-checks/lifecycle.mjs`.** Mocked tests on Windows cannot show process groups and signals, and HTOO-642 is a fault that a passing unit test did not catch. The script must print `SUMMARY: PASS`.
+- **Everything else waits for the end-of-release pass**, with the two scripts and the tables below.
+
+The scripts print PASS or FAIL against the fixed behaviour, and exit 1 on a FAIL. On `main` at `a1a2d16` they print M1 FAIL, M3 PASS and M6 FAIL (the `R&D` folder). M2 and M5 test git and MSBuild, which no fix changes, so they print FACT; unit tests in epona check the HTOO-644 and HTOO-646 fixes.
+
 ## Checks for the Mac and the Linux box
 
 Each one settles a finding marked **box**. They run on the Mac and the Linux box in Sabrael's office **before the fixes start** (Sabrael, 2026-10-31). A check that does not confirm its finding closes that card. M7, L4 and W1 need a released build or a fix, so they stay in the end-of-release pass.
