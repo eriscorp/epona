@@ -31,8 +31,9 @@ const iconColour = (label) =>
   getComputedStyle(screen.getByRole('button', { name: label }).querySelector('svg')).color
 
 /**
- * Epona's second bar, under the title bar (HTOO-572). It paints secondary.main,
- * like the title bar, so its text and icons are held to the house nav-bar rules:
+ * Epona's second bar, under the title bar (HTOO-572). It paints tertiary.main, a
+ * second colour under the title bar's secondary.main (HTOO-629). Its text and
+ * icons are held to the house nav-bar rules:
  * the caption 4.5:1, and each icon 4.5:1 at rest and as the current page (the
  * Settings button while its pane is open). The caption drew text.button, the
  * token for headings on the page, and hybrasyl's "not found" line drew
@@ -57,7 +58,7 @@ describe('the nav toolbar', () => {
   })
 
   it.each(THEME_NAMES)('%s: the caption is 4.5:1 on the bar, found or not', (name) => {
-    const bar = themesByName[name].palette.secondary.main
+    const bar = themesByName[name].palette.tertiary.main
     for (const props of [{}, { detectedVersion: null }]) {
       mount(name, props)
       const caption = getComputedStyle(screen.getByTestId('client-status')).color
@@ -67,7 +68,7 @@ describe('the nav toolbar', () => {
   })
 
   it.each(THEME_NAMES)('%s: each icon is 4.5:1 on the bar, at rest', (name) => {
-    const bar = themesByName[name].palette.secondary.main
+    const bar = themesByName[name].palette.tertiary.main
     mount(name)
     for (const label of ICONS) {
       const icon = iconColour(label)
@@ -76,7 +77,7 @@ describe('the nav toolbar', () => {
   })
 
   it.each(THEME_NAMES)('%s: Settings is the current page while its pane is open', (name) => {
-    const bar = themesByName[name].palette.secondary.main
+    const bar = themesByName[name].palette.tertiary.main
     mount(name, { settingsOpen: true })
     const settings = screen.getByRole('button', { name: 'Settings' })
     const style = getComputedStyle(settings)

@@ -30,6 +30,15 @@ const grinnealTheme = responsiveFontSizes(
         dark: '#3c3020',
         contrastText: '#e8dcc0'
       },
+      // The nav bar under the title bar (tertiary.test.ts): secondary.main,
+      // 40% darker. Its icons take the title bar's text colour, so
+      // contrastText is secondary.contrastText.
+      tertiary: {
+        main: '#3a2b1d',
+        light: '#61554a',
+        dark: '#291e14',
+        contrastText: '#e8dcc0'
+      },
       background: {
         default: '#27221c',
         gray: '#27221c',
@@ -252,7 +261,9 @@ const grinnealTheme = responsiveFontSizes(
       MuiCheckbox: {
         styleOverrides: {
           root: {
-            color: 'rgba(127,147,96,0.5)',
+            // Unchecked: text.secondary, as MUI and the Radio draw it. The accent at
+            // 50% was 2.0:1 to 2.8:1, below the 3:1 for a control.
+            color: '#b0a088',
             '&.Mui-checked': { color: '#7f9360' }
           }
         }
@@ -284,11 +295,6 @@ const grinnealTheme = responsiveFontSizes(
             '&:hover': { color: '#c0d090' },
             '&:visited': { color: '#7f9360' }
           }
-        }
-      },
-      MuiSvgIcon: {
-        styleOverrides: {
-          root: ({ theme }) => ({ color: theme.palette.secondary.light })
         }
       },
       MuiCircularProgress: {

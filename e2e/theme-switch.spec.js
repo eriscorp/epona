@@ -1,14 +1,23 @@
 import { test, expect } from '@playwright/test'
 import { launchEpona, getMainWindow } from './helpers.js'
 
-// Smoke test for all six themes. A theme is a MUI theme object; a bad token
+// Smoke test for all eight themes. A theme is a MUI theme object; a bad token
 // (missing palette entry, malformed value) throws at *render* time, which jsdom
 // unit tests don't catch because they don't mount the fully themed app. Here we
 // switch through every theme in the real renderer, assert none throws a page
 // error, the app stays mounted, and the background actually changes (proof the
 // theme is applied, not silently ignored).
 
-const THEMES = ['Hybrasyl', 'Chadul', 'Danaan', 'Grinneal', 'Mundanes', 'Dubhaimid']
+const THEMES = [
+  'Hybrasyl',
+  'Chadul',
+  'Danaan',
+  'Grinneal',
+  'Shattered',
+  'Untamed',
+  'Mundanes',
+  'Dubhaimid'
+]
 
 test.describe('All themes render without error', () => {
   let electronApp
@@ -52,7 +61,7 @@ test.describe('All themes render without error', () => {
     // No render-time explosions from any theme object.
     expect(pageErrors, `renderer errors: ${pageErrors.join(' | ')}`).toEqual([])
 
-    // The six themes aren't all the same color — light (Mundanes, Danaan) vs
+    // The eight themes aren't all the same color — light (Mundanes, Danaan, Untamed) vs
     // the dark themes differ, so we should have seen more than one background.
     expect(backgrounds.size).toBeGreaterThan(1)
   })

@@ -114,7 +114,7 @@ describe('detectRemoteSession', () => {
 
 describe('REMOTE_SESSION_CSS', () => {
   it('neutralises the two blur effects that cost the most under software compositing', () => {
-    // backdrop-filter: four themes put blur(2px) on MuiPaper.root, and Paper
+    // backdrop-filter: six themes put blur(2px) on MuiPaper.root, and Paper
     // backs Card/Dialog/Accordion/Menu — a readback and blur of everything
     // behind most surfaces, on every repaint.
     expect(REMOTE_SESSION_CSS).toMatch(/backdrop-filter:\s*none\s*!important/)

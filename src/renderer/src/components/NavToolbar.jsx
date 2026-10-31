@@ -15,11 +15,12 @@ export default function NavToolbar({
 }) {
   const isWindows = window.sparkAPI.platform === 'win32'
   const theme = useSettings((s) => s.settings?.theme)
-  // A second bar under the title bar. It paints secondary.main too, and its
-  // buttons take the house nav-bar chrome (titleChrome.js, HTOO-572): the bar's
-  // text colour, the house hover, and the one current-page mark, here on
-  // Settings while its pane is open. The bar is not faded with opacity: a
-  // faded bar draws its text and icons below the ratios the house measures.
+  // A second bar under the title bar. It paints tertiary.main, so the two bars
+  // read as two (HTOO-629). Its buttons take the house nav-bar chrome
+  // (titleChrome.js, HTOO-572): the bar's text colour, the house hover, and the
+  // one current-page mark, here on Settings while its pane is open. The bar is
+  // not faded with opacity: a faded bar draws its text and icons below the
+  // ratios the house measures.
   // NavToolbar.test.jsx measures the caption and the icons in each theme.
   const kind = chromeKind(theme)
   // The game glyphs keep the size they had on this bar.
@@ -40,21 +41,18 @@ export default function NavToolbar({
       ? { found: true, label: `Assets: ${assetsName}` }
       : { found: false, label: 'Assets Not Found' }
   return (
-    <Toolbar
-      variant="dense"
-      disableGutters
-      sx={{ bgcolor: 'secondary.main', minHeight: 40, px: 2 }}
-    >
-      {/* Text on the bar is secondary.contrastText (HTOO-572). text.button is for
-          headings on the page: on this bar it measured 1.19:1 in mundanes, 1.66:1
-          in danaan and 4.23:1 in grinneal. The "not found" line drew
-          text.disabled (info.main in hybrasyl), below 4.5:1 in five themes. A
-          located client is bold; a missing one is regular weight. */}
+    <Toolbar variant="dense" disableGutters sx={{ bgcolor: 'tertiary.main', minHeight: 40, px: 2 }}>
+      {/* Text on the bar is tertiary.contrastText, the title bar's text colour
+          (HTOO-572). text.button is for headings on the page: on this bar it
+          measured 1.19:1 in mundanes, 1.66:1 in danaan and 4.23:1 in grinneal.
+          The "not found" line drew text.disabled (info.main in hybrasyl), below
+          4.5:1 in five themes. A located client is bold; a missing one is
+          regular weight. */}
       <Typography
         data-testid="client-status"
         variant="caption"
         sx={{
-          color: 'secondary.contrastText',
+          color: 'tertiary.contrastText',
           ...(status.found && { fontWeight: 'bold', letterSpacing: '0.1em' })
         }}
       >

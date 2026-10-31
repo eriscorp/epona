@@ -150,7 +150,7 @@ open -n --env LOCALAPPDATA="$(mktemp -d)" dist/mac-universal/Epona.app
 
 ### B2. The title bar (macOS) — HTOO-242
 
-On each of the six themes (Settings → Theme): the stoplights sit centred in the bar, and the bar holds nothing else, with no logo and no name. The green stoplight does not put the window in full screen: the window has a fixed size.
+On each of the eight themes (Settings → Theme): the stoplights sit centred in the bar, and the bar holds nothing else, with no logo and no name. The green stoplight does not put the window in full screen: the window has a fixed size.
 
 ### B3. The application menu (macOS) — HTOO-242, HTOO-382
 
@@ -202,7 +202,7 @@ Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
 
-- **Theme walk (any OS), HTOO-572:** on each of the six themes (Settings → Theme), check the title bar, the toolbar below it, the tabs, a filled button and its hover, and the "You're running this" chip in What's New. Danaan and Grinneal have a dark title bar with light, outlined text; Hybrasyl and Chadul have light outlined text; Mundanes and Dubhaimid are flat. No bar text is engraved. The close button turns red under the pointer. The client status and the toolbar icons are easy to read. On the four Dark Ages themes, the Stop Server button shows the error colour. Then open Settings → Theme → Theme gallery and look at each section in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
+- **Theme walk (any OS), HTOO-572:** on each of the eight themes (Settings → Theme), check the title bar, the toolbar below it, the tabs, a filled button and its hover, and the "You're running this" chip in What's New. Danaan, Grinneal, Shattered and Untamed have a dark title bar with light, outlined text; Hybrasyl and Chadul have light outlined text; Mundanes and Dubhaimid are flat. No bar text is engraved. The close button turns red under the pointer. The toolbar below the title bar has a different colour from the title bar, and the client status and the toolbar icons are easy to read. On the six Dark Ages themes, the Stop Server button shows the error colour. Then open Settings → Theme → Theme gallery and look at each section in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
 - **Quit prompts (Windows), HTOO-242:** with a repo-mode server running, the title-bar X, Alt+F4 and the in-app X each ask once; Cancel keeps the window and the server; Quit exits with no second question. Closing from the taskbar while minimised restores the window and asks.
 - **Portable exe (Windows), HTOO-466 and HTOO-351:** no Setup window flashes on close by the X, Alt+F4 or the taskbar; a second launch brings the first window to the front, also when it is minimised.
 - **Signing (Windows, the tag run), HTOO-517:** the release job signs both Windows artifacts on Java 17. Check the `java -version` line, the `[sign] signing … (java: …)` lines and the Verify signatures step.

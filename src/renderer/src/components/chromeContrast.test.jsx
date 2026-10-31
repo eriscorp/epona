@@ -122,15 +122,18 @@ describe('the title bar', () => {
 })
 
 /**
- * A nav bar under the title bar paints `secondary.main` too, with the app's
- * icon buttons on it (HTOO-572). Each app marked the current page its own way,
- * and each mark failed on a dark bar. `navButtonSx` is the one mark.
+ * A nav bar under the title bar paints `tertiary.main`, with the app's icon
+ * buttons on it (HTOO-572). It painted `secondary.main`, and the two bars read
+ * as one band; `tertiary` is a second colour with the same text colour
+ * (tertiary.test.js). Each app marked the current page its own way, and each
+ * mark failed on a dark bar. `navButtonSx` is the one mark. Its hover is tuned
+ * against the title bar, so it is measured here on the nav bar's colour.
  */
 describe('a nav-bar button', () => {
   afterEach(cleanup)
 
   it.each(THEME_NAMES)('%s: reads at rest, as the current page, and hovered', (name) => {
-    const bar = themesByName[name].palette.secondary.main
+    const bar = themesByName[name].palette.tertiary.main
     const kind = chromeKind(name)
     render(
       <ThemeProvider theme={themesByName[name]}>
@@ -144,8 +147,8 @@ describe('a nav-bar button', () => {
     )
     const button = (label) => screen.getByRole('button', { name: label })
     const style = (label) => getComputedStyle(button(label))
-    // The icon, not the button: the DA themes colour every MUI icon, and an
-    // icon that does not inherit drew 1.0:1 on danaan's bar.
+    // The icon, not the button: the DA themes coloured every MUI icon, and an
+    // icon that did not inherit drew 1.0:1 on danaan's bar.
     const icon = (label) => getComputedStyle(button(label).querySelector('svg')).color
     const rest = style('rest')
     const current = style('current')

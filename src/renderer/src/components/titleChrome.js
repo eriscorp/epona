@@ -88,7 +88,7 @@ export function windowButtonSx(kind, close = false, hovered = false) {
 }
 
 /**
- * The current page on a nav bar: a row of icon buttons on `secondary.main`,
+ * The current page on a nav bar: a row of icon buttons on `tertiary.main`,
  * under the title bar (creidhne, epona, balor, taliesin). Each app drew its own
  * mark, and each failed on a dark bar: `secondary.dark` or `warning.main` on
  * the bar was 1.1:1 to 1.5:1 (HTOO-572). The current button keeps the bar's
@@ -110,10 +110,6 @@ export function navButtonSx(kind, current = false, hovered = false) {
   const hover = { backgroundColor: c.hoverBackground, color: c.hoverColor }
   return {
     WebkitAppRegion: 'no-drag',
-    // The DA themes colour every MUI icon (`MuiSvgIcon`: secondary.dark in
-    // hybrasyl, primary.main in danaan), and on the bar that was 1.0:1 to 4:1.
-    // The icon takes the button's colour.
-    '& .MuiSvgIcon-root': { color: 'inherit' },
     ...(current ? { backgroundColor: CURRENT.background, boxShadow: CURRENT.ring } : {}),
     ...(hovered ? hover : { color: c.color, '&:hover': hover })
   }

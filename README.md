@@ -104,7 +104,7 @@ Settings persist to `%LOCALAPPDATA%\Erisco\Epona\settings.json`. Chromium's cach
 
 - **Atomic writes** — every save writes `settings.tmp.json` and renames over `settings.json` so a crash mid-save can't leave the file half-written. The previous primary is copied to `settings.bak.json` before rename, so corrupt settings can be recovered on next load.
 - **Schema migrations on load** — settings written by older Epona versions are migrated forward in-memory; the migrated shape is persisted on the next save. No-op once already migrated.
-- **Themes** — six themes: Hybrasyl, Chadul, Danaan and Grinneal (the four Dark Ages themes), and Mundanes and Dubhaimid (light and dark, with plain controls). They are the house palettes, the same as in the other house apps. Settings → Theme → Theme gallery shows each control in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
+- **Themes** — eight themes: Hybrasyl, Chadul, Danaan, Grinneal, Shattered and Untamed (the six Dark Ages themes), and Mundanes and Dubhaimid (light and dark, with plain controls). They are the house palettes, the same as in the other house apps. Settings → Theme → Theme gallery shows each control in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
 
 ### Remote Desktop
 

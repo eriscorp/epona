@@ -31,6 +31,15 @@ const danaanTheme = responsiveFontSizes(
         dark: '#3a2810',
         contrastText: '#f5e8c0'
       },
+      // The nav bar under the title bar (tertiary.test.ts): secondary.main,
+      // 40% darker. Its icons take the title bar's text colour, so
+      // contrastText is secondary.contrastText.
+      tertiary: {
+        main: '#36280a',
+        light: '#5e533b',
+        dark: '#261c07',
+        contrastText: '#f5e8c0'
+      },
       background: {
         default: '#f5e8c0',
         gray: '#f5e8c0',
@@ -256,7 +265,9 @@ const danaanTheme = responsiveFontSizes(
       MuiCheckbox: {
         styleOverrides: {
           root: {
-            color: 'rgba(118,93,27,0.5)',
+            // Unchecked: text.secondary, as MUI and the Radio draw it. The accent at
+            // 50% was 2.0:1 to 2.8:1, below the 3:1 for a control.
+            color: '#4a3c20',
             '&.Mui-checked': { color: '#765d1b' }
           }
         }
@@ -288,11 +299,6 @@ const danaanTheme = responsiveFontSizes(
             '&:hover': { color: '#765d1b' },
             '&:visited': { color: '#4a3c20' }
           }
-        }
-      },
-      MuiSvgIcon: {
-        styleOverrides: {
-          root: ({ theme }) => ({ color: theme.palette.primary.main })
         }
       },
       MuiCircularProgress: {

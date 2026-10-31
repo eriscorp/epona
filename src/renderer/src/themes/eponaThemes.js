@@ -2,10 +2,10 @@ import { createTheme } from '@mui/material/styles'
 import { themesByName as houseThemes } from './index'
 
 /**
- * The themes that Epona renders: the six house themes, with Epona's text sizes.
+ * The themes that Epona renders: the eight house themes, with Epona's text sizes.
  *
  * Epona's window has a fixed size, 480 px wide (MAIN_W). The house typography
- * sets body text at 1.2rem in the four Dark Ages themes, for the large windows
+ * sets body text at 1.2rem in the six Dark Ages themes, for the large windows
  * of the other house apps. In 480 px that text is too large, so Epona keeps the
  * sizes it had before the house palette (Sabrael, 2026-10-24): MUI's default
  * body and subtitle sizes, at every window width. h6 is the house size, which is

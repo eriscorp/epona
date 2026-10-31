@@ -7,8 +7,17 @@
 // `renderer/src/themes/themeNames.test.js` checks that this list and the theme
 // registry have the same keys.
 
-/** The six house themes, in picker order. */
-export const THEME_NAMES = ['hybrasyl', 'chadul', 'danaan', 'grinneal', 'mundanes', 'dubhaimid']
+/** The eight house themes, in picker order. */
+export const THEME_NAMES = [
+  'hybrasyl',
+  'chadul',
+  'danaan',
+  'grinneal',
+  'shattered',
+  'untamed',
+  'mundanes',
+  'dubhaimid'
+]
 
 /** The names the Settings theme picker shows. */
 export const THEME_LABELS = {
@@ -16,6 +25,8 @@ export const THEME_LABELS = {
   chadul: 'Chadul',
   danaan: 'Danaan',
   grinneal: 'Grinneal',
+  shattered: 'Shattered',
+  untamed: 'Untamed',
   mundanes: 'Mundanes',
   dubhaimid: 'Dubhaimid'
 }

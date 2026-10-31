@@ -8,7 +8,7 @@ const mediaKeys = (style) => Object.keys(style).filter((k) => k.startsWith('@med
 // Epona's text sizes over the house themes (Sabrael, 2026-10-24): the window is
 // 480 px wide, so the body text keeps the sizes it had before the house palette.
 describe("Epona's themes", () => {
-  it('are the six house themes', () => {
+  it('are the eight house themes', () => {
     expect(THEME_NAMES).toEqual(Object.keys(houseThemes))
   })
 

@@ -267,7 +267,7 @@ function Buttons() {
             </Measure>
           ))}
           <Measure min={0}>
-            <Button variant={variant} disabled>
+            <Button variant={variant} disabled startIcon={<AddIcon />}>
               disabled
             </Button>
           </Measure>
@@ -296,6 +296,16 @@ function IconButtons() {
           </span>
         </Tooltip>
       ))}
+      {/* A disabled icon button takes MUI's grey (HTOO-639). */}
+      <Tooltip title="disabled">
+        <span>
+          <Measure min={0} part="svg">
+            <IconButton disabled aria-label="disabled">
+              <DeleteIcon />
+            </IconButton>
+          </Measure>
+        </span>
+      </Tooltip>
     </Row>
   )
 }
@@ -590,8 +600,9 @@ function BarButtons({ kind, hovered }) {
 
 /**
  * A nav bar under the title bar, as four apps draw one: a plain button, the
- * current page, and a hovered button, with `navButtonSx`. Epona's NavToolbar
- * is one (its current page is Settings while the pane is open).
+ * current page, and a hovered button, with `navButtonSx`. It paints
+ * `tertiary.main`, so it reads as a second bar (tertiary.test.js). Epona's
+ * NavToolbar is one (its current page is Settings while the pane is open).
  */
 function NavBarPreview({ kind }) {
   const buttons = [
@@ -603,7 +614,7 @@ function NavBarPreview({ kind }) {
     <Toolbar
       variant="dense"
       disableGutters
-      sx={{ bgcolor: 'secondary.main', minHeight: 40, px: 3, gap: 1 }}
+      sx={{ bgcolor: 'tertiary.main', minHeight: 40, px: 3, gap: 1 }}
     >
       {buttons.map(([label, current, hovered]) => (
         <Measure key={label} part="svg">

@@ -33,6 +33,16 @@ const chadulTheme = responsiveFontSizes(
         dark: '#1e1030',
         contrastText: '#e0d8ea'
       },
+      // The nav bar under the title bar (tertiary.test.ts): secondary.main,
+      // 15% toward white, because a darker purple is too near the title bar.
+      // Its icons take the title bar's text colour, so contrastText is
+      // secondary.contrastText.
+      tertiary: {
+        main: '#4d3c65',
+        light: '#716384',
+        dark: '#362a47',
+        contrastText: '#e0d8ea'
+      },
       background: {
         default: '#020804',
         gray: '#020804',
@@ -255,7 +265,9 @@ const chadulTheme = responsiveFontSizes(
       MuiCheckbox: {
         styleOverrides: {
           root: {
-            color: 'rgba(66,135,77,0.5)',
+            // Unchecked: text.secondary, as MUI and the Radio draw it. The accent at
+            // 50% was 2.0:1 to 2.8:1, below the 3:1 for a control.
+            color: '#c0a8d8',
             '&.Mui-checked': { color: '#42874d' }
           }
         }
@@ -288,11 +300,6 @@ const chadulTheme = responsiveFontSizes(
             // text.visited: 5.84:1 on the page. #7a5a9a was 3.62:1.
             '&:visited': { color: '#9a7ad0' }
           }
-        }
-      },
-      MuiSvgIcon: {
-        styleOverrides: {
-          root: ({ theme }) => ({ color: theme.palette.primary.light })
         }
       },
       MuiCircularProgress: {
