@@ -13,10 +13,14 @@ import {
 } from '../buildProps.js'
 import { resolveDotnetPath } from '../dotnet.js'
 
-// Strip a case-insensitive .xml suffix; the server's `--config` flag wants
-// the bare name (e.g. "local"), not the filename ("local.xml").
-export function stripXmlExt(name) {
-  return typeof name === 'string' ? name.replace(/\.xml$/i, '') : ''
+// The server config the user picked, as a path for `--configFile`. `--config`
+// takes a config's Name attribute, not its file name, and matches it with case:
+// `config.xml` with no Name is "default", and `local.xml` with Name="Local" is
+// "Local", so the file name failed to start both (HTOO-595). `--configFile`
+// loads the one file. The server has had it since the same commit as the
+// camelCase flags (`9b169383`), so every server that takes `--logDir` takes it.
+export function serverConfigPath(instance) {
+  return join(instance.dataDir, 'xml', 'serverconfigs', instance.configFileName)
 }
 
 // Build the env object we pass to the spawned server. Only emits HYB_REDIS_*
@@ -41,8 +45,8 @@ function buildEnv(instance) {
 //                   has its own validator, so we must pass it explicitly.
 // The instance's `dataDir` field is what the user picks (a ceridwen-style
 // layout containing `xml/`, `scripts/`, `mapfiles/`, …) and maps directly to
-// --dataDir. --worldDataDir is then `<dataDir>/xml`. --config <name> takes
-// the bare config name (no .xml) and resolves under <worldDataDir>/serverconfigs/.
+// --dataDir. --worldDataDir is then `<dataDir>/xml`. --configFile takes the
+// picked file under <worldDataDir>/serverconfigs/ (serverConfigPath).
 function buildServerArgs(instance) {
   return [
     '--dataDir',
@@ -51,8 +55,8 @@ function buildServerArgs(instance) {
     join(instance.dataDir, 'xml'),
     '--logDir',
     instance.logDir,
-    '--config',
-    stripXmlExt(instance.configFileName)
+    '--configFile',
+    serverConfigPath(instance)
   ]
 }
 

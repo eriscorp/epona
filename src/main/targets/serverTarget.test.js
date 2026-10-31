@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { stripXmlExt, buildBinarySpawn, buildRepoSpawn, validateForLaunch } from './serverTarget.js'
+import {
+  serverConfigPath,
+  buildBinarySpawn,
+  buildRepoSpawn,
+  validateForLaunch
+} from './serverTarget.js'
 import { join } from 'path'
 
 const BASE_INSTANCE = {
@@ -35,20 +40,12 @@ const REPO_INSTANCE = {
   xmlBranch: null
 }
 
-describe('stripXmlExt', () => {
-  it('strips a lower-case .xml suffix', () => {
-    expect(stripXmlExt('local.xml')).toBe('local')
-  })
-  it('strips regardless of case', () => {
-    expect(stripXmlExt('QA.XML')).toBe('QA')
-    expect(stripXmlExt('dev.Xml')).toBe('dev')
-  })
-  it('returns an input with no .xml suffix untouched', () => {
-    expect(stripXmlExt('local')).toBe('local')
-  })
-  it('returns empty string for non-string input', () => {
-    expect(stripXmlExt(null)).toBe('')
-    expect(stripXmlExt(undefined)).toBe('')
+describe('serverConfigPath', () => {
+  it('is the picked file under <dataDir>/xml/serverconfigs, with its own spelling', () => {
+    // The file name, not the Name attribute, and with its case (HTOO-595).
+    expect(serverConfigPath({ dataDir: 'D:/world', configFileName: 'Local.XML' })).toBe(
+      join('D:/world', 'xml', 'serverconfigs', 'Local.XML')
+    )
   })
 })
 
@@ -66,8 +63,8 @@ describe('buildBinarySpawn', () => {
       join('D:/ceridwen', 'xml'),
       '--logDir',
       'D:/hyb-logs',
-      '--config',
-      'config'
+      '--configFile',
+      join('D:/ceridwen', 'xml', 'serverconfigs', 'config.xml')
     ])
   })
 
@@ -81,8 +78,8 @@ describe('buildBinarySpawn', () => {
       join('D:/ceridwen', 'xml'),
       '--logDir',
       'D:/hyb-logs',
-      '--config',
-      'config'
+      '--configFile',
+      join('D:/ceridwen', 'xml', 'serverconfigs', 'config.xml')
     ])
   })
 
@@ -91,10 +88,12 @@ describe('buildBinarySpawn', () => {
     expect(spec.command).toBe('D:/HYB.EXE')
   })
 
-  it('strips .xml from configFileName for --config', () => {
-    const spec = buildBinarySpawn({ ...BASE_INSTANCE, configFileName: 'local.xml' })
-    expect(spec.args).toContain('local')
-    expect(spec.args).not.toContain('local.xml')
+  it('passes the config file to --configFile, not a name to --config (HTOO-595)', () => {
+    // config.xml has no Name attribute, so its name is "default"; `--config
+    // config` stopped the server with "no configurations with that name".
+    const spec = buildBinarySpawn({ ...BASE_INSTANCE, configFileName: 'config.xml' })
+    expect(spec.args).not.toContain('--config')
+    expect(spec.args).toContain(join('D:/ceridwen', 'xml', 'serverconfigs', 'config.xml'))
   })
 
   it('emits no HYB_REDIS_* env vars when redisHost is blank (server reads XML)', () => {
@@ -140,15 +139,15 @@ describe('buildRepoSpawn', () => {
       join('D:/ceridwen', 'xml'),
       '--logDir',
       'D:/hyb-logs',
-      '--config',
-      'config'
+      '--configFile',
+      join('D:/ceridwen', 'xml', 'serverconfigs', 'config.xml')
     ])
   })
 
-  it('strips .xml from configFileName for --config', () => {
-    const spec = buildRepoSpawn({ ...REPO_INSTANCE, configFileName: 'qa.xml' }, 'D:/wt')
-    expect(spec.args).toContain('qa')
-    expect(spec.args).not.toContain('qa.xml')
+  it('passes the config file to --configFile, as binary mode does (HTOO-595)', () => {
+    const spec = buildRepoSpawn({ ...REPO_INSTANCE, configFileName: 'local.xml' }, 'D:/wt')
+    const at = spec.args.indexOf('--configFile')
+    expect(spec.args[at + 1]).toBe(join('D:/ceridwen', 'xml', 'serverconfigs', 'local.xml'))
   })
 
   it('emits HYB_REDIS_* env vars when redisHost is populated, same as binary mode', () => {
