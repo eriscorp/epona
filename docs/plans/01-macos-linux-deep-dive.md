@@ -1,6 +1,6 @@
 # 01 — macOS and Linux deep dive (HTOO-627)
 
-Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); M7, L4, W1 and W2 are owed. Owner: Sabrael.
+Status: code read complete, 2026-10-31. Cards filed as HTOO-641 to HTOO-663; F4 is on HTOO-589, and F10, F12 and F20 are on HTOO-596. The baseline checks have run on the Mac and the Linux box (L2 closed; L7 partial); W2 is owed on the Windows box, and M7, L4 and W1 are in the end-of-release pass. Owner: Sabrael.
 
 This is the audit that HTOO-627 asks for: Epona's faults on macOS and Linux, found by reading the code, before the fix work package starts. The ten bugs of 2026-10-21 (HTOO-587 to HTOO-596) came from one macOS session and show what that user tried. This document finds the rest and sets the order of the fixes.
 
@@ -211,7 +211,7 @@ The card asks for a fault that hides other faults to go first. Three of those co
 Sabrael approved this on 2026-10-31.
 
 - **The fixes are built on the Windows box.** It has the full gate, e2e, the `da-win32` rebuild and signing, and the Windows work (F29, F17). `npm run validate:linux` runs the unit suite on real Linux through WSL. Each PR records its Windows checks and leaves the macOS and Linux rows owed, as the release plan says.
-- **Before the work starts, each box runs every check it can, as the baseline** (Sabrael, 2026-10-31). That is every check below except M7 and W1, which need a tag or a fix, and L4, which needs a stock Ubuntu 24.04 machine. L5 and L7 use a local `npm run build:linux` AppImage.
+- **Before the work starts, each box runs every check it can, as the baseline** (Sabrael, 2026-10-31). That is every check below except M7, W1 and L4, which test a released build or a fix. L5 and L7 use a local `npm run build:linux` AppImage.
 - **After a fix group merges, the boxes run again the script that covers it.** `01-box-checks/lifecycle.mjs` after group 2 (the lifecycle), on the Mac and the Linux box: mocked tests on Windows cannot show process groups and signals, and HTOO-642 is a fault that a passing unit test did not catch. `01-box-checks/build-and-git.sh` after group 3 (the server launch). Each must print `SUMMARY: PASS`.
 - **The end-of-release pass runs the whole table again** on both boxes, against the release's own dmg and AppImage, and adds M7, L4 and W1.
 
@@ -219,7 +219,7 @@ The scripts print PASS or FAIL against the fixed behaviour, and exit 1 on a FAIL
 
 ## Checks for the Mac and the Linux box
 
-Each one settles a finding marked **box**. They run on the Mac and the Linux box in Sabrael's office before the fixes start, and again after them, as [the schedule above](#where-the-work-is-done-and-when-the-boxes-check-it) sets out. A check that does not confirm its finding closes that card. M7, L4 and W1 need a released build, a stock Ubuntu machine or a fix, so they run only in the end-of-release pass.
+Each one settles a finding marked **box**. They run on the Mac and the Linux box in Sabrael's office before the fixes start, and again after them, as [the schedule above](#where-the-work-is-done-and-when-the-boxes-check-it) sets out. A check that does not confirm its finding closes that card. M7, L4 and W1 test a released build or a fix, so they run only in the end-of-release pass.
 
 ### Mac
 
@@ -240,7 +240,7 @@ Each one settles a finding marked **box**. They run on the Mac and the Linux box
 | L1 | F2, HTOO-592 | M1 and M3 on Linux. |
 | L2 | F6 | **Closed, not run.** It needed .NET 8 from apt beside .NET 10 in `~/.dotnet`, which Epona's hint (`sudo apt install dotnet-sdk-10.0`) does not support (Sabrael, 2026-10-31). The hinted install works: see the Linux results. |
 | L3 | F17 | In the packaged app, open the Log Pane in repo mode. Press Ctrl+R, then Ctrl+Shift+I, then F11. Note what each does. Repeat on the Windows box. |
-| L4 | F23, F24 | On a stock Ubuntu 24.04: `sysctl kernel.apparmor_restrict_unprivileged_userns`, then `chmod +x` the release's AppImage and launch it. Note whether it needed `libfuse2` (`libfuse2t64`) and whether it hit a sandbox error. Run A2 there too. |
+| L4 | F23, F24 | End of release, on the Mint box: there is no stock Ubuntu machine (Sabrael, 2026-10-31). Mint 22.3 is built on Ubuntu 24.04 and differs here only in leaving `kernel.apparmor_restrict_unprivileged_userns` at 0, so set it as stock Ubuntu does: `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=1` (until reboot). `chmod +x` the release's AppImage and launch it, then run A2. Note any sandbox error. Set it back to 0 after. The `libfuse2` half is not measured: Ubuntu 22.04 and later do not install `libfuse2` (`libfuse2t64` on 24.04) and Mint does, so the checklist states it, with `--appimage-extract-and-run` as the alternative. Untested: any other difference in stock Ubuntu's package set. |
 | L5 | F25 | Under the AppImage, start the client and a server. Run `tr '\0' '\n' < /proc/<child pid>/environ \| grep -E 'LD_LIBRARY_PATH\|APPDIR'`. |
 | L6 | F16 | On a desktop where `xdg-mime query default inode/directory` prints nothing, click "Reveal settings folder". |
 | L7 | F28 | Launch the AppImage under X11 and under Wayland, and look at the taskbar icon. |
