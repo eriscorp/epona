@@ -52,6 +52,7 @@ import {
   createInstanceManager,
   toSafeResult,
   isTrackedAlive,
+  runOnce,
   stopChild
 } from './instanceManager.js'
 import { initSessionLog, captureError } from './sessionLog.js'
@@ -168,6 +169,10 @@ let quitCleanupDone = false
 // question needs the main window and the tracked children; before that there is
 // nothing to stop.
 let confirmStopRepoLaunches = async () => true
+
+// Stops the repo-mode Hybrasyl client and runs its launch cleanup, for the quit
+// sweep (HTOO-644). whenReady replaces it, because the client is local there.
+let stopRepoClient = async () => {}
 
 // Report Issue / diagnostics: session logs live in a `logs/` subfolder of the local
 // app-data dir (a clean "Reveal logs folder" target, separate from settings.json).
@@ -768,9 +773,25 @@ app.whenReady().then(() => {
   // fire-and-forget with no pipes, so multiple can run in parallel.
   let activeHybrasylChild = null
   // Pending cleanup for the active repo child (worktree release). Runs when
-  // the child exits or when a fresh launch supersedes it. Awaited inline so
-  // a fast Stop→Start can't race the worktree refcount.
+  // the child exits, when a fresh launch supersedes it, and on quit. Awaited
+  // inline so a fast Stop→Start can't race the worktree refcount. Run-once, as
+  // a server's is: the exit and the caller that stopped the child both reach it.
   let activeHybrasylCleanup = async () => {}
+
+  // The quit sweep's stop for the client. A failed kill skips the cleanup: on
+  // macOS and Linux nothing stops `git worktree remove` under a running client.
+  stopRepoClient = async () => {
+    const child = activeHybrasylChild
+    const cleanup = activeHybrasylCleanup
+    if (child) {
+      const result = await stopChild(child)
+      if (!result.ok) {
+        console.warn('hybrasyl client stop on quit failed:', result.error.message)
+        return
+      }
+    }
+    await cleanup()
+  }
 
   function wireHybrasylChildLogs(child, cleanup) {
     // Mirror what we send to the renderer into a local buffer so the auto-save
@@ -889,23 +910,23 @@ app.whenReady().then(() => {
       const result = await launchHybrasyl(settings.targets.hybrasyl, profile, settings.clientPath)
       if (result.success && result.kind === 'repo' && result.child) {
         // Singleton repo run — stop the previous one so the pane shows a single
-        // clean stream, then adopt the new child.
-        if (activeHybrasylChild && activeHybrasylChild.exitCode === null) {
+        // clean stream, then adopt the new child. Its whole tree: `kill()`
+        // ended `dotnet run` and left the client it started running.
+        const stopped = activeHybrasylChild ? await stopChild(activeHybrasylChild) : { ok: true }
+        // Run the previous launch's cleanup before swapping, so worktree
+        // refcounts settle in order. Not after a failed stop: the old client's
+        // own exit runs it then.
+        if (!stopped.ok) {
+          console.warn('hybrasyl client previous-stop failed:', stopped.error.message)
+        } else {
           try {
-            activeHybrasylChild.kill()
-          } catch {
-            /* may already be gone */
+            await activeHybrasylCleanup()
+          } catch (err) {
+            console.warn('hybrasyl client previous-cleanup failed:', err.message)
           }
         }
-        // Run the previous launch's cleanup before swapping, so worktree
-        // refcounts settle in order.
-        try {
-          await activeHybrasylCleanup()
-        } catch (err) {
-          console.warn('hybrasyl client previous-cleanup failed:', err.message)
-        }
         activeHybrasylChild = result.child
-        activeHybrasylCleanup = result.cleanup ?? (async () => {})
+        activeHybrasylCleanup = runOnce(result.cleanup ?? (async () => {}))
         wireHybrasylChildLogs(result.child, activeHybrasylCleanup)
       } else if (result.success && !result.child && result.cleanup) {
         // Binary launch with a stray cleanup (shouldn't happen today, but
@@ -1007,10 +1028,10 @@ app.whenReady().then(() => {
   // leaving the kill-failure decision visible at both call sites.
   //
   // `before-quit` is not a third caller, though the review lists it as a variant.
-  // It only kills: the map is about to be discarded, the renderer is being torn
-  // down so there is nobody to notify, and worktrees are released by
-  // releaseAllWorktrees and sweepAllOrphans instead. Routing it through here would
-  // add all three of those back.
+  // It kills and runs each launch's cleanup (HTOO-644), but it does not untrack
+  // or notify: the map is about to be discarded, and the renderer is being torn
+  // down so there is nobody to notify. Routing it through here would add both of
+  // those back.
   //
   // Covered by index.instanceLifecycle.test.js, which pins both sides.
   function untrackPidInstance(instanceId, pid) {
@@ -1601,28 +1622,31 @@ async function confirmAndQuit() {
   }
 }
 
-// Best-effort cleanup on clean shutdown. Order matters: kill any tracked
-// server instances first so they release their open file handles inside the
-// worktree dirs, otherwise `git worktree remove` fails silently and orphans
-// directories on disk.
+// Best-effort cleanup on clean shutdown. Order matters: stop each launch, then
+// run its cleanup, and only then release the worktrees. On Windows a running
+// process holds its worktree's files open and `git worktree remove` fails. On
+// macOS and Linux nothing does, and the worktree is deleted under the process
+// (HTOO-644). The cleanup also removes `Directory.Build.props`, which nothing
+// else does.
+//
+// The launches stop in parallel, each with the full grace period: the server's
+// own shutdown takes 2 s, and one at a time the sweep waited for each in turn
+// (HTOO-592).
 async function shutdownSweep() {
   // Stop polling first: a tick landing mid-teardown would reap entries this
   // sweep is about to kill, and race their worktree cleanup.
   statusMonitor?.stop()
 
-  for (const [id, tracked] of instanceChildren) {
-    try {
-      if (tracked.kind === 'child') {
-        await stopChild(tracked.value)
-      } else {
-        // PID-tracked: kill the wrapper + its tree (taskkill on Windows,
-        // SIGKILL to the process group on POSIX).
-        await killProcessTree(tracked.value)
-      }
-    } catch (err) {
-      console.warn(`instance ${id} kill on quit failed:`, err.message)
-    }
-  }
+  await Promise.all([
+    stopRepoClient().catch((err) =>
+      console.warn('hybrasyl client stop on quit failed:', err.message)
+    ),
+    ...[...instanceChildren].map(([id, tracked]) =>
+      stopTrackedOnQuit(tracked).catch((err) =>
+        console.warn(`instance ${id} stop on quit failed:`, err.message)
+      )
+    )
+  ])
 
   try {
     await releaseAllWorktrees()
@@ -1633,4 +1657,15 @@ async function shutdownSweep() {
   // releaseAll only knows about worktrees this run refcounted. Sweep the rest —
   // ones adopted from a previous run, or left by a branch switch.
   await sweepAllOrphans('quit')
+}
+
+// One tracked server, for the quit sweep: end its tree (taskkill on Windows, the
+// group with a grace period on POSIX), then run its cleanup. A launch that is
+// still running keeps its worktree and its build props.
+async function stopTrackedOnQuit(tracked) {
+  tracked.stopping = true
+  const result =
+    tracked.kind === 'child' ? await stopChild(tracked.value) : await killProcessTree(tracked.value)
+  if (!result.ok) throw result.error
+  await tracked.cleanup()
 }
