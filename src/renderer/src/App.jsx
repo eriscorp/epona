@@ -22,6 +22,7 @@ import ReportIssueDialog from './components/ReportIssueDialog'
 import UpdateNotice from './components/UpdateNotice'
 import BridgeErrorBanner from './components/BridgeErrorBanner'
 import SnackbarHost from './components/SnackbarHost'
+import { revealFailure } from './revealFailure'
 import ThemeGallery from './pages/ThemeGallery'
 import { PANEL_BORDER_COLOR, MAIN_W, PANE_W, GALLERY_W } from './uiConstants.js'
 import { resolveVersionCode, supportsPatch } from './runtimePatchGate.js'
@@ -75,6 +76,9 @@ export default function App() {
   // A server that exited when nobody asked it to: { instanceId, message }
   // (HTOO-590). Shown with the Log Pane closed, on any tab.
   const [exitNotice, setExitNotice] = useState(null)
+  // A Reveal menu item whose folder did not open (HTOO-658). The exit notice
+  // shares the one snackbar and goes first.
+  const [folderNotice, setFolderNotice] = useState(null)
   // Non-null when the IPC bridge could not be reached at startup. Renders a
   // banner that itself uses no IPC — the existing Report Issue dialog and
   // "Reveal logs" are both invokes, so in exactly this state they are dead too.
@@ -237,8 +241,9 @@ export default function App() {
       },
       openSettings: () => setSettingsOpen(true),
       locateClient: handleLocateClient,
-      revealSettings: () => window.sparkAPI.revealSettings(),
-      revealLogs: () => window.sparkAPI.revealLogs(),
+      revealSettings: async () =>
+        setFolderNotice(revealFailure(await window.sparkAPI.revealSettings())),
+      revealLogs: async () => setFolderNotice(revealFailure(await window.sparkAPI.revealLogs())),
       toggleLogPane: () => {
         if (canToggleLogPane) setLogPaneOpen((o) => !o)
       },
@@ -525,16 +530,18 @@ export default function App() {
         <ReportIssueDialog open={reportOpen} onClose={() => setReportOpen(false)} />
         <SnackbarHost
           snack={
-            exitNotice && {
-              severity: 'error',
-              message: exitNotice.message,
-              duration: 15000,
-              action: serverLogPane
-                ? { label: 'Show log', onClick: () => showServerLog(exitNotice.instanceId) }
-                : undefined
-            }
+            exitNotice
+              ? {
+                  severity: 'error',
+                  message: exitNotice.message,
+                  duration: 15000,
+                  action: serverLogPane
+                    ? { label: 'Show log', onClick: () => showServerLog(exitNotice.instanceId) }
+                    : undefined
+                }
+              : folderNotice
           }
-          onClose={() => setExitNotice(null)}
+          onClose={() => (exitNotice ? setExitNotice(null) : setFolderNotice(null))}
         />
         {/* Mounted unconditionally and self-scheduling: it renders nothing until
             its own delayed check comes back with an undismissed newer release. */}

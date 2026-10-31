@@ -178,6 +178,26 @@ describe('the macOS application menu', () => {
     return { menu, send: (command) => act(() => emit({ command })) }
   }
 
+  it('names the folder when Reveal Settings Folder cannot open it (HTOO-658)', async () => {
+    let emit = () => {}
+    await renderApp('darwin', {
+      onMenuCommand: vi.fn((cb) => {
+        emit = cb
+        return () => {}
+      }),
+      revealSettings: vi.fn().mockResolvedValue({
+        ok: false,
+        path: '/Users/me/Library/Application Support/Erisco/Epona',
+        error: 'Failed to open path'
+      })
+    })
+    await act(() => emit({ command: 'revealSettings' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Could not open the folder /Users/me/Library/Application Support/Erisco/Epona'
+    )
+  })
+
   it('reports the tab once settings hydrate, and Go switches the tab', async () => {
     const { menu, send } = await renderWithMenu()
     expect(menu.setMenuState).toHaveBeenLastCalledWith({

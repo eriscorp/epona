@@ -28,6 +28,7 @@ import { listServerConfigs, readDataStore, isHybrasylDataDir } from './serverCon
 import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
 import { buildHint } from './buildHints.js'
+import { openFolder } from './openFolder.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { reprobeGit } from './gitExec.js'
 import {
@@ -709,7 +710,7 @@ app.whenReady().then(() => {
   // App / diagnostics (About card). Reveal opens the app-owned settings folder;
   // registerDiagnosticsHandlers wires the Report Issue flow + reveal-logs;
   // registerChangelogHandlers backs the What's New dialog.
-  ipc.handle('app:revealSettings', () => shell.openPath(dataDir))
+  ipc.handle('app:revealSettings', () => openFolder(shell, dataDir))
   // Update check (house module update-check v1, HTOO-382). No payload to
   // validate: the renderer sends nothing, and main reads the running version
   // itself. It never throws: "up to date" and "could not tell" come back as

@@ -44,6 +44,7 @@ import WhatsNewDialog from './WhatsNewDialog'
 import UpdateCheckButton from './UpdateCheckButton'
 import ManagedWorktrees from './ManagedWorktrees'
 import SnackbarHost from './SnackbarHost'
+import { revealFailure } from '../revealFailure'
 import { useMenuRequest } from '../useMenuRequest'
 import { LOGO_FILTER } from './titleChrome'
 import { THEME_LABELS } from '../../../shared/themeNames.js'
@@ -622,7 +623,9 @@ export default function SettingsPane({
               variant="text"
               size="small"
               startIcon={<FolderOpenIcon />}
-              onClick={() => window.sparkAPI.revealSettings()}
+              onClick={async () =>
+                setWorktreeSnack(revealFailure(await window.sparkAPI.revealSettings()))
+              }
             >
               Reveal settings folder
             </Button>
