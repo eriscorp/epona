@@ -90,8 +90,64 @@ jobs:
           node-version: 24
           cache: npm
 
+      # THE ELECTRON BINARY: CACHE IT, AND RETRY THE INSTALL (HTOO-388).
+      #
+      # `npm ci` downloads the Electron binary (about 100 MB) from
+      # github.com/electron/electron/releases. That server sometimes returns a
+      # 503, and the job then fails on code that is correct. Dagda lost seven CI
+      # runs to it in one day.
+      #
+      # Since Electron 42 the `electron` package has no install script. The
+      # project's own postinstall runs `install-electron` (HTOO-553), inside the
+      # `npm ci` step, so the env var goes on that step. `install-electron` gives
+      # `cacheRoot: process.env.electron_config_cache` to `@electron/get`, so the
+      # var moves the download cache to a path that `actions/cache` restores. If
+      # that postinstall goes, the download moves to the first
+      # `require('electron')`, in a later step without the var: the cache then
+      # misses on every run, with a green tick.
+      #
+      # The path is under `runner.temp`, NOT the workspace. A cache directory in
+      # the checkout is a directory that `eslint .` and each glob must ignore.
+      #
+      # The env var and the cache path are both STEP-level. The `runner` context
+      # does not exist at workflow or job level. An expression there expands to
+      # an empty string and does not fail, so the cache points at the root of
+      # the filesystem and restores nothing, on every run, with a green tick.
+      #
+      # The key is package-lock.json, because the lockfile pins the Electron
+      # version: a version bump misses by construction, and no other key can
+      # restore an old binary. The key includes `runner.os`, because each OS
+      # downloads a different zip.
+      #
+      # This workflow runs only by hand (workflow_dispatch), and GitHub removes a
+      # cache that nothing uses for seven days. So the cache is usually COLD
+      # here, and the retry is the part that pays. The cache stays because every
+      # house app has the same steps (hyb-electron-template has them too).
+      #
+      # scripts/electron-cache.test.mjs pins these steps in each job.
+      - name: Cache the Electron binary
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      # A cache miss gets the binary from the same server, so the install is
+      # retried. `shell: bash` on every runner, so the loop has one form: Git
+      # Bash is on the Windows runners. Three attempts, with a longer wait after
+      # each failure. The step fails if the last attempt fails, so a real
+      # `npm ci` failure still fails the job.
       - name: Install dependencies
-        run: npm ci
+        shell: bash
+        env:
+          electron_config_cache: ${{ runner.temp }}/electron-cache
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci; then exit 0; fi
+            echo "npm ci failed (attempt $attempt of 3)"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 20)); fi
+          done
+          exit 1
 
       - name: Lint (0 warnings tolerated)
         run: npm run lint:check
@@ -148,8 +204,19 @@ jobs:
       # postinstall only fixes up the CLI shim; vitest and vite use the JS API,
       # which reads the optional package directly. Checked rather than assumed —
       # this is the step most likely to be "simplified" back to a plain npm ci.
+      #
+      # The install has the `check` job's retry (HTOO-388), but no Electron
+      # cache: `--ignore-scripts` skips `install-electron`, so this job never
+      # downloads the binary. The retry covers a failed registry fetch.
       - name: Install dependencies (no native builds)
-        run: npm ci --ignore-scripts
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci --ignore-scripts; then exit 0; fi
+            echo "npm ci failed (attempt $attempt of 3)"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 20)); fi
+          done
+          exit 1
 
       - name: Lint (0 warnings tolerated)
         run: npm run lint:check
@@ -172,8 +239,27 @@ jobs:
           node-version: 24
           cache: npm
 
+      # The same cache and the same retried install as the `check` job. Read
+      # the reasons there: `runner.temp` and the two step-level placements are
+      # necessary, not style.
+      - name: Cache the Electron binary
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
       - name: Install dependencies
-        run: npm ci
+        shell: bash
+        env:
+          electron_config_cache: ${{ runner.temp }}/electron-cache
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci; then exit 0; fi
+            echo "npm ci failed (attempt $attempt of 3)"
+            if [ "$attempt" -lt 3 ]; then sleep $((attempt * 20)); fi
+          done
+          exit 1
 
       - name: Rebuild native addon
         run: npm run rebuild
