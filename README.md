@@ -167,6 +167,8 @@ npm test                # vitest suite
 npm run lint            # eslint + prettier
 ```
 
+An npm script that runs a script under Electron calls `node scripts/run-electron.mjs <script>`, not `electron <script>`. The launcher removes `ELECTRON_RUN_AS_NODE` before it starts Electron. Some shells export that variable, and then a bare `electron` runs as plain Node. Give the script its own guard for a direct `electron` run, and make the guard's message name the npm script (HTOO-612).
+
 Local Windows builds are unsigned: signing needs the SSL.com Cloud eSigner credentials, which only CI holds. `scripts/sign.js` logs a skip and the build continues.
 
 CI builds and publishes every platform on tag push — Windows installer and portable exe, macOS dmg, Linux deb and AppImage.
