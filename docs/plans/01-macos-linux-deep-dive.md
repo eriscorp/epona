@@ -239,6 +239,22 @@ Each one settles a finding marked **box**. They run on the Mac and the Linux box
 | W1 | F29 | With the tee in place, start a server and check that interactive shutdown still works in the console window. |
 | W2 | F17 | L3 on Windows. |
 
+### Results on the Mac (2026-10-31)
+
+macOS 27, Apple Silicon, epona `main` at `a1a2d16`, server `6ed8d59a`, .NET 10.0.12 in `/usr/local/share/dotnet`. The checks run from two scripts in [`01-box-checks/`](01-box-checks/), which drive Epona's own modules against a real repo-mode server (`lifecycle.mjs`) or build throwaway projects (`build-and-git.sh`). Run the same two scripts on the Linux box for L1 and the Linux half of M2, M5 and M6.
+
+| Check | Card | Result |
+| --- | --- | --- |
+| M1 | HTOO-642 | **Confirmed.** The listener (the `Hybrasyl` apphost) is a child of `dotnet run` in its process group, and is not the leader: PID 12008, PPID and PGID 12001. `killProcessTree(12008)` returns `{ ok: true }`, and the server keeps listening. The group also holds the Roslyn compiler server (`VBCSCompiler`), which a kill by group takes down too; that is harmless. |
+| M2 | HTOO-644 | **Confirmed.** A non-force `git worktree remove` deletes a worktree that holds ignored build output while a process runs from it, with a file open. The process keeps running with a deleted working folder. |
+| M3 | HTOO-592 | **Not reproduced on macOS.** Stop's SIGTERM to `dotnet run` reaches the server: `dotnet run` exits with code 143 within 30 ms, and the port is free within 1 s. No orphan. The card's other parts stand (cleanup after a timeout, SIGKILL only, the adopted path is HTOO-642). L1 decides it for Linux. |
+| M4 | HTOO-645 | **Not run:** this Mac has .NET in the system location only. L2 covers it. |
+| M5 | HTOO-646 | **Confirmed.** A project under `<repo>/.worktrees/<branch>/` imports the repo root's `Directory.Build.props`: it sees `UseLocalProtocol=true`. |
+| M6 | HTOO-654 | **Half cleared.** MSBuild on macOS resolves Epona's backslash `LocalXmlProjectPath` (restore gives `Hybrasyl.Xml` as `project`, and the build succeeds), so the backslashes are cosmetic. The escaping half is **confirmed**: under a folder named `R&D`, restore reports no error and silently drops the reference. |
+| M7 | HTOO-650, HTOO-643 | Waits for the next tag. |
+
+**Found on the way: logs nested in `logs/logs`.** `config.xml`, `qa.xml` and the local `local.xml` in the world repo gave each log a `Destination` of `logs/<Name>-.log`. The server joins it onto `--logDir`, so with Epona's default `<world>/logs` the logs went to `<world>/logs/logs/`. Sabrael ruled that logs are not nested there. `config.xml` is fixed in world PR #192 (`local.xml` too, locally); `qa.xml` waits for a check of the QA server's `--logDir` (WLD-85).
+
 ## Checked and fine
 
 The agents also recorded what holds on macOS and Linux, so that the coverage is visible:
