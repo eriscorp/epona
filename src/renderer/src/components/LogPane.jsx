@@ -136,7 +136,9 @@ export default function LogPane({ title = 'Console', source, slug, onClose }) {
       >
         {lines.length === 0 && (
           <Typography variant="caption" sx={{ opacity: 0.5, fontStyle: 'italic' }}>
-            (no output yet — launch the client to see logs here)
+            {source === 'hybrasyl'
+              ? '(no output yet — launch the client to see logs here)'
+              : '(no output yet — start the server to see logs here)'}
           </Typography>
         )}
         {lines.map((entry, i) => (

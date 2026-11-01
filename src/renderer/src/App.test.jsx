@@ -336,6 +336,8 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
       await userEvent.click(toggle)
       // The pane's header names the instance.
       await waitFor(() => expect(screen.getAllByText('Local').length).toBeGreaterThan(1))
+      // Its empty text is about the server, not the client.
+      expect(screen.getByText(/start the server to see logs here/)).toBeTruthy()
     }
   )
 
