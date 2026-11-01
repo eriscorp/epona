@@ -37,7 +37,12 @@ export async function launchEpona({ seedSettings, localAppData: reuseDir } = {})
   // which is the one thing these specs exist to model. Pointing at '.' makes
   // Electron resolve package.json -> main -> out/main/index.js, exactly as the
   // packaged app and `electron-vite preview` do.
-  const electronApp = await electron.launch({ args: ['.'], cwd: repoRoot, env })
+  // EPONA_E2E_NO_SANDBOX=1 adds --no-sandbox, for a Linux box where the
+  // kernel refuses Chromium's sandbox (Ubuntu 24.04 with
+  // kernel.apparmor_restrict_unprivileged_userns=1; A2 in the Mac and Linux
+  // release checks, HTOO-643). Off by default: the sandbox is what ships.
+  const args = process.env.EPONA_E2E_NO_SANDBOX === '1' ? ['.', '--no-sandbox'] : ['.']
+  const electronApp = await electron.launch({ args, cwd: repoRoot, env })
   await assertIsolated(electronApp, localAppData)
   return { electronApp, localAppData }
 }

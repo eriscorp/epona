@@ -218,9 +218,9 @@ mac:
   icon: build/icon.icns
   # da-win32 is a Windows-only native module; on macOS it compiles to an
   # empty stub that's never require()'d (the load is gated behind
-  # process.platform === 'win32'). The stub is byte-identical across arches
-  # and can't be lipo-merged, so tell @electron/universal to ship it as-is
-  # rather than failing the arch merge.
+  # process.platform === 'win32'). Both slices get the stub built for the
+  # host arch, which cannot be lipo-merged, so tell @electron/universal to ship
+  # it as-is rather than failing the arch merge. Harmless: nothing loads it.
   x64ArchFiles: '**/da_win32.node'
   hardenedRuntime: true
   gatekeeperAssess: false

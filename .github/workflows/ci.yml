@@ -53,9 +53,9 @@ name: CI
 #
 # What replaces it: "npm run validate", run by hand before a push. A pre-push
 # hook ran it from 2026-08-12 to 2026-10-10; it was removed because GitHub
-# Desktop and Balor could not start npm from it. "npm run validate:linux" runs
-# the same suite on real Linux through WSL, for the platform a Windows dev box
-# cannot cover.
+# Desktop and Balor could not start npm from it. The Linux box and the Mac
+# run the suite on their own OS in the pre-release pass (Sabrael, 2026-10-31);
+# the WSL run (`validate:linux`) is gone.
 #
 # release.yml validates at tag time: each of its three build jobs runs
 # "npm run validate" before it builds (HTOO-651; until then this line said so and
@@ -190,10 +190,11 @@ jobs:
           node-version: 24
           cache: npm
 
-      # `--ignore-scripts` is required, not a speed-up. `da-win32` sets
-      # `gypfile: true`, so a plain `npm ci` invokes node-gyp on it, and its
-      # binding.gyp is Windows-only — the install fails outright on both of
-      # these runners. It also skips the project's `postinstall` (install-electron,
+      # `--ignore-scripts` keeps this job small. `da-win32` sets `gypfile: true`,
+      # so a plain `npm ci` runs node-gyp on it. Off Windows that builds an empty
+      # stub (addon.cc), which needs a C++ toolchain and Python but nothing
+      # this job tests; release.yml's plain `npm ci` builds it on both runners.
+      # It also skips the project's `postinstall` (install-electron,
       # which downloads the Electron binary, then electron-builder
       # install-app-deps), neither of which the unit suite touches: nothing here
       # imports the addon or launches Electron, and the one file that would

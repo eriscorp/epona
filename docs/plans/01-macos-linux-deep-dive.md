@@ -254,6 +254,13 @@ The card asks for a fault that hides other faults to go first. Three of those co
 - `tailFile` polls the file into `instance:log`. The tail stops before the exit is sent, on Stop, Reset, a reap and the quit sweep. The Server tab's pane, the menu item and Show log work on Windows too.
 - Two costs, both now server cards. With stdout piped, Serilog drops its colours, so the window shows plain text (HS-1691, an opt-in to keep them). Ctrl+C stops the server hard, as it did before the pipe: the server's `Shutdown()` runs only from `ProcessExit`, and it has no Ctrl+C handler (HS-1690).
 
+**Group 8** (HTOO-643, HTOO-662):
+
+- HTOO-643 (F23, F24): Part C in the release checks, after the tag. C1 checks the published dmg with `spctl` and `stapler`, starts it from `/Applications` and reads its entitlements (M7). C2 starts the published AppImage, with L4 and the `libfuse2` note. Step 9 of "Before you start" covers the Ubuntu 24.04 sandbox restriction: `EPONA_E2E_NO_SANDBOX=1` for A2 (an opt-in in `e2e/helpers.js`) and `--no-sandbox` for A5.
+- HTOO-662 (F26, F27): the npm 12 and `python3` note, the A3 empty-list check, the B5 quarantine line, and the stale text in `ci.yml`, `electron-builder.yml`, `release-process.md`, `README.md`, `e2e/README.md` and `CLAUDE.md`. `verify-fuses.test.mjs` looks in the host-arch build folders too, and `release-artifacts.test.mjs` pins the dmg step's file name against `dmg.artifactName`. B3.3 was already right after group 1. The card's first item, to name the tracker's repo on line 5, is not done: epona is public, and the house rule is to call that repo "the document repo".
+- `validate:linux` and `scripts/validate-linux.mjs` are gone: the Linux box runs the suite (Sabrael, 2026-10-31).
+- **Not in any group:** F25 (HTOO-661, the AppImage environment and the inherited descriptors from L5) and F28 (HTOO-663, the Linux window icon). They stay open for a later round.
+
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.
