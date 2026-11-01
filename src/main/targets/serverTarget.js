@@ -211,16 +211,26 @@ export function consoleLogPath(instance) {
 // the line's own text, and the StreamWriter writes UTF-8 with no BOM.
 // [Console]::OutputEncoding is UTF-8 so that the server writes UTF-8 to the
 // pipe, and PowerShell reads it as UTF-8.
+//
+// Ctrl+C in the window stops the server and this script too, so the last line
+// goes in a `finally`, which PowerShell runs when it stops a script. Without it
+// a Ctrl+C left the pane with no end. The window then closes, because the
+// stopped script does not reach Read-Host.
 export function buildConsoleScript({ command, args, logFile }) {
   const quote = (s) => `'${String(s).replace(/'/g, "''")}'`
   return (
     `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ` +
     `$log = New-Object System.IO.StreamWriter(${quote(logFile)}, $false, (New-Object System.Text.UTF8Encoding $false)); ` +
     `$log.AutoFlush = $true; ` +
+    `$code = $null; ` +
+    `try { ` +
     `& ${quote(command)} ${args.map(quote).join(' ')} 2>&1 | ForEach-Object { $line = "$_"; [Console]::WriteLine($line); $log.WriteLine($line) }; ` +
-    `$code = $LASTEXITCODE; ` +
-    `$log.WriteLine('[epona] The server exited with code ' + $code + '.'); ` +
-    `$log.Close(); ` +
+    `$code = $LASTEXITCODE ` +
+    `} finally { ` +
+    `if ($null -eq $code) { $log.WriteLine('[epona] The server was stopped from its console window.') } ` +
+    `else { $log.WriteLine('[epona] The server exited with code ' + $code + '.') }; ` +
+    `$log.Close() ` +
+    `}; ` +
     `Write-Host ''; ` +
     `Write-Host ('=== Server exited (code ' + $code + '). Press Enter to close this window. ===') -ForegroundColor Yellow; ` +
     `$null = Read-Host`

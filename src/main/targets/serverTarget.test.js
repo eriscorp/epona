@@ -291,6 +291,14 @@ describe('the Windows console script', () => {
     expect(script).toContain('[Console]::OutputEncoding = [System.Text.Encoding]::UTF8')
   })
 
+  it('writes the end of the run in a finally, so a Ctrl+C in the window still ends the pane', () => {
+    // PowerShell runs a finally block when Ctrl+C stops the script.
+    expect(script).toMatch(/try \{ & .* \} finally \{ .*\$log\.Close\(\) \}/)
+    expect(script).toContain(
+      "$log.WriteLine('[epona] The server was stopped from its console window.')"
+    )
+  })
+
   it('writes the exit code to the file, and still waits for Enter in the window', () => {
     expect(script).toContain("$log.WriteLine('[epona] The server exited with code ' + $code + '.')")
     expect(script.trimEnd()).toMatch(/\$null = Read-Host$/)
