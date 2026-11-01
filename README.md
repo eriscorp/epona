@@ -161,7 +161,7 @@ npm install
 npm run rebuild         # rebuild da-win32 against Electron's ABI
 npm run dev             # development (renderer hot-reload)
 npm run build:portable  # Windows installer + portable .exe (output in dist/)
-npm run build:mac       # macOS dmg + zip (must run on macOS, unsigned)
+npm run build:mac       # macOS dmg (must run on macOS, unsigned)
 npm run build:linux     # Linux AppImage (must run from WSL2 or a Linux host)
 npm test                # vitest suite
 npm run lint            # eslint + prettier

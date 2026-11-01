@@ -9,7 +9,7 @@ npm run e2e        # builds (electron-vite) then runs all specs
 npm run e2e:only   # runs specs against the existing out/ build
 ```
 
-**Windows only, locally and in CI.** `ci.yml` runs the whole suite as its own job on `windows-2022`: it rebuilds `da-win32`, builds the app, and runs every spec below. No virtual display is involved — the job is Windows and headed.
+**Windows in CI, and every OS by hand.** `ci.yml` runs the whole suite as its own job on `windows-2022`: it rebuilds `da-win32`, builds the app, and runs every spec below. No virtual display is involved — the job is Windows and headed. On macOS and Linux, A2 in [`docs/release-checks-mac-linux.md`](../docs/release-checks-mac-linux.md) runs it in the pre-release pass; a Linux box with no display uses `xvfb-run -a`, and one that refuses Chromium's sandbox sets `EPONA_E2E_NO_SANDBOX=1`.
 
 The suite is not part of the `ubuntu-latest` / `macos-latest` unit job, and is not meant to be: the specs need the native addon and a built app.
 
