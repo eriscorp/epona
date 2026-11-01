@@ -65,6 +65,7 @@ export function createInstanceManager({
   settingsManager,
   instanceChildren,
   wireInstanceLogs,
+  tailInstanceLog,
   launchServer
 }) {
   // Validate the payload, re-resolve the instance from disk by id (spawn-path
@@ -95,7 +96,13 @@ export function createInstanceManager({
       instanceChildren.set(instance.id, { kind: 'child', value: result.child, cleanup })
       wireInstanceLogs(instance.id, result.child)
     } else if (result.success && result.pid) {
-      instanceChildren.set(instance.id, { kind: 'pid', value: result.pid, cleanup })
+      const entry = { kind: 'pid', value: result.pid, cleanup }
+      // A Windows server's console script writes its output to a file; follow
+      // it into the Log Pane (HTOO-652). `stopLog` stops the tail.
+      if (result.logFile && tailInstanceLog) {
+        entry.stopLog = tailInstanceLog(instance.id, result.logFile)
+      }
+      instanceChildren.set(instance.id, entry)
     }
     return toSafeResult(result)
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest'
 import { EventEmitter } from 'events'
-import { rmSync, mkdtempSync } from 'fs'
+import { rmSync, mkdtempSync, promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -28,6 +28,8 @@ import { tmpdir } from 'os'
 //           and a stale wrapper is not a reason to refuse them one.
 
 const sandbox = mkdtempSync(join(tmpdir(), 'epona-lifecycle-'))
+// A Windows server's console log (HTOO-652): the console script writes it.
+const logFile = () => join(sandbox, 'epona-console-inst-1.log')
 
 const WORLD_DIR = join(sandbox, 'world')
 // Ports included because the status monitor polls them on a timer as soon as boot
@@ -170,6 +172,22 @@ describe('instance:stop for a PID-tracked instance', () => {
     const exit = sends.find(([channel]) => channel === 'instance:childExit')
     expect(exit).toBeTruthy()
     expect(exit[1]).toMatchObject({ instanceId: 'inst-1', pid: PID, signal: 'SIGKILL' })
+  })
+
+  it("ends the console-log tail before the exit, so the run's last lines come first (HTOO-652)", async () => {
+    launchServer.mockResolvedValue({ success: true, pid: PID, logFile: logFile(), cleanup })
+    await harness.invoke('instance:start', { id: 'inst-1' })
+    await fs.appendFile(logFile(), '[epona] The server exited with code 0.')
+
+    await harness.invoke('instance:stop', 'inst-1')
+
+    const order = harness.windows
+      .at(-1)
+      .webContents.send.mock.calls.filter(
+        ([c]) => c === 'instance:log' || c === 'instance:childExit'
+      )
+      .map(([c, p]) => (c === 'instance:log' ? p.line : 'EXIT'))
+    expect(order).toEqual(['[epona] The server exited with code 0.', 'EXIT'])
   })
 
   it('reports a failed kill and leaves the instance tracked', async () => {

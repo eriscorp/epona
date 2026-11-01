@@ -205,14 +205,17 @@ describe('createInstanceManager.spawnAndTrackInstance', () => {
   function setup(result) {
     const instanceChildren = new Map()
     const wireInstanceLogs = vi.fn()
+    const stopLog = vi.fn()
+    const tailInstanceLog = vi.fn(() => stopLog)
     const launchServer = vi.fn().mockResolvedValue(result)
     const { spawnAndTrackInstance } = createInstanceManager({
       settingsManager: { load: vi.fn() },
       instanceChildren,
       wireInstanceLogs,
+      tailInstanceLog,
       launchServer
     })
-    return { spawnAndTrackInstance, instanceChildren, wireInstanceLogs }
+    return { spawnAndTrackInstance, instanceChildren, wireInstanceLogs, tailInstanceLog, stopLog }
   }
 
   it('tracks a child launch and wires its logs, returning an IPC-safe result', async () => {
@@ -242,6 +245,17 @@ describe('createInstanceManager.spawnAndTrackInstance', () => {
     expect(instanceChildren.get('i2')).toMatchObject({ kind: 'pid', value: 4321 })
     expect(wireInstanceLogs).not.toHaveBeenCalled()
     expect(safe).toEqual({ success: true, pid: 4321 })
+  })
+
+  it("follows a Windows server's console log into the pane (HTOO-652)", async () => {
+    const { spawnAndTrackInstance, instanceChildren, tailInstanceLog, stopLog } = setup({
+      success: true,
+      pid: 4321,
+      logFile: 'D:/logs/epona-console-i2.log'
+    })
+    await spawnAndTrackInstance({ id: 'i2' })
+    expect(tailInstanceLog).toHaveBeenCalledWith('i2', 'D:/logs/epona-console-i2.log')
+    expect(instanceChildren.get('i2').stopLog).toBe(stopLog)
   })
 
   it('does not track a failed launch', async () => {
