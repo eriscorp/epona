@@ -19,6 +19,8 @@ Each check names the tracker card it reports to. The tracker is in the document 
 5. Make sure that `ELECTRON_RUN_AS_NODE` is not set. Some agent shells set it, and then Electron runs as plain Node. Run `unset ELECTRON_RUN_AS_NODE` in each shell that builds, packages or runs e2e.
 6. Use Node 24 (`.nvmrc`).
 7. Quit any running Epona. A3 hashes the real settings folder, and a running copy changes files there.
+8. `npm --version` must be 12 or later, because step 4's `npm install-scripts ls` is an npm 12 command and Node 24 comes with npm 11 (`npm install -g npm@12`). node-gyp also needs `python3` on the PATH.
+9. **Linux:** run `sysctl kernel.apparmor_restrict_unprivileged_userns`. On Ubuntu 24.04 and later it is 1 by default, and Chromium's sandbox then aborts an unpackaged Electron (HTOO-643). If it is 1, say so in the report, run A2 with `EPONA_E2E_NO_SANDBOX=1 npm run e2e`, and start A5 with `--no-sandbox`. Linux Mint leaves it at 0.
 
 ## How to report
 
@@ -58,11 +60,12 @@ ls -d "$S"     # say in the report whether it exists
 find "$S" -type f -exec sha256sum {} + 2>/dev/null | sort > "$T/before.txt"
 npm run e2e
 find "$S" -type f -exec sha256sum {} + 2>/dev/null | sort > "$T/after.txt"
+[ -s "$T/before.txt" ] || echo "EMPTY: no hash tool, or no settings folder"
 cmp "$T/before.txt" "$T/after.txt" && echo UNCHANGED
 ls -d "$S"     # a folder that did not exist before must not exist now
 ```
 
-If `sha256sum` is missing, use `shasum -a 256`.
+If `sha256sum` is missing, use `shasum -a 256`. Two empty lists also compare as `UNCHANGED`, so an `EMPTY` line means that A3 checked nothing: fix the hash command, or say that the settings folder did not exist.
 
 Expected for A2 (30 tests in 16 files):
 
@@ -116,7 +119,7 @@ kill -0 $P 2>/dev/null && { echo "RUNNING after 10s"; kill $P; } || { wait $P; e
 grep -i integrity "$T/stderr.txt"
 ```
 
-On a Linux box with no display, start it under `xvfb-run -a`.
+On a Linux box with no display, start it under `xvfb-run -a`. With the sandbox restriction from step 9 on, add `--no-sandbox` after `"$BIN"`.
 
 Expected: `RUNNING after 10s`, and no integrity line. B1 then checks what the window shows.
 
@@ -177,7 +180,7 @@ This check needs a Hybrasyl server instance in repo mode that starts on the Mac 
 
 ### B5. Missing Command Line Tools (macOS, only if such a Mac is available) — HTOO-512
 
-This needs a Mac that has no Command Line Tools. Do not remove the tools from the Mac that runs Part A. Copy the packaged app from A4 to that Mac; it cannot run `npm ci` itself.
+This needs a Mac that has no Command Line Tools. Do not remove the tools from the Mac that runs Part A. Copy the packaged app from A4 to that Mac; it cannot run `npm ci` itself. The A4 build is not signed, so macOS quarantines the copy: run `xattr -dr com.apple.quarantine Epona.app` on that Mac before you open it.
 
 1. On the Server tab, pick a folder that is a git checkout. **Expected:** the message says to run `xcode-select --install`, not "not a git repository".
 2. Open the branch list a few times. **Expected:** the system install dialog does not come back each time.
@@ -216,6 +219,29 @@ Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected
 4. Point the Dark Ages folder at a folder with no `.dat` files. **Expected:** the toolbar says "Assets Not Found", as the Legacy tab's chip does (HTOO-660).
 5. On Linux with no `lsof` installed, start a server, end Epona with `kill -9`, open it again and press Stop. **Expected:** the server stops (Epona finds it with `ss`). The server panel's log-folder tooltip says Finder on macOS and "the file manager" on Linux (HTOO-596).
 
+## Part C: the published build, after the tag — HTOO-643
+
+Part A and Part B use a local, unsigned `--dir` build. Only the release's own files have the signature, the notarization, the hardened runtime and the entitlements that users get, and on Linux only the AppImage runs from its own mount. Do these after the tag run is green, with the files from the GitHub release.
+
+### C1. The published dmg (macOS)
+
+```bash
+DMG=~/Downloads/epona-<version>.dmg
+spctl -a -vv --type open --context context:primary-signature "$DMG"
+xcrun stapler validate "$DMG"
+```
+
+**Expected:** `accepted` with `source=Notarized Developer ID`, and `The validate action worked!`. Open the dmg, copy Epona to `/Applications`, and start it from Finder. **Expected:** as in B1, with no Gatekeeper dialog. Then run `codesign -d --entitlements - /Applications/Epona.app` (M7). **Expected:** `allow-jit`, `allow-unsigned-executable-memory` and `disable-library-validation` only, with no `allow-dyld-environment-variables` (HTOO-650).
+
+### C2. The published AppImage (Linux)
+
+```bash
+chmod +x ~/Downloads/epona-<version>-x86_64.AppImage
+~/Downloads/epona-<version>-x86_64.AppImage
+```
+
+**Expected:** the window opens. Then L4: set the sandbox restriction on for this boot (`sudo sysctl kernel.apparmor_restrict_unprivileged_userns=1`), start the AppImage again, and record whether it aborts at the sandbox check. Set it back to its value from step 9 afterwards. Say in the report if the AppImage needed `libfuse2`: Ubuntu 22.04 and later do not install it, and Mint does. Without it, `--appimage-extract-and-run` starts the AppImage. If the AppImage aborts with the restriction on, that is a code card for HTOO-643.
+
 ## Owed elsewhere — not on this page
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
@@ -226,14 +252,18 @@ These checks are for any OS, or for Windows, and are listed here so that they ar
 - **Portable exe (Windows), HTOO-466 and HTOO-351:** no Setup window flashes on close by the X, Alt+F4 or the taskbar; a second launch brings the first window to the front, also when it is minimised.
 - **Signing (Windows, the tag run), HTOO-517:** the release job signs both Windows artifacts on Java 17. Check the `java -version` line, the `[sign] signing … (java: …)` lines and the Verify signatures step.
 
-## For this release (2.9.0)
+## For this release (November 2026)
 
-Rewrite this section for each release: what applies, and what is already done.
+Rewrite this section for each release: what applies, and what is already done. The owed list for this release is the November comment on HTOO-242; tick it there as each check passes.
 
-**macOS: done** on 2026-10-11 (macOS 27.0.1, Apple Silicon, epona `66ffa71`). A1 to A5, B1, B2, B3 and B6 pass, with every count as this page expects; the results are on each card and summed up on HTOO-242. B4 and B5 were skipped by Sabrael's decision: tests cover both, and a fault would come in as a complaint.
+Everything on this page applies, on Electron 44.10.0, with these parts new since 2.9.0:
 
-**Linux: done** on 2026-10-11 (Linux Mint 22.3, x86_64, Cinnamon on X11, epona `db45145`). A1 to A6 and B6 to B8 pass, with every count as this page expects; the results are on each card and summed up on HTOO-242. The client file case from B6 is on HTOO-287.
+- **Part A:** the A2 and A3 notes, and steps 8 and 9 of "Before you start".
+- **B3.3:** the Log Pane on the Server tab, the exit notice and Show log (HTOO-589, HTOO-590).
+- **B4 steps 6 to 8**, on macOS and on Linux: quit with a repo-mode client and server, Stop on an adopted server, and a server with `config.xml` and a missing log folder.
+- **B9 and B10**, on both OS; B10 steps 1 and 2 on Windows too.
+- **Part C**, after the tag: C1 with M7, and C2 with L4.
+- **The HTOO-627 box scripts** in `docs/plans/01-box-checks/`: `lifecycle.mjs` and `build-and-git.sh` on the Mac and the Linux box, and `m4-dotnet.mjs` on the Mac. Each must print `SUMMARY: PASS`. Then the rest of the HTOO-627 table in `docs/plans/01-macos-linux-deep-dive.md`, against the release's own dmg and AppImage.
+- **Windows:** the items in "Owed elsewhere", with the server Log Pane (HTOO-652) and the tag run's Validate step in all three build jobs (HTOO-651).
 
-**Windows: done** (Sabrael, 2026-10-12): the items in "Owed elsewhere" are checked. Nothing on this page is owed for 2.9.0.
-
-When the release is published, Sabrael runs `npm run publish:version -- v2.9.0` on the Windows box. That closes Epona's row on HTOO-382; it is not a Mac or Linux step.
+When the release is published, Sabrael runs `npm run publish:version -- v<version>` on the Windows box. That closes Epona's row on HTOO-382; it is not a Mac or Linux step.
