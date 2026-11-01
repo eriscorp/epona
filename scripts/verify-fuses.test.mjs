@@ -267,8 +267,13 @@ describe('the packaged artifact, when one exists', () => {
   const CANDIDATES = [
     join(REPO_ROOT, 'dist', 'win-unpacked', 'Epona.exe'),
     join(REPO_ROOT, 'dist', 'linux-unpacked', 'epona'),
+    join(REPO_ROOT, 'dist', 'linux-arm64-unpacked', 'epona'),
     join(REPO_ROOT, 'dist', 'mac-universal', 'Epona.app'),
-    join(REPO_ROOT, 'dist', 'mac', 'Epona.app')
+    join(REPO_ROOT, 'dist', 'mac', 'Epona.app'),
+    // A host-arch build (`--arm64` or `--x64`, or `--dir` on one arch) lands
+    // here. Without these, it was skipped and the test stayed green (HTOO-662).
+    join(REPO_ROOT, 'dist', 'mac-arm64', 'Epona.app'),
+    join(REPO_ROOT, 'dist', 'mac-x64', 'Epona.app')
   ]
   const target = CANDIDATES.find((p) => existsSync(fuseFilePath(p)))
 

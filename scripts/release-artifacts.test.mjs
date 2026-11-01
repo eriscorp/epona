@@ -369,3 +369,12 @@ describe('Windows signing on a current JDK (HTOO-517)', () => {
     })
   })
 })
+
+// The dmg step signs a file by name. A rename of `dmg.artifactName` or of the
+// package left the tag run failing at the signing step, with every test green
+// (HTOO-662).
+it('signs the dmg that electron-builder names', () => {
+  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
+  expect(builder).toMatch(/^dmg:\n {2}artifactName: \$\{name\}-\$\{version\}\.\$\{ext\}$/m)
+  expect(workflow).toContain(`DMG="dist/${pkg.name}-\${VERSION}.dmg"`)
+})
