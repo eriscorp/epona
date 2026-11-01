@@ -71,6 +71,7 @@ the rules above.
 - **On macOS and Linux, Epona refuses a Windows `.exe` as the client, and tells you when the client is not executable.** Before, the `.exe` showed as a valid client and then did not start.
 - **A client on a branch runs the code from that branch when its folder is reached through a symbolic link.** Before, it could run the code from the main checkout with no error.
 - **Epona tells you when the Dark Ages folder does not exist.** Before, with settings copied from Windows, the client started without its assets and gave no error.
+- **On Windows, the Hybrasyl Server tab shows the server's output.** The console button opens the Log Pane for the selected instance, as on macOS and Linux. The server keeps its console window, which now shows its output as plain text. Epona also keeps a copy of the output in the instance's log folder, in `epona-console-<instance>.log`.
 - **On Windows and Linux, Ctrl+R, Ctrl+Shift+I and F11 do nothing.** Before, Ctrl+R reloaded the window and closed the Log Pane, Ctrl+Shift+I opened the developer tools, and F11 put the window in full screen, where it drew wrong.
 - **Epona tells you when a Reveal folder button cannot open the folder.** Before, on a Linux desktop with no program for folders, Reveal settings folder, Reveal logs folder and the Report Issue folder button did nothing. Now a notice names the folder.
 - **When Epona cannot start, its message names the logs folder of your OS.** Before, it gave the Windows folder on macOS and Linux too.

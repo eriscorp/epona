@@ -247,6 +247,13 @@ The card asks for a fault that hides other faults to go first. Three of those co
 - HTOO-660 (F19): `useAssetDirStatus` shares the folder check through the runtime store; the toolbar shows "found" only when it passes.
 - HTOO-596 (F10, F20): per-OS words in `platformWords.js` and `portOwner.js`; an `ss` fallback for a missing `lsof`; a server apphost runs directly; a `.exe` is refused off Windows.
 
+**Group 7** (HTOO-652, F29):
+
+- The console script (`buildConsoleScript`) pipes the server's stdout and stderr through `ForEach-Object`, which writes each line to the window and to `epona-console-<instance>.log` in the instance's log folder, as UTF-8 with no BOM. Stdin is not piped. Not `Tee-Object`: in Windows PowerShell 5.1 it writes UTF-16, and with `2>&1` each stderr line prints as an error record.
+- The pipe and the last line are in `try`/`finally`, so a run ends with `[epona] The server exited with code N.`, or after a Ctrl+C in the window with `[epona] The server was stopped from its console window.`
+- `tailFile` polls the file into `instance:log`. The tail stops before the exit is sent, on Stop, Reset, a reap and the quit sweep. The Server tab's pane, the menu item and Show log work on Windows too.
+- Two costs, both now server cards. With stdout piped, Serilog drops its colours, so the window shows plain text (HS-1691, an opt-in to keep them). Ctrl+C stops the server hard, as it did before the pipe: the server's `Shutdown()` runs only from `ProcessExit`, and it has no Ctrl+C handler (HS-1690).
+
 ### Where the work is done, and when the boxes check it
 
 Sabrael approved this on 2026-10-31.
@@ -290,7 +297,7 @@ Each one settles a finding marked **box**. They run on the Mac and the Linux box
 
 | Check | For | Steps |
 | --- | --- | --- |
-| W1 | F29 | With the tee in place, start a server and check that interactive shutdown still works in the console window. |
+| W1 | F29 | With the tee in place, start a server and check that interactive shutdown still works in the console window. **Done 2026-10-31 (Sabrael):** Ctrl+C stops the server, as before the pipe, but hard; see Group 7 and HS-1690. |
 | W2 | F17 | L3 on Windows. |
 
 ### Results on the Mac (2026-10-31)
