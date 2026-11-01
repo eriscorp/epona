@@ -27,7 +27,9 @@ export default function PathPicker({
         <Typography variant="caption" color="text.button">
           {label}
         </Typography>
-        {chip && <Chip size="small" {...chip} variant="outlined" />}
+        {/* A status chip is filled: outlined, its thin letters were hard to
+            read on the light themes (Sabrael, 2026-10-31). */}
+        {chip && <Chip size="small" {...chip} />}
       </Box>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
         <Typography variant="body2" sx={{ ...PICKER_SX, opacity: value ? 1 : 0.5 }}>
