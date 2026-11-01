@@ -80,6 +80,7 @@ the rules above.
 - **On macOS and Linux, Epona's messages name Activity Monitor, Finder, the file manager or `kill`, not Task Manager or Explorer.** On Linux, Stop finds a server with `ss` when `lsof` is not installed. The world folder example shows a path for your OS.
 - **On macOS and Linux, a server published as a program, without `.dll`, runs.** Before, Epona ran it through `dotnet`, which failed. A Windows `.exe` is refused with a clear message.
 - **Two branches whose names differ only in capital letters get their own worktree folders.** Before, on macOS and Windows they shared one folder, and the launch failed.
+- **The .NET status and the folder status are easy to read on the light themes.** They now show as filled chips. Before, their thin outlined letters were hard to read on Danaan, Untamed and Mundanes.
 - **Epona deletes the Dark Ages installer after a successful install.** Before, the 208 MB download stayed in Epona's settings folder on macOS and Linux.
 - **Server and client output keeps letters such as é when the output arrives in pieces.** Before, such a letter could show as two replacement characters.
 - **On an Apple Silicon Mac, Epona tells you when a server build needs Rosetta.** Before, the build stopped with exit code 1 and no explanation. Now the log and the notice give the command that installs Rosetta.

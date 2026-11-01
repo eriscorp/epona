@@ -385,7 +385,9 @@ export default function ServerInstancePanel({
             <Typography variant="caption" color="text.button">
               Runtime
             </Typography>
-            <Chip size="small" label={chip.label} color={chip.color} variant="outlined" />
+            {/* Filled, as on the client panel: an outlined chip's thin letters
+                were hard to read on the light themes. */}
+            <Chip size="small" label={chip.label} color={chip.color} />
           </Box>
           <PathPicker
             label="Server Repo"

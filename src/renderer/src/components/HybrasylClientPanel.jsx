@@ -235,7 +235,9 @@ export default function HybrasylClientPanel({
         <Typography variant="caption" color="text.button">
           Runtime
         </Typography>
-        <Chip size="small" label={chip.label} color={chip.color} variant="outlined" />
+        {/* Filled: an outlined chip's thin letters were hard to read on the
+            light themes (Sabrael, 2026-10-31). */}
+        <Chip size="small" label={chip.label} color={chip.color} />
         <Box sx={{ flex: 1 }} />
         <Tooltip title={consoleTooltip}>
           <span>
