@@ -29,6 +29,7 @@ import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
 import { buildHint } from './buildHints.js'
 import { openFolder } from './openFolder.js'
+import { tailFile } from './fileTail.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { reprobeGit } from './gitExec.js'
 import {
@@ -1068,9 +1069,22 @@ app.whenReady().then(() => {
   // those back.
   //
   // Covered by index.instanceLifecycle.test.js, which pins both sides.
-  function untrackPidInstance(instanceId, pid) {
+  //
+  // The entry's console-log tail (HTOO-652) stops first, so the run's last
+  // lines reach the Log Pane before its exit line.
+  async function untrackPidInstance(instanceId, entry) {
     instanceChildren.delete(instanceId)
-    notifyPidExit(instanceId, pid)
+    await entry.stopLog?.()
+    notifyPidExit(instanceId, entry.value)
+  }
+
+  // A Windows server's output, from the file that its console script writes,
+  // into the Log Pane (HTOO-652). Returns the function that stops the tail.
+  function tailInstanceLog(instanceId, logFile) {
+    const tail = tailFile(logFile, (line) =>
+      safeSend('instance:log', { instanceId, stream: 'stdout', line })
+    )
+    return () => tail.stop()
   }
 
   ipc.handle('instance:listServerConfigs', async (_, dataDir) => listServerConfigs(dataDir))
@@ -1276,6 +1290,7 @@ app.whenReady().then(() => {
     settingsManager,
     instanceChildren,
     wireInstanceLogs,
+    tailInstanceLog,
     launchServer
   })
 
@@ -1293,6 +1308,7 @@ app.whenReady().then(() => {
     // releases the git worktree when the user just closes the console window)
     // and tell the renderer the process ended.
     onReap: async (instanceId, entry) => {
+      await entry.stopLog?.()
       notifyPidExit(instanceId, entry.value)
       await entry.cleanup?.()
     }
@@ -1427,7 +1443,7 @@ app.whenReady().then(() => {
       // what lets a second Stop retry the same wrapper.
       return { success: false, error: `kill failed: ${result.error.message}` }
     }
-    untrackPidInstance(instanceId, pid)
+    await untrackPidInstance(instanceId, tracked)
     await runCleanup()
     return { success: true, wasRunning: true }
   }
@@ -1461,7 +1477,7 @@ app.whenReady().then(() => {
       const pid = tracked.value
       // The kill result is deliberately not checked — see untrackPidInstance.
       await killProcessTree(pid)
-      untrackPidInstance(instance.id, pid)
+      await untrackPidInstance(instance.id, tracked)
     }
 
     try {
@@ -1700,6 +1716,7 @@ async function stopTrackedOnQuit(tracked) {
   tracked.stopping = true
   const result =
     tracked.kind === 'child' ? await stopChild(tracked.value) : await killProcessTree(tracked.value)
+  await tracked.stopLog?.()
   if (!result.ok) throw result.error
   await tracked.cleanup()
 }

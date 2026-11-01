@@ -193,19 +193,61 @@ export function validateForLaunch(instance) {
   return { ok: true }
 }
 
-// Spawn `command args` inside a new visible PowerShell console window that
-// pauses on Read-Host after exit so crash traces don't vanish. Returns
-// { success, pid } where pid is the wrapper PID (taskkill /F /T against it
-// reaps the whole tree). Used by both binary and repo modes.
-async function spawnInPowerShellConsole({ command, args, env, cwd }) {
-  const quote = (s) => `'${String(s).replace(/'/g, "''")}'`
+// The file that the Windows console script copies the server's output to, in
+// the instance's log folder, for the Log Pane (HTOO-652). One per instance, so
+// two instances that share a log folder do not share it.
+export function consoleLogPath(instance) {
+  return join(instance.logDir, `epona-console-${String(instance.id).replace(/[^\w.-]/g, '_')}.log`)
+}
 
-  const childScript =
-    `& ${quote(command)} ${args.map(quote).join(' ')}; ` +
-    `$code = $LASTEXITCODE; ` +
+// The script that runs in the server's console window. It shows each output
+// line in the window and writes it to `logFile`, which Epona follows into the
+// Log Pane (HTOO-652). Stdin is not piped, so the server still has the console
+// for its input. It pauses on Read-Host after the exit so crash traces do not
+// vanish, and it writes the exit code to the file too.
+//
+// Not Tee-Object: in Windows PowerShell 5.1 it writes UTF-16, and with `2>&1`
+// PowerShell prints each stderr line as an error record. ForEach-Object writes
+// the line's own text, and the StreamWriter writes UTF-8 with no BOM.
+// [Console]::OutputEncoding is UTF-8 so that the server writes UTF-8 to the
+// pipe, and PowerShell reads it as UTF-8.
+//
+// Ctrl+C in the window stops the server and this script too, so the last line
+// goes in a `finally`, which PowerShell runs when it stops a script. Without it
+// a Ctrl+C left the pane with no end. The window then closes, because the
+// stopped script does not reach Read-Host.
+export function buildConsoleScript({ command, args, logFile }) {
+  const quote = (s) => `'${String(s).replace(/'/g, "''")}'`
+  return (
+    `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ` +
+    `$log = New-Object System.IO.StreamWriter(${quote(logFile)}, $false, (New-Object System.Text.UTF8Encoding $false)); ` +
+    `$log.AutoFlush = $true; ` +
+    `$code = $null; ` +
+    `try { ` +
+    `& ${quote(command)} ${args.map(quote).join(' ')} 2>&1 | ForEach-Object { $line = "$_"; [Console]::WriteLine($line); $log.WriteLine($line) }; ` +
+    `$code = $LASTEXITCODE ` +
+    `} finally { ` +
+    `if ($null -eq $code) { $log.WriteLine('[epona] The server was stopped from its console window.') } ` +
+    `else { $log.WriteLine('[epona] The server exited with code ' + $code + '.') }; ` +
+    `$log.Close() ` +
+    `}; ` +
     `Write-Host ''; ` +
     `Write-Host ('=== Server exited (code ' + $code + '). Press Enter to close this window. ===') -ForegroundColor Yellow; ` +
     `$null = Read-Host`
+  )
+}
+
+// Spawn `command args` inside a new visible PowerShell console window (see
+// buildConsoleScript). Returns { success, pid, logFile } where pid is the
+// wrapper PID (taskkill /F /T against it reaps the whole tree). Used by both
+// binary and repo modes.
+async function spawnInPowerShellConsole({ command, args, env, cwd, logFile }) {
+  const quote = (s) => `'${String(s).replace(/'/g, "''")}'`
+
+  // Empty it first, so that the Log Pane does not show the last run while the
+  // console window starts.
+  await fs.writeFile(logFile, '')
+  const childScript = buildConsoleScript({ command, args, logFile })
   const encodedScript = Buffer.from(childScript, 'utf16le').toString('base64')
 
   const outerPs =
@@ -260,7 +302,7 @@ async function spawnInPowerShellConsole({ command, args, env, cwd }) {
       error: `Could not parse server wrapper PID from PowerShell output: ${psStdout.trim() || '(empty)'}`
     }
   }
-  return { success: true, pid: wrapperPid }
+  return { success: true, pid: wrapperPid, logFile }
 }
 
 // Non-Windows direct spawn: no PowerShell wrapper — spawn the server directly
@@ -305,10 +347,11 @@ async function launchBinary(instance) {
     command: spec.command,
     args: spec.args,
     env: spec.env,
-    cwd: instance.dataDir
+    cwd: instance.dataDir,
+    logFile: consoleLogPath(instance)
   })
   if (!result.success) return result
-  return { success: true, pid: result.pid, cleanup: async () => {} }
+  return { success: true, pid: result.pid, logFile: result.logFile, cleanup: async () => {} }
 }
 
 async function launchRepo(instance) {
@@ -428,14 +471,15 @@ async function launchRepo(instance) {
       command: spec.command,
       args: spec.args,
       env: spec.env,
-      cwd: serverWorktreePath
+      cwd: serverWorktreePath,
+      logFile: consoleLogPath(instance)
     })
     if (!result.success) {
       // Spawn failed — undo what we set up so the next attempt is clean.
       await cleanup()
       return result
     }
-    return { success: true, pid: result.pid, cleanup }
+    return { success: true, pid: result.pid, logFile: result.logFile, cleanup }
   } catch (err) {
     // Any setup step (worktree add, build-props write) blew up — undo and
     // report. cleanup() already swallows each step's errors during recovery.

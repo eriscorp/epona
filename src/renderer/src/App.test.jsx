@@ -325,7 +325,9 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
     delete savedSettings.activeInstance
   })
 
-  it.each(['darwin', 'linux'])(
+  // Every OS: on Windows the console script copies the output to a file that
+  // main follows into the pane (HTOO-652).
+  it.each(['darwin', 'linux', 'win32'])(
     '%s: the console button opens the pane for the instance',
     async (platform) => {
       await renderServerTab(platform)
@@ -336,11 +338,6 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
       await waitFor(() => expect(screen.getAllByText('Local').length).toBeGreaterThan(1))
     }
   )
-
-  it('win32: the console button stays off, because the server has its own console', async () => {
-    await renderServerTab('win32')
-    expect(screen.getByTestId('server-log-toggle').disabled).toBe(true)
-  })
 
   it('shows Start Server again after a Start that throws (HTOO-594)', async () => {
     // A rejected IPC call left the button on "Starting…" until a reload.
@@ -384,10 +381,10 @@ describe('a server instance on the Server tab (HTOO-589, HTOO-590)', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('win32: the notice has no Show log, because there is no pane for the server', async () => {
+  it('win32: the notice has Show log too, now that the pane has the output (HTOO-652)', async () => {
     const emit = await renderServerTab('win32', { running: true })
     emit.exit({ instanceId: 'inst-1', pid: 5150, code: 1, signal: null, unexpected: true })
     await screen.findByRole('alert')
-    expect(screen.queryByRole('button', { name: 'Show log' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Show log' })).toBeTruthy()
   })
 })

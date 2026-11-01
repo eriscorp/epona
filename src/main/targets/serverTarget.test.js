@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   serverConfigPath,
   leftoverServerHint,
+  buildConsoleScript,
+  consoleLogPath,
   buildBinarySpawn,
   buildRepoSpawn,
   validateForLaunch
@@ -260,5 +262,51 @@ describe('validateForLaunch for a .exe off Windows (HTOO-596)', () => {
     expect(validateForLaunch({ ...BASE_INSTANCE, binaryPath: 'D:/hyb/Hybrasyl.exe' })).toEqual({
       ok: true
     })
+  })
+})
+
+// HTOO-652. The console window on Windows keeps the server's output, and the
+// script copies each line to a file that Epona follows into the Log Pane.
+describe('the Windows console script', () => {
+  const script = buildConsoleScript({
+    command: 'C:/Program Files/dotnet/dotnet.exe',
+    args: ['run', '--project', "D:/it's/Hybrasyl.csproj"],
+    logFile: 'D:/logs/epona-console-i1.log'
+  })
+
+  it('pipes stdout and stderr, and leaves stdin to the console', () => {
+    expect(script).toContain(
+      "& 'C:/Program Files/dotnet/dotnet.exe' 'run' '--project' 'D:/it''s/Hybrasyl.csproj' 2>&1 | ForEach-Object"
+    )
+    expect(script).not.toMatch(/<|\$input/)
+  })
+
+  it('writes each line to the window and to the file as UTF-8 with no BOM', () => {
+    // Tee-Object in Windows PowerShell 5.1 writes UTF-16.
+    expect(script).not.toContain('Tee-Object')
+    expect(script).toContain(
+      "New-Object System.IO.StreamWriter('D:/logs/epona-console-i1.log', $false, (New-Object System.Text.UTF8Encoding $false))"
+    )
+    expect(script).toContain('[Console]::WriteLine($line); $log.WriteLine($line)')
+    expect(script).toContain('[Console]::OutputEncoding = [System.Text.Encoding]::UTF8')
+  })
+
+  it('writes the end of the run in a finally, so a Ctrl+C in the window still ends the pane', () => {
+    // PowerShell runs a finally block when Ctrl+C stops the script.
+    expect(script).toMatch(/try \{ & .* \} finally \{ .*\$log\.Close\(\) \}/)
+    expect(script).toContain(
+      "$log.WriteLine('[epona] The server was stopped from its console window.')"
+    )
+  })
+
+  it('writes the exit code to the file, and still waits for Enter in the window', () => {
+    expect(script).toContain("$log.WriteLine('[epona] The server exited with code ' + $code + '.')")
+    expect(script.trimEnd()).toMatch(/\$null = Read-Host$/)
+  })
+
+  it('keeps one file per instance in its log folder', () => {
+    expect(consoleLogPath({ logDir: 'D:/logs', id: 'inst/1 x' })).toBe(
+      join('D:/logs', 'epona-console-inst_1_x.log')
+    )
   })
 })
