@@ -213,21 +213,17 @@ export default function App() {
     update({ targetKind: TAB_ORDER[index] })
   }
 
-  // The server's output reaches Epona on macOS and Linux, where the server runs
-  // as Epona's child (HTOO-590). On Windows it runs in its own console window, so
-  // its output does not reach the pane yet (HTOO-652).
-  const serverLogPane = !isWindows
-
   // The console button on the Hybrasyl Client tab is enabled in repo mode only,
-  // and the one on the Server tab where the server's output reaches Epona. The
-  // menu's Log Pane item follows them. An open pane stays open on the other
+  // and the one on the Server tab when an instance is selected. The server's
+  // output reaches the pane on every OS: on macOS and Linux the server is
+  // Epona's child (HTOO-590), and on Windows its console script copies the
+  // output to a file that main follows (HTOO-652). The menu's Log Pane item
+  // follows the buttons. An open pane stays open on the other
   // tabs, so the item is also enabled while the pane is open, to close it.
   const canToggleLogPane =
     logPaneOpen ||
     (activeTab === 1 && settings.targets.hybrasyl.mode === 'repo') ||
-    (activeTab === 2 &&
-      serverLogPane &&
-      settings.instances.some((i) => i.id === settings.activeInstance))
+    (activeTab === 2 && settings.instances.some((i) => i.id === settings.activeInstance))
 
   // The macOS application menu (src/main/appMenu.js). Each command runs the same
   // handler as its button. Inert off macOS.
@@ -453,7 +449,6 @@ export default function App() {
                     onOpenSettings={() => setSettingsOpen(true)}
                     onSelect={(id) => update({ activeInstance: id })}
                     onInstancesChange={(next) => update({ instances: next })}
-                    logPaneAvailable={serverLogPane}
                     logPaneOpen={logPaneOpen}
                     onToggleLogPane={() => setLogPaneOpen((o) => !o)}
                     // Start/Stop/Reset write an optimistic row so the button flips on
@@ -536,9 +531,7 @@ export default function App() {
                   severity: 'error',
                   message: exitNotice.message,
                   duration: 15000,
-                  action: serverLogPane
-                    ? { label: 'Show log', onClick: () => showServerLog(exitNotice.instanceId) }
-                    : undefined
+                  action: { label: 'Show log', onClick: () => showServerLog(exitNotice.instanceId) }
                 }
               : folderNotice
           }
