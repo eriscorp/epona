@@ -107,3 +107,53 @@ describe('committed icon artifacts', () => {
     })
   })
 })
+
+// The hicolor set above is half of the taskbar icon. The other half is the
+// config that installs it and ties the running window to the .desktop entry
+// (HTOO-38, HTOO-63). This replaced the check by eye of the taskbar icon on the
+// Linux box (Sabrael, 2026-11-02). A6 still reads the built .deb.
+describe('the Linux icon config', () => {
+  const builderYml = readFileSync(join(REPO_ROOT, 'electron-builder.yml'), 'utf8').replace(
+    /\r\n/g,
+    '\n'
+  )
+  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
+
+  /**
+   * The keys of the top-level `linux:` block, comments excluded. Raw text, as in
+   * portable-config.test.mjs: the repo has no YAML dependency of its own. Only
+   * `  key: value` at exactly two spaces counts, and the next column-0 key ends
+   * the block.
+   */
+  function linuxKeys() {
+    const lines = builderYml.split('\n')
+    const start = lines.indexOf('linux:')
+    expect(start, 'electron-builder.yml has no top-level linux: block').toBeGreaterThan(-1)
+    const keys = {}
+    for (const line of lines.slice(start + 1)) {
+      if (/^\S/.test(line)) break
+      const found = /^ {2}([A-Za-z]+):\s*(.*?)\s*$/.exec(line)
+      if (found) keys[found[1]] = found[2]
+    }
+    return keys
+  }
+
+  it('linux.icon points at build/icons, not a single file', () => {
+    // A single PNG becomes one hicolor entry at its own size. With linux.icon
+    // gone, mac.icon outranks the top-level icon and Linux gets the .icns.
+    expect(linuxKeys().icon).toBe('build/icons')
+  })
+
+  it('the desktop-name pair is set on both sides', () => {
+    // Without both, the desktop cannot tie the running window to epona.desktop,
+    // and the taskbar draws a generic icon however correct build/icons/ is.
+    expect(pkg.desktopName).toBe('epona.desktop')
+    expect(linuxKeys().syncDesktopName).toBe('true')
+  })
+
+  it('the deb has a maintainer', () => {
+    // The .deb installs the desktop entry and the icons, and electron-builder
+    // fails the deb with no maintainer.
+    expect(linuxKeys().maintainer).toMatch(/\S/)
+  })
+})
