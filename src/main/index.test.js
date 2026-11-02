@@ -130,6 +130,30 @@ describe('the response-header CSP (HTOO-467)', () => {
   })
 })
 
+describe('the window-button channels', () => {
+  // The window buttons, from the main side. AppTitleBar.test.jsx checks that
+  // each button sends its channel; this checks what main does with it, on the
+  // booted handlers. It replaced a check by eye on the Linux box (Sabrael,
+  // 2026-11-02). The window is a fixed size (maximizable: false), so there is
+  // no maximise channel. close() is replaced while it runs: closing the main
+  // window for real ends this file's booted process (see index.windowClose).
+  it('minimise minimises the main window', () => {
+    const main = harness.windows.at(-1)
+    const minimize = vi.spyOn(main, 'minimize')
+    harness.listeners.get('window:minimize')(harness.trustedEventFor())
+    expect(minimize).toHaveBeenCalledOnce()
+    minimize.mockRestore()
+  })
+
+  it('close closes the main window', () => {
+    const main = harness.windows.at(-1)
+    const close = vi.spyOn(main, 'close').mockImplementation(() => {})
+    harness.listeners.get('window:close')(harness.trustedEventFor())
+    expect(close).toHaveBeenCalledOnce()
+    close.mockRestore()
+  })
+})
+
 describe('the IPC sender guard', () => {
   // CLAUDE.md: "Register IPC handlers on `ipc`, never the raw `ipcMain`."
   // guardIpc wraps ipcMain once so the check applies by construction, and a
