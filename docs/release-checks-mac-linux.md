@@ -137,7 +137,7 @@ dpkg-deb --fsys-tarfile "$DEB" | tar -xO ./usr/share/applications/epona.desktop
 Expected:
 
 - One `epona.png` for each of the eight hicolor sizes in `build/icons/`, `16x16` to `512x512`. The 256 is the square tile, full-bleed (no light plate around it).
-- The desktop file is `epona.desktop`, with `Icon=epona` and `StartupWMClass=epona`. The file name and the window class must agree, or the taskbar shows a generic icon (B8).
+- The desktop file is `epona.desktop`, with `Icon=epona` and `StartupWMClass=epona`. The file name and the window class must agree, or the taskbar shows a generic icon.
 
 ## Part B: checks a person does
 
@@ -194,15 +194,13 @@ This needs a Mac that has no Command Line Tools. Do not remove the tools from th
 3. List the folder. It holds the client files, including `Legend.dat`. On Linux, record the case of the names exactly as they are on disk.
 4. Choose another empty folder and start an unpack. Kill Epona while it unpacks: a `<folder>.epona-incomplete-<n>` folder stays beside the destination. Start Epona again and unpack into the same folder. **Expected:** the leftover folder is gone (HTOO-462). The sweep removes only leftovers beside the folder it unpacks into.
 
-### B7. The splash spinner (Linux) — HTOO-553
+### B7 and B8. The chrome on Linux: retired
 
-Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected:** the spinner is a round ring. Linux has no Segoe UI, and with the fallback font the column used to squeeze the spinner into an oval that wobbled as it turned.
+Sabrael retired the Linux chrome checks on 2026-11-02. Tests cover each one, and A1 runs them:
 
-### B8. Desktop integration (Linux) — HTOO-38, HTOO-63
-
-1. Install the `.deb` from A6 (`sudo apt install ./dist/<file>.deb`).
-2. Start Epona from the application menu. **Expected:** the menu entry shows the square tile icon, and the taskbar shows the same icon for the running window, not a generic one.
-3. Remove it afterwards (`sudo apt remove epona`).
+- **The round splash spinner** (B7, HTOO-553): `src/main/splash.test.js` pins `flex-shrink: 0` on the spinner and the logo, and the spinner's equal width and height and `border-radius: 50%`.
+- **The menu and taskbar icon** (B8, HTOO-38, HTOO-63): `scripts/icons.test.mjs` pins the eight hicolor sizes, `linux.icon`, the desktop-name pair (`desktopName` and `syncDesktopName`) and the deb's maintainer. A6 still reads the icons and the desktop file from a real `.deb`.
+- **The title bar and the toolbar on the eight themes** (HTOO-572), which the theme walk under "Owed elsewhere" covered: `chromeContrast.test.jsx` (the bar text and glyphs, the outline or the flat bar, light text on a decorated bar, the hover and close-hover colours), `tertiary.test.js` (the toolbar differs from the title bar), `NavToolbar.test.jsx` (the client status and the toolbar icons are easy to read, and the open Settings pane has a ring) and `AppTitleBar.test.jsx` (the theme's chrome, and the window buttons wired to the bridge). `e2e/theme-switch.spec.js` applies all eight in the real app.
 
 ### B9. The Hybrasyl client launch (both OS) — HTOO-593, HTOO-594, HTOO-656
 
@@ -246,7 +244,7 @@ chmod +x ~/Downloads/epona-<version>-x86_64.AppImage
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
 
-- **Theme walk (any OS), HTOO-572:** on each of the eight themes (Settings → Theme), check the title bar, the toolbar below it, the tabs, a filled button and its hover, and the "You're running this" chip in What's New. Danaan, Grinneal, Shattered and Untamed have a dark title bar with light, outlined text; Hybrasyl and Chadul have light outlined text; Mundanes and Dubhaimid are flat. No bar text is engraved. The close button turns red under the pointer. The toolbar below the title bar has a different colour from the title bar, and the client status and the toolbar icons are easy to read. On the six Dark Ages themes, the Stop Server button shows the error colour. Then open Settings → Theme → Theme gallery and look at each section in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
+- **Theme walk (any OS), HTOO-572:** on each of the eight themes (Settings → Theme), check the tabs, a filled button and its hover, and the "You're running this" chip in What's New. On the six Dark Ages themes, the Stop Server button shows the error colour. Then open Settings → Theme → Theme gallery and look at each section in each theme. A settings file that names the retired Spark theme opens in Dubhaimid. Tests now cover the title bar and the toolbar (B7 and B8).
 - **Quit prompts (Windows), HTOO-242:** with a repo-mode server running, the title-bar X, Alt+F4 and the in-app X each ask once; Cancel keeps the window and the server; Quit exits with no second question. Closing from the taskbar while minimised restores the window and asks.
 - **Server Log Pane (Windows), HTOO-652:** start a repo-mode server, open the pane on the Server tab, and check that the build and start lines arrive. Stop the server: the pane ends with `— process … ended (signal SIGKILL) —`, because Stop ends the console script with `taskkill /F`, before it can write a line of its own. A server that exits by itself ends with `[epona] The server exited with code …`, and a Ctrl+C in the console window with `[epona] The server was stopped from its console window.`
 - **Portable exe (Windows), HTOO-466 and HTOO-351:** no Setup window flashes on close by the X, Alt+F4 or the taskbar; a second launch brings the first window to the front, also when it is minimised.
@@ -266,6 +264,7 @@ Everything on this page applies, on Electron 44.10.0, with these parts new since
 - **The HTOO-627 box scripts** in `docs/plans/01-box-checks/`: `lifecycle.mjs` and `build-and-git.sh` on the Mac and the Linux box, and `m4-dotnet.mjs` on the Mac. Each must print `SUMMARY: PASS`. Then the rest of the HTOO-627 table in `docs/plans/01-macos-linux-deep-dive.md`, against the release's own dmg and AppImage.
 - **Windows:** the items in "Owed elsewhere", with the server Log Pane (HTOO-652) and the tag run's Validate step in all three build jobs (HTOO-651).
 - **N1 to N5 below**, on both OS: checks for the HTOO-627 cards that no step above covers.
+- **B7 and B8 are retired** (Sabrael, 2026-11-02), with the title bar and the toolbar in the theme walk. Tests cover them.
 
 ### Checks for this release only
 
