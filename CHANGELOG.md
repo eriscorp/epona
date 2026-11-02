@@ -33,6 +33,8 @@ the rules above.
 
 ## [2.10.0] - 2026-11-02
 
+**macOS: this release is signed but not notarized.** The first time you open Epona, macOS says that it cannot verify the app. Click Done. Then open System Settings → Privacy & Security, and click Open Anyway beside the Epona message. After that, Epona opens as usual.
+
 ### Added
 
 - **The Dubhaimid theme.** Dubhaimid is the dark theme with plain controls that the other house apps have. Select it in Settings → Theme.
