@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hybrasylClientPathConfigured } from './actionButtonGate.js'
+import { hybrasylClientPathConfigured, hybrasylAssetWarning } from './actionButtonGate.js'
 
 describe('hybrasylClientPathConfigured', () => {
   it('returns true in binary mode when binaryPath is set', () => {
@@ -47,5 +47,28 @@ describe('hybrasylClientPathConfigured', () => {
       }
     }
     expect(hybrasylClientPathConfigured(settings)).toBe(true)
+  })
+})
+
+describe('hybrasylAssetWarning (HTOO-669)', () => {
+  const noDats = { ok: false, reason: 'no-dat-files' }
+
+  it('asks before a Hybrasyl launch off Windows when the folder has no .dat files', () => {
+    expect(hybrasylAssetWarning('hybrasyl', 'darwin', noDats)).toBe(true)
+    expect(hybrasylAssetWarning('hybrasyl', 'linux', noDats)).toBe(true)
+  })
+
+  it('does not ask for a folder with game files', () => {
+    expect(hybrasylAssetWarning('hybrasyl', 'darwin', { ok: true, datCount: 21 })).toBe(false)
+  })
+
+  it("leaves an unset or missing folder to main's error (HTOO-656)", () => {
+    expect(hybrasylAssetWarning('hybrasyl', 'darwin', { ok: false, reason: 'unset' })).toBe(false)
+    expect(hybrasylAssetWarning('hybrasyl', 'linux', { ok: false, reason: 'missing' })).toBe(false)
+  })
+
+  it('does not ask on Windows or for the legacy client', () => {
+    expect(hybrasylAssetWarning('hybrasyl', 'win32', noDats)).toBe(false)
+    expect(hybrasylAssetWarning('legacy', 'darwin', noDats)).toBe(false)
   })
 })
