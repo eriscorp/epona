@@ -177,7 +177,6 @@ This check needs a Hybrasyl server instance in repo mode that starts on the Mac 
 6. Start the instance, and launch the Hybrasyl client in repo mode on a pinned branch. Press ⌘Q, then Quit. **Expected:** the question lists both. Within about 5 seconds the client closes and Epona exits. `ps` shows no process from either launch, and `.worktrees/<branch>` is gone. Do this step on Linux too (HTOO-644).
 7. Start the instance, then end Epona with `kill -9`. Open Epona again and press Stop on the instance. **Expected:** the instance shows as stopped, and `lsof -iTCP:<lobbyPort> -sTCP:LISTEN` shows nothing. Do this step on Linux too (HTOO-642).
 8. Set the instance's Server Config to `config.xml` (it has no `Name`), and its Log Dir to a folder that does not exist. Start the instance. **Expected:** the server starts, and the log folder exists. Open the Log Pane and click Save Log: the dialog opens in that folder. Do this step on Linux too (HTOO-595, HTOO-587, HTOO-588).
-9. Use an instance on a branch, with an XML branch. Set its Server Config to a file that does not exist, and start it. Wait for the notice that the server stopped. **Expected:** `.worktrees/<branch>/Directory.Build.props` is gone. Set the Server Config back and start the instance again: it starts, with no "Another running instance already points…" error. Do this step on Linux too (HTOO-641).
 
 ### B5. Missing Command Line Tools (macOS, only if such a Mac is available) — HTOO-512
 
@@ -194,7 +193,6 @@ This needs a Mac that has no Command Line Tools. Do not remove the tools from th
 2. **Expected:** the progress bar moves and the unpack finishes. The panel then shows the folder as a usable client folder.
 3. List the folder. It holds the client files, including `Legend.dat`. On Linux, record the case of the names exactly as they are on disk.
 4. Choose another empty folder and start an unpack. Kill Epona while it unpacks: a `<folder>.epona-incomplete-<n>` folder stays beside the destination. Start Epona again and unpack into the same folder. **Expected:** the leftover folder is gone (HTOO-462). The sweep removes only leftovers beside the folder it unpacks into.
-5. After the install in step 2 finishes, list Epona's settings folder. **Expected:** it holds no `DarkAges-installer.exe` (about 208 MB) and no `.meta.json` file for it (HTOO-657).
 
 ### B7. The splash spinner (Linux) — HTOO-553
 
@@ -212,7 +210,6 @@ Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected
 2. Copy the client program and remove its execute bit (`chmod -x`). Pick the copy. **Expected:** the message names `chmod +x`. Pick a Windows `.exe`. **Expected:** the message says that it is a Windows program (HTOO-594).
 3. Pick a client program that cannot start, for example an x86_64-only build on Apple Silicon with no Rosetta, or a script with no interpreter. Click Launch. **Expected:** an error that says why, not a launch that does nothing (HTOO-594).
 4. In `settings.json`, set `clientPath` to a Windows path such as `C:\DarkAges\Darkages.exe`, then start Epona and launch the client. **Expected:** "Dark Ages folder not set" (HTOO-656).
-5. Make a symbolic link to the client checkout (`ln -s <checkout> ~/brigid-link`). In repo mode, pick the csproj through the link, pin a branch, and click Launch. Run `ps -o command= -p $(pgrep -f 'dotnet run --project')`. **Expected:** the `--project` path is inside `.worktrees/<branch>/`, not in the main checkout (HTOO-647).
 
 ### B10. Keys, folders and status (both OS; steps 1 and 2 on Windows too) — HTOO-649, HTOO-658, HTOO-659, HTOO-660, HTOO-596
 
@@ -220,13 +217,7 @@ Start Epona (`npm run dev` or the packaged app) and watch the splash. **Expected
 2. In Settings, click Reveal settings folder, and in Report Issue click the logs folder button. **Expected:** the folder opens. On a Linux desktop with no handler for folders (start Epona with `XDG_DATA_HOME`, `XDG_DATA_DIRS` and `XDG_CONFIG_DIRS` pointed at empty folders, as L6 did), a notice names the folder instead (HTOO-658).
 3. On the Hybrasyl Client tab, select a profile with the redirect off. **Expected:** the caption under the profile names its host and port, not "No redirect". Edit the profile: off Windows there is no redirect checkbox, and the host can be changed (HTOO-659).
 4. Point the Dark Ages folder at a folder with no `.dat` files. **Expected:** the toolbar says "Assets Not Found", as the Legacy tab's chip does (HTOO-660).
-5. On Linux with no `lsof` installed, start a server, end Epona with `kill -9`, open it again and press Stop. **Expected:** the server stops (Epona finds it with `ss`). The server panel's log-folder tooltip says Finder on macOS and "the file manager" on Linux. The world folder field in Settings shows `/Users/you/Hybrasyl/world` on macOS and `/home/you/hybrasyl/world` on Linux, not a Windows path (HTOO-596).
-
-### B11. The server binary and the branch folders (both OS) — HTOO-596, HTOO-655
-
-1. Publish the server as a program: `dotnet publish hybrasyl/Hybrasyl.csproj -c Release -o <dir>`. Make a binary-mode instance, and pick `<dir>/Hybrasyl`, the file with no extension. **Expected:** the field label says "Binary Path (.dll or program)", and the server starts and listens (HTOO-596).
-2. Pick a Windows `.exe` as the binary. **Expected:** a message says that it is a Windows program, and the Start Server button does not stay on "Starting…" (HTOO-596).
-3. In a scratch clone of the server repo, make two branches whose names differ only in capital letters: `git branch Case/Test` and `git branch case/test`. Make an instance on each. Start the first and stop it, then start the second and stop it. **Expected:** each start builds. `ls .worktrees` shows two folders: `case__test`, and `Case__Test-` followed by 8 hex characters (HTOO-655). This matters most on macOS, where the disk ignores case.
+5. On Linux with no `lsof` installed, start a server, end Epona with `kill -9`, open it again and press Stop. **Expected:** the server stops (Epona finds it with `ss`). The server panel's log-folder tooltip says Finder on macOS and "the file manager" on Linux (HTOO-596).
 
 ## Part C: the published build, after the tag — HTOO-643
 
@@ -255,11 +246,10 @@ chmod +x ~/Downloads/epona-<version>-x86_64.AppImage
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
 
-- **Theme walk (any OS), HTOO-572:** on each of the eight themes (Settings → Theme), check the title bar, the toolbar below it, the tabs, a filled button and its hover, and the "You're running this" chip in What's New. Danaan, Grinneal, Shattered and Untamed have a dark title bar with light, outlined text; Hybrasyl and Chadul have light outlined text; Mundanes and Dubhaimid are flat. No bar text is engraved. The close button turns red under the pointer. The toolbar below the title bar has a different colour from the title bar, and the client status and the toolbar icons are easy to read. On the six Dark Ages themes, the Stop Server button shows the error colour. The .NET status and the folder status are filled chips, easy to read on Danaan, Untamed and Mundanes. Then open Settings → Theme → Theme gallery and look at each section in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
+- **Theme walk (any OS), HTOO-572:** on each of the eight themes (Settings → Theme), check the title bar, the toolbar below it, the tabs, a filled button and its hover, and the "You're running this" chip in What's New. Danaan, Grinneal, Shattered and Untamed have a dark title bar with light, outlined text; Hybrasyl and Chadul have light outlined text; Mundanes and Dubhaimid are flat. No bar text is engraved. The close button turns red under the pointer. The toolbar below the title bar has a different colour from the title bar, and the client status and the toolbar icons are easy to read. On the six Dark Ages themes, the Stop Server button shows the error colour. Then open Settings → Theme → Theme gallery and look at each section in each theme. A settings file that names the retired Spark theme opens in Dubhaimid.
 - **Quit prompts (Windows), HTOO-242:** with a repo-mode server running, the title-bar X, Alt+F4 and the in-app X each ask once; Cancel keeps the window and the server; Quit exits with no second question. Closing from the taskbar while minimised restores the window and asks.
-- **Server Log Pane (Windows), HTOO-652:** start a repo-mode server, open the pane on the Server tab, and check that the build and start lines arrive. Stop the server: the pane ends with `— process … ended (signal SIGKILL) —`, because Stop ends the console script with `taskkill /F`, before it can write a line of its own. A server that exits by itself ends with `[epona] The server exited with code …`, and a Ctrl+C in the console window with `[epona] The server was stopped from its console window.` The instance's log folder holds `epona-console-<instance>.log`, with the same lines.
+- **Server Log Pane (Windows), HTOO-652:** start a repo-mode server, open the pane on the Server tab, and check that the build and start lines arrive. Stop the server: the pane ends with `— process … ended (signal SIGKILL) —`, because Stop ends the console script with `taskkill /F`, before it can write a line of its own. A server that exits by itself ends with `[epona] The server exited with code …`, and a Ctrl+C in the console window with `[epona] The server was stopped from its console window.`
 - **Portable exe (Windows), HTOO-466 and HTOO-351:** no Setup window flashes on close by the X, Alt+F4 or the taskbar; a second launch brings the first window to the front, also when it is minimised.
-- **Validate (the tag run), HTOO-651:** each of the three build jobs runs its Validate step, after the install and before the build, and the step passes.
 - **Signing (Windows, the tag run), HTOO-517:** the release job signs both Windows artifacts on Java 17. Check the `java -version` line, the `[sign] signing … (java: …)` lines and the Verify signatures step.
 
 ## For this release (November 2026)
@@ -270,40 +260,23 @@ Everything on this page applies, on Electron 44.10.0, with these parts new since
 
 - **Part A:** the A2 and A3 notes, and steps 8 and 9 of "Before you start".
 - **B3.3:** the Log Pane on the Server tab, the exit notice and Show log (HTOO-589, HTOO-590).
-- **B4 steps 6 to 9**, on macOS and on Linux: quit with a repo-mode client and server, Stop on an adopted server, a server with `config.xml` and a missing log folder, and the cleanup after a server that stops by itself.
-- **B6 step 5:** the installer is deleted after the install.
-- **B9, B10 and B11**, on both OS; B10 steps 1 and 2 on Windows too.
+- **B4 steps 6 to 8**, on macOS and on Linux: quit with a repo-mode client and server, Stop on an adopted server, and a server with `config.xml` and a missing log folder.
+- **B9 and B10**, on both OS; B10 steps 1 and 2 on Windows too.
 - **Part C**, after the tag: C1 with M7, and C2 with L4.
 - **The HTOO-627 box scripts** in `docs/plans/01-box-checks/`: `lifecycle.mjs` and `build-and-git.sh` on the Mac and the Linux box, and `m4-dotnet.mjs` on the Mac. Each must print `SUMMARY: PASS`. Then the rest of the HTOO-627 table in `docs/plans/01-macos-linux-deep-dive.md`, against the release's own dmg and AppImage.
 - **Windows:** the items in "Owed elsewhere", with the server Log Pane (HTOO-652) and the tag run's Validate step in all three build jobs (HTOO-651).
+- **N1 to N5 below**, on both OS: checks for the HTOO-627 cards that no step above covers.
 
-The HTOO-627 work closed many cards. Each one has a check here, or a reason for none. Report each result on the card in this list.
+### Checks for this release only
 
-| Card | Check |
-| --- | --- |
-| HTOO-589, HTOO-590 | B3.3 |
-| HTOO-641 | B4.9 |
-| HTOO-642 | B4.7, and M1 in `lifecycle.mjs` |
-| HTOO-644 | B4.6 |
-| HTOO-592 | M3 in `lifecycle.mjs` |
-| HTOO-587, HTOO-588, HTOO-595 | B4.8 |
-| HTOO-645 | `m4-dotnet.mjs` (macOS) |
-| HTOO-646, HTOO-654 | M5 and M6 in `build-and-git.sh` |
-| HTOO-593, HTOO-594, HTOO-656 | B9.1 to B9.4 |
-| HTOO-647 | B9.5 |
-| HTOO-657 | B6.5 |
-| HTOO-649, HTOO-658, HTOO-659, HTOO-660 | B10.1 to B10.4 |
-| HTOO-596 | B10.5, B11.1 and B11.2 |
-| HTOO-655 | B11.3 |
-| HTOO-650 | C1 (M7) |
-| HTOO-643 | Part C, and step 9 of "Before you start" |
-| HTOO-651 | "Owed elsewhere": Validate |
-| HTOO-652 | "Owed elsewhere": server Log Pane |
-| HTOO-591 | Unit tests only. The check needs an Apple Silicon Mac with no Rosetta, and macOS has no supported way to remove Rosetta. |
-| HTOO-648 | Unit tests only. The banner shows only when the bridge fails, which a person cannot cause in a packaged app. |
-| HTOO-653 | Unit tests only. A split character depends on how the pipe cuts the output. |
-| HTOO-662 | Docs only. Nothing to run. |
+These test fixes from the HTOO-627 work. They do not need to run again on later releases. Report each on its card.
 
-HTOO-661 (the AppImage environment) and HTOO-663 (the Linux window icon) stay open, and this release does not check them.
+- **N1. Cleanup after a server stops by itself (HTOO-641).** Use an instance on a branch, with an XML branch. Set its Server Config to a file that does not exist, and start it. Wait for the notice that the server stopped. **Expected:** `.worktrees/<branch>/Directory.Build.props` is gone. Set the Server Config back and start the instance again: it starts, with no "Another running instance already points…" error.
+- **N2. The installer is deleted (HTOO-657).** After the install in B6 step 2, list Epona's settings folder. **Expected:** no `DarkAges-installer.exe` (about 208 MB) and no `.meta.json` file for it.
+- **N3. A client checkout through a symbolic link (HTOO-647).** Make a link to the client checkout (`ln -s <checkout> ~/brigid-link`). In repo mode, pick the csproj through the link, pin a branch, and click Launch. Run `ps -o command= -p $(pgrep -f 'dotnet run --project')`. **Expected:** the `--project` path is inside `.worktrees/<branch>/`, not in the main checkout.
+- **N4. The server as a program (HTOO-596).** Publish the server: `dotnet publish hybrasyl/Hybrasyl.csproj -c Release -o <dir>`. In a binary-mode instance, pick `<dir>/Hybrasyl`, the file with no extension. **Expected:** the label says "Binary Path (.dll or program)", and the server starts and listens. Then pick a Windows `.exe`. **Expected:** a message says that it is a Windows program, and the button does not stay on "Starting…". The world folder field in Settings shows `/Users/you/Hybrasyl/world` on macOS and `/home/you/hybrasyl/world` on Linux.
+- **N5. Branch names that differ only in capital letters (HTOO-655).** In a scratch clone of the server repo, run `git branch Case/Test` and `git branch case/test`. Make an instance on each. Start and stop the first, then the second. **Expected:** each start builds, and `ls .worktrees` shows `case__test` and `Case__Test-` followed by 8 hex characters. This matters most on macOS, where the disk ignores case.
+
+Three cards have no check, only unit tests: HTOO-591 (Rosetta: macOS has no supported way to remove it), HTOO-648 (the banner shows only when the bridge fails) and HTOO-653 (a split character depends on how the pipe cuts the output). HTOO-661 and HTOO-663 stay open.
 
 When the release is published, Sabrael runs `npm run publish:version -- v<version>` on the Windows box. That closes Epona's row on HTOO-382; it is not a Mac or Linux step.
