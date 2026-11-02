@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const created = []
@@ -163,5 +166,32 @@ describe('createSplashWindow', () => {
     // See CLAUDE.md.
     const splash = createSplashWindow()
     expect(splash.loaded).toMatch(/resources[\\/]splash\.html$/)
+  })
+})
+
+// The round spinner (HTOO-553). On Linux the font falls back from Segoe UI, the
+// column overflows, and flex takes the overflow out of whatever can shrink: the
+// spinner turned as an oval. This replaced a check by eye on the Linux box
+// (Sabrael, 2026-11-02), so it pins the CSS that prevents it.
+describe('resources/splash.html', () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const html = readFileSync(join(here, '..', '..', 'resources', 'splash.html'), 'utf8')
+  const rule = (selector) => {
+    const match = html.match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`))
+    expect(match, `no ${selector} rule`).not.toBeNull()
+    return match[1]
+  }
+
+  it.each(['.spinner', '.logo'])('%s does not shrink when the column overflows', (selector) => {
+    expect(rule(selector)).toMatch(/flex-shrink:\s*0\s*;/)
+  })
+
+  it('draws the spinner as a circle', () => {
+    const spinner = rule('.spinner')
+    const width = spinner.match(/(?:^|[\s;])width:\s*([^;]+);/)?.[1]
+    const height = spinner.match(/(?:^|[\s;])height:\s*([^;]+);/)?.[1]
+    expect(width).toBeDefined()
+    expect(height).toBe(width)
+    expect(spinner).toMatch(/border-radius:\s*50%\s*;/)
   })
 })
