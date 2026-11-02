@@ -31,6 +31,8 @@ the rules above.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-02
+
 ### Added
 
 - **The Dubhaimid theme.** Dubhaimid is the dark theme with plain controls that the other house apps have. Select it in Settings → Theme.
