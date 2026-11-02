@@ -1,7 +1,9 @@
 // Open a folder in the OS file manager, and say whether it opened.
 // shell.openPath resolves '' on success and an error string on failure. The
-// Reveal buttons threw that string away, so on a desktop with no handler for
-// folders a click did nothing at all (HTOO-658, L6 on the Linux box).
+// Reveal buttons threw that string away, so a failed open did nothing at all
+// (HTOO-658). On Linux, Electron 44 resolves '' even when xdg-open fails, so a
+// desktop with no handler for folders still shows no notice. Epona does not
+// support that desktop (wontfix, 2026-11-02).
 //
 // @param {{ openPath: (path: string) => Promise<string> }} shell Electron's shell
 // @param {string} dir

@@ -239,7 +239,7 @@ The card asks for a fault that hides other faults to go first. Three of those co
 
 - HTOO-653 (F5): `createLineBuffer` decodes with a `StringDecoder`, flushed by `flush()`.
 - HTOO-649 (F17): off macOS `applyAppMenu` sets no menu, and `fullscreenable: false` applies on every OS, as W2 showed it must.
-- HTOO-658 (F16): `openFolder` returns `{ ok, path, error }` for Reveal settings and Reveal logs; the menu, Settings and Report Issue show a notice that names the folder.
+- HTOO-658 (F16): `openFolder` returns `{ ok, path, error }` for Reveal settings and Reveal logs; the menu, Settings and Report Issue show a notice that names the folder. The November Linux pass found that this does not cover L6: with no handler for folders, `xdg-open` exits 4, but `shell.openPath` resolves `''`, so no notice shows. Sabrael ruled it wontfix on 2026-11-02, because Epona does not support a desktop with no handler for folders.
 - HTOO-657 (F15): `downloadAndInstall` deletes the installer and its `.meta.json` after `verifyClientTree` passes; a failed install keeps both.
 - HTOO-655 (F9): `worktreeDirName` keeps the readable name for a lower-case branch of letters, digits, `.`, `-` and `/`, and adds 8 hex characters of a SHA-1 of the exact name for any other branch. Existing worktrees are adopted by branch, so an old folder is still found.
 - HTOO-648 (F14): the banner's logs path comes from the preload's `platform`, or `navigator.platform` with no bridge.
