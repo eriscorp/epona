@@ -15,8 +15,8 @@ const COMMANDS = {
   darwin: {
     git: 'xcode-select --install',
     redis: 'brew install redis',
-    dotnetSdk: 'brew install dotnet',
-    dotnetRuntime: 'brew install dotnet'
+    dotnetSdk: 'brew install --cask dotnet-sdk',
+    dotnetRuntime: 'brew install --cask dotnet-sdk'
   },
   linux: {
     git: 'sudo apt install git',
@@ -63,13 +63,13 @@ export function installItems(platform) {
       command: c.git
     }
   ]
-  // On macOS the SDK and runtime are the same Homebrew formula, so show one row;
+  // On macOS the SDK cask also installs the runtime, so show one row;
   // Windows/Linux split them (the runtime is a separate, smaller install).
   if (platform === 'darwin') {
     items.push({
       key: 'dotnet',
       name: '.NET 10 SDK',
-      why: "Required for repo-mode launches (`dotnet run` compiles first) and to run prebuilt .dll artifacts. Homebrew's dotnet formula installs the SDK, which includes the runtime.",
+      why: "Required for repo-mode launches (`dotnet run` compiles first) and to run prebuilt .dll artifacts. The dotnet-sdk cask installs Microsoft's SDK, which includes the runtime, into /usr/local/share/dotnet. Use the cask, not the dotnet formula.",
       command: c.dotnetSdk
     })
   } else {

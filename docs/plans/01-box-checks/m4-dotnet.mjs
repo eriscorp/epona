@@ -1,4 +1,5 @@
-// HTOO-627 machine check M4 (HTOO-645), macOS: the hinted .NET install, `brew install dotnet`.
+// HTOO-627 machine check M4 (HTOO-645), macOS. Written for the `dotnet` formula. The hinted
+// install is now the `dotnet-sdk` cask (Sabrael, 2026-11-02); the script runs on either.
 //
 // Run it the way Finder starts Epona: no shell profile, launchd's PATH, no DOTNET_ROOT.
 //

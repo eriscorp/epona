@@ -45,6 +45,7 @@ the rules above.
 - **The client status and the icons on the toolbar below the title bar are easy to read in every theme.** Before, the status text was hard to read on the Danaan, Grinneal and Mundanes toolbars. The toolbar is no longer faded. It has its own colour, a little different from the title bar, so that the two bars are easy to tell apart. While the Settings pane is open, the Settings button has a light background and a ring.
 - **A disabled button looks disabled in every theme.** Before, a disabled button kept the accent colour on its text, its icon and its border.
 - **An icon shows its own colour.** Before, the Dark Ages themes drew every icon in the accent colour. Now the Log Pane button on the Hybrasyl Client tab shows the accent only while the pane is open, and the tick after a copy in the Help dialog is green. The other icon buttons have the same colour as in Mundanes and Dubhaimid.
+- **On macOS, Recommended Installs names the .NET SDK cask.** The command is now `brew install --cask dotnet-sdk`, which installs Microsoft's .NET SDK. Before, it was `brew install dotnet`, and a client that needs .NET did not find that install when Epona started from Finder.
 - **Visited links are easy to read in every theme.** Before, a visited link, such as the release link of the update check, was hard to read in Hybrasyl and Chadul.
 
 ### Removed
