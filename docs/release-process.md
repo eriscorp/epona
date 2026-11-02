@@ -5,9 +5,9 @@ How to cut an Epona release end-to-end. Pushing a `v*` tag is the single action 
 The flow at a glance:
 
 1. Pre-release sanity (local)
-2. Bump the version, commit, push to `main`
+2. Promote the CHANGELOG section, bump the version, commit, push to `main`
 3. Push a `v*` tag — **this fires the build and publishes the release**
-4. (Optional) Polish the auto-generated release notes in the GitHub UI
+4. (Optional) Polish the release notes in the GitHub UI
 5. Watch the Actions run go green, then verify artifacts + Discord
 6. Start the packaged app, then publish the version manifest (`npm run publish:version`)
 
@@ -20,12 +20,13 @@ Before bumping anything, run the full gate against `main`:
 ```bash
 git checkout main
 git pull
-npm run lint:check
-npm test
+npm run validate
 npm run build
 ```
 
-All three must be clean. Epona is plain JS — no `typecheck` step. Use `lint:check`, not `lint`: the latter is `eslint --fix` and rewrites the tree, which is not what a pre-release check should do. If lint regresses, fix it before tagging rather than after.
+Both must be clean. `validate` is `lint:check`, `format:check` and the unit suite: the same step that each build job in `release.yml` runs before it builds (HTOO-651), so a fault that passes here does not fail the tag run. Epona is plain JS — no `typecheck` step. Do not use `lint`: it is `eslint --fix` and rewrites the tree, which is not what a pre-release check should do. If lint regresses, fix it before tagging rather than after.
+
+The tag run also runs the unit suite on Linux and macOS, where the POSIX tests in `processKill` and `hybrasylTarget` run for real. A local Windows run skips them. To find a POSIX fault before the tag, dispatch `ci.yml`, or run A1 of [release-checks-mac-linux.md](release-checks-mac-linux.md) on the Mac or the Linux box.
 
 Then smoke-test what landed since the last release. `npm run e2e` builds and drives the real app under Playwright (on Windows here; A2 in [release-checks-mac-linux.md](release-checks-mac-linux.md) runs it on macOS and Linux) and covers most of it: the IPC sender guard in both directions, the preload sandbox, What's New, and the window geometry.
 
@@ -48,10 +49,12 @@ Start `dist/win-unpacked/Epona.exe` and `dist/*-portable.exe`. Each must open it
 - **Minor** (e.g. `1.0.x → 1.1.0`): new features, sizeable additions, or security hardening that users should notice. This is the common case.
 - **Major** (e.g. `1.x → 2.0`): breaking changes to settings format (e.g. the `worldDirectories` schema migration), the IPC contract, or anything that requires the user to reconfigure.
 
-Edit `package.json`, then:
+Promote the release notes in [`CHANGELOG.md`](../CHANGELOG.md) in the same commit. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, and add a new, empty `## [Unreleased]` above it. The release body and the What's New dialog both read the `X.Y.Z` section. If you forget this step, `changelog-extract.mjs` prints a warning and exits 0, and the release goes out with only the auto-generated PR list. No step fails.
+
+Set the version (`npm version X.Y.Z --no-git-tag-version` edits `package.json` and `package-lock.json`), then:
 
 ```bash
-git add package.json
+git add package.json package-lock.json CHANGELOG.md
 git commit -m "chore: bump version to X.Y.Z"
 git push origin main
 ```
@@ -69,27 +72,23 @@ Pushing the tag **triggers `release.yml`** (`on: push: tags: ['v*']`). There is 
 
 ## 4. (Optional) Polish the release notes
 
-The `release` job uses `generate_release_notes: true`, so GitHub auto-writes notes from the merged PRs / commits since the previous tag. That's usually enough. If you want a hand-curated summary, edit the release in the GitHub UI after it's published and group by user impact:
-
-```bash
-git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --oneline
-```
-
-(`HEAD^` skips the version-bump commit so `describe` finds the prior tag, not the one you just pushed.) Group by user impact, not commit order — **Highlights** (new features), **Fixes**, **Security & hardening**, **Developer / docs**.
+The release body is the `X.Y.Z` section of `CHANGELOG.md`, which `scripts/changelog-extract.mjs` pulls out, with GitHub's auto-generated list of PRs below it (`generate_release_notes: true`). The CHANGELOG is where the notes are written, so a fix to the text goes there too. An edit in the GitHub UI changes the release page only, and What's New does not see it.
 
 ## 5. What the workflow does
 
 Pushing the tag fires [`release.yml`](../.github/workflows/release.yml), which runs four jobs:
 
-- **`build-windows`** (pinned `windows-2022`, Node 24): `npm ci` → `npm run rebuild` (rebuilds the `da-win32` native addon against the Electron ABI) → `npm run build` → installs Java 17 and downloads SSL.com CodeSignTool → `electron-builder --win --publish never`, which **code-signs every Windows binary as it packages** them → verifies the signatures → uploads `dist/*-setup.exe` and `dist/*-portable.exe`.
+- **`build-windows`** (pinned `windows-2022`, Node 24): `npm ci` → `npm run rebuild` (rebuilds the `da-win32` native addon against the Electron ABI) → `npm run validate` → `npm run build` → installs Java 17 and downloads SSL.com CodeSignTool → `electron-builder --win --publish never`, which **code-signs every Windows binary as it packages** them → verifies the signatures → uploads `dist/*-setup.exe` and `dist/*-portable.exe`.
 
   Signing is not a separate step on the finished artifacts any more. `scripts/sign.js` is wired in as `win.signtoolOptions.sign` and runs once per signable binary; `scripts/after-pack-sign.js` handles `da_win32.node`, which electron-builder's signable-file walk skips because it is `asarUnpack`'d. Signing only the two outer artifacts left the whole extracted payload unsigned and contributed to the Defender false positive documented in [`antivirus.md`](antivirus.md). The **Verify signatures** step fails the build if any binary comes out unsigned, so a half-signed release cannot ship. Both scripts self-skip when the `ES_*` secrets are absent, so forks still build.
 
   `scripts/sign.js` runs the CodeSignTool jar on `$JAVA_HOME/bin/java.exe` (the Java 17 that the workflow installs), then on the `java` on PATH. It never runs `CodeSignTool.bat` or the JDK 11.0.2 in the CodeSignTool zip. That JDK cannot build the certificate chain that `login.ssl.com` sent from 2026-09-30, so each sign on it failed with `PKIX path building failed` (HTOO-517).
 
-- **`build-linux`** (ubuntu-latest): builds and packages `deb` + `AppImage` (the `beforeBuild` hook is overridden with `scripts/noop-before-build.cjs` to skip the Windows-only addon rebuild).
-- **`build-mac`** (macos-latest): imports the Developer ID cert into a temp keychain, **signs + notarizes + staples** the `.app` via electron-builder, then separately signs/notarizes/staples the `.dmg`.
-- **`release`** (needs all three, only on a tag ref): downloads the artifacts and creates the GitHub Release via `softprops/action-gh-release@v3` with `generate_release_notes: true`, attaching the portable exe, deb, AppImage, and dmg — then prints a reminder to publish the version manifest (§6) and posts a Discord announcement.
+- **`build-linux`** (pinned `ubuntu-24.04`): runs `npm run validate`, then builds and packages `deb` + `AppImage` (the `beforeBuild` hook is overridden with `scripts/noop-before-build.cjs` to skip the Windows-only addon rebuild).
+- **`build-mac`** (macos-latest): runs `npm run validate`, imports the Developer ID cert into a temp keychain, **signs + notarizes + staples** the `.app` via electron-builder, then separately signs/notarizes/staples the `.dmg`.
+- **`release`** (`ubuntu-24.04`; needs all three, only on a tag ref): downloads the artifacts, extracts the release notes from `CHANGELOG.md`, writes `SHA256SUMS.txt`, attests the build provenance of each artifact, and creates the GitHub Release via `softprops/action-gh-release@v3`, attaching the installer, the portable exe, the deb, the AppImage, the dmg and `SHA256SUMS.txt` — then prints a reminder to publish the version manifest (§6) and posts a Discord announcement.
+
+The Validate step in each build job runs `lint:check`, `format:check` and the unit suite after the install and before the build (HTOO-651). On Linux and macOS it is the one check that always runs the POSIX half of the unit suite, because `ci.yml` runs only when someone dispatches it. `scripts/release-validate.test.mjs` pins the step in all three jobs.
 
 Each of the three build jobs runs `npm run verify:fuses` on its own package after packaging and before upload (HTOO-374). The reader finds the fuse wire in the binary and fails the job if a fuse is not as `electron-builder.yml` sets it. It reads `dist/win-unpacked/Epona.exe`, `dist/linux-unpacked/epona` and `dist/mac-universal/Epona.app`. The universal Mac app has one wire for each architecture, and the reader checks each wire. On macOS it runs before the dmg is signed. `scripts/release-artifacts.test.mjs` pins each step, its path and its position.
 
@@ -112,7 +111,7 @@ Watch the Actions tab to confirm all four jobs go green. Typical runtime is seve
 
 - Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 - Trigger: **`push` of a `v*` tag** (`on: push: tags: ['v*']`), plus manual `workflow_dispatch`. Pushing the tag builds and publishes; there is no `release.published` UI step.
-- Builds on: `windows-2022` (pinned), `ubuntu-latest`, `macos-latest` — all Node 24.
+- Builds on: `windows-2022` (pinned), `ubuntu-24.04` (pinned), `macos-latest` — all Node 24.
 - Produces: **Windows installer + portable exe (both signed), macOS dmg (signed + notarized), Linux deb + AppImage** — all attached to the GitHub Release automatically. Targets are configured in [`electron-builder.yml`](../electron-builder.yml), and **only** there — the packaging step runs a bare `--win`. `scripts/release-artifacts.test.mjs` pins the declared targets against the release globs in both directions, because a target that no glob collects is published by nothing and reported by nothing (`fail_on_unmatched_files` cannot see it). Prefer the **installer** when advising a user on a managed Windows endpoint; see [`antivirus.md`](antivirus.md).
 - Local equivalents: `npm run build:portable` / `build:win` (Windows), `npm run build:mac` (→ `dist/epona-x.y.z.dmg`), `npm run build:linux` (→ `dist/epona-x.y.z-x86_64.AppImage`, needs a Linux host or WSL2 with `mksquashfs`). The mac/linux scripts override the `beforeBuild` hook via `--config.beforeBuild=scripts/noop-before-build.cjs` to skip the Windows-only `da-win32` rebuild. Only needed if you want to build locally — CI produces all three.
 - Native addon: `packages/da-win32/` is rebuilt against the Electron ABI in CI via `npm run rebuild`. Local Windows builds do this through the `beforeBuild` hook in `electron-builder.yml`.
