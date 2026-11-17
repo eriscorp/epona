@@ -52,7 +52,7 @@ function processGroups(pids) {
 }
 
 async function gone(target, ms) {
-  for (const end = Date.now() + ms; Date.now() < end; ) {
+  for (const end = Date.now() + ms; Date.now() < end;) {
     if (!exists(target)) return true
     await new Promise((r) => setTimeout(r, POLL_MS))
   }
