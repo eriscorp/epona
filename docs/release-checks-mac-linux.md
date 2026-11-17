@@ -248,6 +248,8 @@ tr '\0' '\n' < /proc/<child pid>/environ | grep -E '^(APPDIR|APPIMAGE|ARGV0|OWD|
 
 Find the pids with `pgrep -f Hybrasyl` and `pgrep -f Brigid`. **Expected:** no `APPDIR`, `APPIMAGE`, `ARGV0` or `OWD` line, and no line that names `/tmp/.mount_…`. An `LD_LIBRARY_PATH` or `GSETTINGS_SCHEMA_DIR` line is correct only if the session set it before Epona started.
 
+Then quit Epona and run `mount | grep '\.mount_'`. A mount that stays while `VBCSCompiler` runs is the open half of F25 in `docs/plans/01-macos-linux-deep-dive.md`: each child inherits Epona's open files. It is known, and does not fail L5. Record it, and `dotnet build-server shutdown` releases it.
+
 ## Owed elsewhere — not on this page
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
@@ -256,34 +258,28 @@ These checks are for any OS, or for Windows, and are listed here so that they ar
 - **Quit prompts (Windows), HTOO-242:** with a repo-mode server running, the title-bar X, Alt+F4 and the in-app X each ask once; Cancel keeps the window and the server; Quit exits with no second question. Closing from the taskbar while minimised restores the window and asks.
 - **Server Log Pane (Windows), HTOO-652:** start a repo-mode server, open the pane on the Server tab, and check that the build and start lines arrive. Stop the server: the pane ends with `— process … ended (signal SIGKILL) —`, because Stop ends the console script with `taskkill /F`, before it can write a line of its own. A server that exits by itself ends with `[epona] The server exited with code …`, and a Ctrl+C in the console window with `[epona] The server was stopped from its console window.`
 - **Portable exe (Windows), HTOO-466 and HTOO-351:** no Setup window flashes on close by the X, Alt+F4 or the taskbar; a second launch brings the first window to the front, also when it is minimised.
-- **Signing (Windows, the tag run), HTOO-517:** the release job signs both Windows artifacts on Java 17. Check the `java -version` line, the `[sign] signing … (java: …)` lines and the Verify signatures step.
+- **Signing (Windows, the tag run), HTOO-517 and HTOO-686:** the release job signs both Windows artifacts on Java 17. Check that the "Fetch and verify CodeSignTool" step passes (a changed archive stops it with `CodeSignTool archive digest … is not the pinned …`), the `java -version` line, the `[sign] signing … (java: …)` lines and the Verify signatures step.
 
-## For this release (November 2026)
+## For this release (the release after 2.10.0)
 
-Rewrite this section for each release: what applies, and what is already done. The owed list for this release is the November comment on HTOO-242; tick it there as each check passes.
+Rewrite this section for each release: what applies, and what is already done. The owed list for this release is the 2026-11-17 comment on HTOO-242; tick it there as each check passes.
 
-Everything on this page applies, on Electron 44.10.0, with these parts new since 2.9.0:
+The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45.3.4 (Chromium 156, Node 24.22.3), electron-vite 6 on vite 8, Vitest 5 and jsdom 31. No feature changed, so the whole page applies, and the parts below matter most. The 2.10.0 checks for HTOO-627 (N1 to N5, and the box scripts) are done, and are not owed again.
 
-- **Part A:** the A2 and A3 notes, and steps 8 and 9 of "Before you start".
-- **B3.3:** the Log Pane on the Server tab, the exit notice and Show log (HTOO-589, HTOO-590).
-- **B4 steps 6 to 8**, on macOS and on Linux: quit with a repo-mode client and server, Stop on an adopted server, and a server with `config.xml` and a missing log folder.
-- **B9 and B10**, on both OS; B10 steps 1 and 2 on Windows too.
-- **Part C**, after the tag: C1 with M7, and C2 with L4.
-- **The HTOO-627 box scripts** in `docs/plans/01-box-checks/`: `lifecycle.mjs` and `build-and-git.sh` on the Mac and the Linux box, and `m4-dotnet.mjs` on the Mac. Each must print `SUMMARY: PASS`. Then the rest of the HTOO-627 table in `docs/plans/01-macos-linux-deep-dive.md`, against the release's own dmg and AppImage.
-- **Windows:** the items in "Owed elsewhere", with the server Log Pane (HTOO-652) and the tag run's Validate step in all three build jobs (HTOO-651).
-- **N1 to N5 below**, on both OS: checks for the HTOO-627 cards that no step above covers.
-- **B7 and B8 are retired** (Sabrael, 2026-11-02), with the title bar and the toolbar in the theme walk. Tests cover them.
+- **"Before you start", step 4:** `npm install-scripts ls` must still print `No packages with unreviewed install scripts.` vite 8 builds with rolldown, which installs a native binding with no install script. esbuild is gone, and so is its approval in `package.json`. On macOS, `fsevents` is still approved.
+- **A1:** the suite is on Vitest 5 and jsdom 31. On Windows it is 2117 passed and 17 skipped in 122 files. Report the count; some tests skip by OS, so the count off Windows can differ.
+- **A2 and A3:** e2e on Electron 45. The totals in A2 do not change (30 tests in 16 files).
+- **A4 and A5, then B1:** the first packaged build on Electron 45 on each OS. An Electron major is the change that a packaged launch exists to check: the fuses, the asar check, and the window.
+- **`npm run dev` (both OS):** start it, change a line of text in a renderer file, and save. **Expected:** the window starts, and the change shows without a restart. This is the electron-vite 6 and vite 8 dev server, which no check above starts.
+- **B4, B9 and B10 (both OS):** each starts a server, the client, git or dotnet. Every child now gets its environment from `childEnv()` (HTOO-661). Off the AppImage the environment does not change, so these must pass as before.
+- **Part C, after the tag:** C1 with M7, and C2 with L4 and **L5** (HTOO-661, the AppImage's children). L5 is new.
+- **Windows:** the items in "Owed elsewhere". The Signing item now includes the "Fetch and verify CodeSignTool" step (HTOO-686). The first tag run is also the first run of the pinned actions and of the read-only permissions: if a step fails with a 403 or "Resource not accessible by integration", report it on HTOO-686.
 
 ### Checks for this release only
 
-These test fixes from the HTOO-627 work. They do not need to run again on later releases. Report each on its card.
+- **R1. A portable exe that is not Epona's (HTOO-667, Windows).** Done on 2026-11-17 on a `--dir` build of `7e1ff0e`: with Balor's three `PORTABLE_EXECUTABLE_*` values set, Epona ran for 40 s and its session log had no portable line. With `PORTABLE_EXECUTABLE_APP_FILENAME=epona`, the same build logged `unexpected portable layout`, so the log does show a sweep. Not owed on macOS or Linux: the variables come only from the Windows portable stub.
+- **R2. The portable exe still cleans up (HTOO-667 and HTOO-494, Windows).** Start the release's own portable exe. In Task Manager, end the stub's process (`epona-<version>-portable.exe`, not `Epona.exe`), then close Epona. Its `%TEMP%\ns*.tmp` folder stays. Wait 10 minutes, start the portable exe again, and wait 30 s. **Expected:** the old folder is gone, and the session log has no `unexpected portable layout` line. This proves that the stub's own `PORTABLE_EXECUTABLE_APP_FILENAME` matches the package name `epona`.
 
-- **N1. Cleanup after a server stops by itself (HTOO-641).** Use an instance on a branch, with an XML branch. Set its Server Config to a file that does not exist, and start it. Wait for the notice that the server stopped. **Expected:** `.worktrees/<branch>/Directory.Build.props` is gone. Set the Server Config back and start the instance again: it starts, with no "Another running instance already points…" error.
-- **N2. The installer is deleted (HTOO-657).** After the install in B6 step 2, list Epona's settings folder. **Expected:** no `DarkAges-installer.exe` (about 208 MB) and no `.meta.json` file for it.
-- **N3. A client checkout through a symbolic link (HTOO-647).** Make a link to the client checkout (`ln -s <checkout> ~/brigid-link`). In repo mode, pick the csproj through the link, pin a branch, and click Launch. Run `ps -o command= -p $(pgrep -f 'dotnet run --project')`. **Expected:** the `--project` path is inside `.worktrees/<branch>/`, not in the main checkout.
-- **N4. The server as a program (HTOO-596).** Publish the server: `dotnet publish hybrasyl/Hybrasyl.csproj -c Release -o <dir>`. In a binary-mode instance, pick `<dir>/Hybrasyl`, the file with no extension. **Expected:** the label says "Binary Path (.dll or program)", and the server starts and listens. Then pick a Windows `.exe`. **Expected:** a message says that it is a Windows program, and the button does not stay on "Starting…". The world folder field in Settings shows `/Users/you/Hybrasyl/world` on macOS and `/home/you/hybrasyl/world` on Linux.
-- **N5. Branch names that differ only in capital letters (HTOO-655).** In a scratch clone of the server repo, run `git branch Case/Test` and `git branch case/test`. Make an instance on each. Start and stop the first, then the second. **Expected:** each start builds, and `ls .worktrees` shows `case__test` and `Case__Test-` followed by 8 hex characters. This matters most on macOS, where the disk ignores case.
+HTOO-663 (the Linux window icon) and HTOO-685 (the renderer's launch authority) stay open.
 
-Three cards have no check, only unit tests: HTOO-591 (Rosetta: macOS has no supported way to remove it), HTOO-648 (the banner shows only when the bridge fails) and HTOO-653 (a split character depends on how the pipe cuts the output). HTOO-661 and HTOO-663 stay open.
-
-When the release is published, Sabrael runs `npm run publish:version -- v<version>` on the Windows box. That closes Epona's row on HTOO-382; it is not a Mac or Linux step.
+When the release is published, Sabrael runs `npm run publish:version -- v<version>` on the Windows box. It is not a Mac or Linux step.

@@ -67,6 +67,16 @@ Two of those four taught the build something the plan could not have known, and 
 
 ### Unreleased
 
+**The November round of 2026-11-17** — eriscorp/epona#70, which closes Epona's rows on HTOO-694 (Electron 45.3.4, vite 8, electron-vite 6, Vitest 5, jsdom 31), HTOO-692 and HTOO-667, and the code of HTOO-686 and HTOO-661: pinned release actions, a read-only token outside the release job and a checked CodeSignTool archive; a portable check that trusts only Epona's own stub; and a child environment without the AppImage's mount. The Mac and Linux checks for it are in `release-checks-mac-linux.md`, "For this release".
+
+What the round taught:
+
+- **A new default can empty a test without failing it, or fail it for the wrong reason.** Vitest 5 clears mocks before each test, so the index.js suites, which boot main once, lost the calls they read. jsdom 31 writes `#000` as `rgb(0, 0, 0)`, so a plain-theme check `not.toMatch(/#000/)` passed with nothing to find. The config keeps `clearMocks: false`, and the check rejects both forms.
+- **A source scan finds what a grep misses.** `childEnv.test.js` fails on any spawn without `childEnv()`. On its first run it found the two dotnet probes in `runtimeCheck.js`, which the grep for HTOO-661 had not listed.
+- **A stale lockfile entry blocks a major, and npm does not name it.** The hoisted esbuild 0.25 from vite 6 failed vite 8's optional peer range, and the ERESOLVE named only vite. Removing the lockfile entries for vite, esbuild and the vite plugins let npm resolve them again.
+
+### 2.9.0 — 2026-10-12
+
 **The house-row round of 2026-10-11** — nine PRs, #47 to #55, which close every open Epona coverage row on the house Electron cards except HTOO-382 (it waits for the next release's `publish:version`) and HTOO-355/572 (deferred to the template's canonical palette). Electron 44 and a clean `npm audit` (#47); release signing on Java 17 (#49); the Hybrasyl theme's primary colour (#48); the update-check module (#50); fuse verification and asar integrity (#52); the portable exe's lifecycle (#53); the renderer CSP header and the nav and Node-global checks (#54); the macOS title bar, menu and Command Line Tools message, and a quit that asks before it stops repo-mode launches (#55); the format pass (#51). The tracker cards hold the detail; the epic is HTOO-242.
 
 What the round taught, again about **checks that pass for the wrong reason**:
