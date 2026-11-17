@@ -51,6 +51,53 @@
 
 import { basename, dirname, join } from 'path'
 
+/** The three variables the NSIS portable stub sets for the app it starts. */
+export const PORTABLE_ENV_KEYS = Object.freeze([
+  'PORTABLE_EXECUTABLE_DIR',
+  'PORTABLE_EXECUTABLE_FILE',
+  'PORTABLE_EXECUTABLE_APP_FILENAME'
+])
+
+/**
+ * True when the portable stub of THIS app started this process (HTOO-667).
+ *
+ * A child process inherits the variables, so `PORTABLE_EXECUTABLE_DIR` alone
+ * also says "portable" in an app that another app's portable exe started (for
+ * example VS Code from Balor's exe, then Epona from a VS Code terminal). The
+ * stub writes electron-builder's `APP_FILENAME` into
+ * `PORTABLE_EXECUTABLE_APP_FILENAME`. For a portable target that is the
+ * sanitized package.json `name` (`epona`), not the exe name (`Epona`). So
+ * compare with the package name. Windows names fold case, so the compare folds
+ * case too.
+ *
+ * @param {Readonly<Record<string, string | undefined>>} env
+ * @param {string} packageName
+ * @returns {boolean}
+ */
+export function isOwnPortableLaunch(env, packageName) {
+  const appFilename = env['PORTABLE_EXECUTABLE_APP_FILENAME']
+  return (
+    Boolean(env['PORTABLE_EXECUTABLE_DIR']) &&
+    typeof appFilename === 'string' &&
+    appFilename.toLowerCase() === packageName.toLowerCase()
+  )
+}
+
+/**
+ * Read the portable launch, then remove the three variables from `env`, so
+ * that no process this app starts inherits them (HTOO-667). Call it once, at
+ * the start of main, before anything starts a child process.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {string} packageName
+ * @returns {boolean}
+ */
+export function takePortableLaunch(env, packageName) {
+  const own = isOwnPortableLaunch(env, packageName)
+  for (const key of PORTABLE_ENV_KEYS) delete env[key]
+  return own
+}
+
 /**
  * The file operations that the sweep uses. The promises API of Electron's
  * `original-fs` and Node's `fs.promises` both fit, so a test can supply its own.
@@ -65,7 +112,7 @@ import { basename, dirname, join } from 'path'
 /**
  * @typedef {object} SweepOptions
  * @property {string} execPath `process.execPath`: `<TEMP>\nsXXXX.tmp\app\Epona.exe` in a portable run.
- * @property {boolean} isPortable True when the NSIS stub started this process. The stub sets `PORTABLE_EXECUTABLE_DIR`.
+ * @property {boolean} isPortable True when this app's own NSIS stub started this process. See `takePortableLaunch`.
  * @property {number} [now]
  * @property {SweepFs} fs The promises API of `original-fs` in Electron (see above). Required.
  * @property {(message: string) => void} [onError]

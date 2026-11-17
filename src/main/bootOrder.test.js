@@ -161,3 +161,21 @@ describe('the CSP call site (HTOO-467)', () => {
     expect(body).not.toMatch(/NODE_ENV|is\.dev/)
   })
 })
+
+describe('portable launch variables (HTOO-667)', () => {
+  it('reads and removes them before any other statement reads process.env', () => {
+    // Every later reader of process.env (LOCALAPPDATA, the GPU override, the
+    // renderer URL) runs after the stub's variables are gone, and so does every
+    // child process. The sweep reads the saved answer, not the variable.
+    const src = sourceWithoutComments()
+    const take = src.search(
+      /^const isOwnPortable = takePortableLaunch\(process\.env, PACKAGE_NAME\)/m
+    )
+    const firstEnv = src.indexOf('process.env')
+    expect(take).toBeGreaterThan(-1)
+    expect(src.indexOf('takePortableLaunch(process.env')).toBeLessThanOrEqual(firstEnv)
+    expect(take).toBeLessThan(src.indexOf("setPath('userData'"))
+    expect(src).not.toMatch(/process\.env\[?['".]?PORTABLE_EXECUTABLE/)
+    expect(src).toMatch(/isPortable: app\.isPackaged && isOwnPortable/)
+  })
+})

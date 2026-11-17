@@ -71,10 +71,18 @@ import { isProcessAlive } from './processAlive.js'
 import { isPortInUse } from './portProbe.js'
 import { findPortOwner, stopByHandHint } from './portOwner.js'
 import originalFs from 'original-fs'
-import { sweepPortableLeftovers } from './portableSweep.js'
+import { sweepPortableLeftovers, takePortableLaunch } from './portableSweep.js'
+import { name as PACKAGE_NAME } from '../../package.json'
 
 // The time after boot that the portable sweep waits (see portableSweep.js).
 const PORTABLE_SWEEP_DELAY_MS = 30_000
+
+// First, before anything can start a child process: read whether THIS app's
+// portable stub started us, then remove the stub's variables from our own
+// environment, so that no server, client, git or dotnet we start inherits them
+// (HTOO-667). bootOrder.test.js asserts that this stays the first statement
+// that reads process.env.
+const isOwnPortable = takePortableLaunch(process.env, PACKAGE_NAME)
 import { buildMenuTemplate } from './appMenu.js'
 import { menuStateSchema } from './schemas/menuState.js'
 import { INITIAL_MENU_STATE, MENU_COMMAND_CHANNEL, MENU_STATE_CHANNEL } from '../shared/appMenu.js'
@@ -691,7 +699,7 @@ app.whenReady().then(() => {
       // keeps it open, so Windows refuses each rename.
       fs: originalFs.promises,
       execPath: process.execPath,
-      isPortable: app.isPackaged && Boolean(process.env['PORTABLE_EXECUTABLE_DIR']),
+      isPortable: app.isPackaged && isOwnPortable,
       onError: (message) => captureError({ source: 'portable-sweep', message })
     }).catch((err) => captureError({ source: 'portable-sweep', message: String(err) }))
   }, PORTABLE_SWEEP_DELAY_MS).unref()
