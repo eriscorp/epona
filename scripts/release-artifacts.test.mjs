@@ -303,11 +303,11 @@ const step = (name) => {
 describe('Windows signing on a current JDK (HTOO-517)', () => {
   it('installs Temurin 17, then CodeSignTool, before the packaging step', () => {
     expect(step('Set up Java 17 for CodeSignTool')).toMatch(
-      /uses: actions\/setup-java@v5\n\s+with:\n\s+distribution: temurin\n\s+java-version: '17'/
+      /uses: actions\/setup-java@[0-9a-f]{40} # v5\.\d+\.\d+\n\s+with:\n\s+distribution: temurin\n\s+java-version: '17'/
     )
     const order = [
       '- name: Set up Java 17 for CodeSignTool',
-      '- name: Download CodeSignTool',
+      '- name: Fetch and verify CodeSignTool',
       '- name: Package installer + portable exe'
     ].map((name) => workflow.indexOf(name))
     expect(order).not.toContain(-1)
@@ -318,14 +318,14 @@ describe('Windows signing on a current JDK (HTOO-517)', () => {
     // The .bat always runs the bundled JDK. The workflow finds the jar instead,
     // and the folder above jar/ becomes CODE_SIGN_TOOL_PATH.
     expect(workflow).not.toMatch(/CodeSignTool\.bat|jdk-11/)
-    const download = step('Download CodeSignTool')
+    const download = step('Fetch and verify CodeSignTool')
     expect(download).toContain("-Filter 'code_sign_tool-*.jar'")
     expect(download).toContain('$jar.Directory.Parent.FullName')
   })
 
   it('stops the download step on a bad layout or a missing Java, before the packaging', () => {
     // Without these stops, the fault shows minutes later inside electron-builder.
-    const download = step('Download CodeSignTool')
+    const download = step('Fetch and verify CodeSignTool')
     expect(download).toContain("$jars.Count -ne 1 -or $jars[0].Directory.Name -ne 'jar'")
     expect(download).toContain('-not (Test-Path $java)')
   })

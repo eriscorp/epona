@@ -12,8 +12,13 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# Read by default (HTOO-686). Only the `release` job, which publishes the
+# GitHub Release, has `contents: write`. A build job runs third-party actions
+# and the signing tool, so it gets no token that can change the repository.
+# Every action is pinned to a full commit SHA, with its version in a comment;
+# a bump changes both. scripts/workflow-policy.test.mjs pins the rules.
 permissions:
-  contents: write
+  contents: read
 
 # FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 used to live here for one holdout:
 # sslcom/esigner-codesign, which still declares `using: node20`. Signing moved
@@ -60,8 +65,10 @@ jobs:
 
     steps:
       # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -103,7 +110,7 @@ jobs:
       #
       # scripts/electron-cache.test.mjs pins these steps in each job.
       - name: Cache the Electron binary
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/electron-cache
           key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -154,7 +161,7 @@ jobs:
       # this step. Without it, JAVA_HOME is the default Java of the runner
       # image, and no one has tested that Java with CodeSignTool.
       - name: Set up Java 17 for CodeSignTool
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '17'
@@ -164,16 +171,28 @@ jobs:
       # tool has to be on disk before electron-builder runs. This replaced
       # the sslcom/esigner-codesign action, which could only sign finished
       # artifacts and therefore left the whole extracted payload unsigned.
-      - name: Download CodeSignTool
+      #
+      # The packaging step gives the tool every eSigner secret, so this step
+      # checks the archive before it expands it, and has no secrets itself
+      # (HTOO-686). The digest is of the exact archive: a new version needs a
+      # new digest, on purpose. GitHub publishes no digest for this asset; this
+      # one was measured on 2026-11-17 (214 673 784 bytes, the asset's size on
+      # the release, last replaced 2025-05-09).
+      - name: Fetch and verify CodeSignTool
         shell: pwsh
-        run: |
+        env:
           # Pinned deliberately. The Cloud eSigner protocol has shifted in
           # subtle ways between releases; test locally before bumping.
-          $version = '1.3.2'
-          $archive = "CodeSignTool-v$version-windows.zip"
-          $url = "https://github.com/SSLcom/CodeSignTool/releases/download/v$version/$archive"
+          CODESIGNTOOL_VERSION: '1.3.2'
+          CODESIGNTOOL_SHA256: '4afc32e8b7f79bbe1de7e4e7049aaad4e0f754357613b9bbec0e3052f06fd36b'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = "CodeSignTool-v$env:CODESIGNTOOL_VERSION-windows.zip"
+          $url = "https://github.com/SSLcom/CodeSignTool/releases/download/v$env:CODESIGNTOOL_VERSION/$archive"
           Write-Host "Downloading $url"
           Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($hash -ne $env:CODESIGNTOOL_SHA256) { throw "CodeSignTool archive digest $hash is not the pinned $env:CODESIGNTOOL_SHA256" }
           Expand-Archive -Path $archive -DestinationPath codesigntool -Force
           # Do not assume the folder layout of the archive. Find the jar in its
           # jar/ folder, and set CODE_SIGN_TOOL_PATH to the folder above jar/.
@@ -250,7 +269,7 @@ jobs:
           Write-Host "All $($targets.Count) Windows binaries carry a valid signature."
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-installers
           path: |
@@ -270,8 +289,10 @@ jobs:
 
     steps:
       # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -279,7 +300,7 @@ jobs:
       # the reasons there: `runner.temp` and the two step-level placements are
       # necessary, not style.
       - name: Cache the Electron binary
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/electron-cache
           key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -318,7 +339,7 @@ jobs:
         run: npm run verify:fuses -- dist/linux-unpacked/epona
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-packages
           path: |
@@ -338,8 +359,10 @@ jobs:
 
     steps:
       # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -347,7 +370,7 @@ jobs:
       # the reasons there: `runner.temp` and the two step-level placements are
       # necessary, not style.
       - name: Cache the Electron binary
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/electron-cache
           key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -444,7 +467,7 @@ jobs:
           xcrun stapler validate "$DMG"
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-dmg
           path: dist/*.dmg
@@ -462,10 +485,10 @@ jobs:
     needs: [build-windows, build-linux, build-mac]
     if: github.ref_type == 'tag'
 
-    # id-token + attestations are for the provenance step below; the
-    # workflow-level `contents: write` has to be restated because naming
+    # The one job with write (HTOO-686): the release step needs it to publish.
+    # id-token + attestations are for the provenance step below. Naming
     # permissions on a job replaces the top-level block rather than adding to
-    # it, and the release step needs write to publish.
+    # it.
     permissions:
       contents: write
       id-token: write
@@ -476,10 +499,12 @@ jobs:
       # CHANGELOG + extract script are on disk.
       #
       # Depth 1 is deliberate. See CHECKOUT DEPTH at the top of this file.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
 
@@ -506,7 +531,7 @@ jobs:
       # attests the publisher. Both feed the reputation story that the
       # Wacatac false positive came down to.
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             artifacts/**/*.exe
@@ -515,7 +540,7 @@ jobs:
             artifacts/**/*.dmg
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: |
             artifacts/**/*-setup.exe

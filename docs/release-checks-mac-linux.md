@@ -41,7 +41,7 @@ npm run validate && npm run build
 
 If a `dist/` folder from an earlier package exists, the packaged-artifact case in `scripts/verify-fuses.test.mjs` reads it, and a package older than the current `electron-builder.yml` fails it. Delete `dist/` first, or run A4 and then this step again.
 
-### A2 and A3. e2e on Electron 44, and the real settings stay the same (both OS) — HTOO-553, HTOO-543
+### A2 and A3. e2e on Electron 45, and the real settings stay the same (both OS) — HTOO-553, HTOO-543
 
 A2 runs the e2e suite (HTOO-553). A3 proves that the suite does not touch the real settings (HTOO-543): the e2e helper points `LOCALAPPDATA` at a temp folder, and Epona reads `LOCALAPPDATA` on every OS. The helper also stops the run if the app's `userData` is not under the temp folder. One e2e run serves both, and it rebuilds the app first, so do not run it twice.
 
@@ -239,6 +239,14 @@ chmod +x ~/Downloads/epona-<version>-x86_64.AppImage
 ```
 
 **Expected:** the window opens. Then L4: set the sandbox restriction on for this boot (`sudo sysctl kernel.apparmor_restrict_unprivileged_userns=1`), start the AppImage again, and record whether it aborts at the sandbox check. Set it back to its value from step 9 afterwards. Say in the report if the AppImage needed `libfuse2`: Ubuntu 22.04 and later do not install it, and Mint does. Without it, `--appimage-extract-and-run` starts the AppImage. If the AppImage aborts with the restriction on, that is a code card for HTOO-643.
+
+Then L5, the children's environment (HTOO-661). Start a server and launch the client from the AppImage. For each child, run:
+
+```bash
+tr '\0' '\n' < /proc/<child pid>/environ | grep -E '^(APPDIR|APPIMAGE|ARGV0|OWD|LD_LIBRARY_PATH|GSETTINGS_SCHEMA_DIR)=|\.mount_'
+```
+
+Find the pids with `pgrep -f Hybrasyl` and `pgrep -f Brigid`. **Expected:** no `APPDIR`, `APPIMAGE`, `ARGV0` or `OWD` line, and no line that names `/tmp/.mount_…`. An `LD_LIBRARY_PATH` or `GSETTINGS_SCHEMA_DIR` line is correct only if the session set it before Epona started.
 
 ## Owed elsewhere — not on this page
 

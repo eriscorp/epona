@@ -69,7 +69,7 @@ describe('committed icon artifacts', () => {
     expect(buf.readUInt32BE(4)).toBe(buf.length)
 
     const types = []
-    for (let o = 8; o + 8 <= buf.length; ) {
+    for (let o = 8; o + 8 <= buf.length;) {
       types.push(buf.subarray(o, o + 4).toString('ascii'))
       o += buf.readUInt32BE(o + 4)
     }

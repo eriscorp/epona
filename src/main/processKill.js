@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'child_process'
+import { childEnv } from './childEnv.js'
 
 // How long a process tree gets to exit after SIGTERM before SIGKILL. The
 // server's own shutdown sleeps 2 s (server hybrasyl/Game.cs), so this leaves it
@@ -11,6 +12,7 @@ const POLL_MS = 100
 function killWindowsTree(pid) {
   return new Promise((resolve) => {
     const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(pid)], {
+      env: childEnv(),
       stdio: 'ignore',
       windowsHide: true
     })
@@ -33,19 +35,24 @@ function exists(target) {
 // exited, or `ps` failed) has no entry.
 function processGroups(pids) {
   return new Promise((resolve) => {
-    execFile('ps', ['-o', 'pid=,pgid=', '-p', pids.join(',')], (_err, stdout) => {
-      const groups = new Map()
-      for (const line of String(stdout ?? '').split('\n')) {
-        const [pid, pgid] = line.trim().split(/\s+/).map(Number)
-        if (pid > 0 && pgid > 0) groups.set(pid, pgid)
+    execFile(
+      'ps',
+      ['-o', 'pid=,pgid=', '-p', pids.join(',')],
+      { env: childEnv() },
+      (_err, stdout) => {
+        const groups = new Map()
+        for (const line of String(stdout ?? '').split('\n')) {
+          const [pid, pgid] = line.trim().split(/\s+/).map(Number)
+          if (pid > 0 && pgid > 0) groups.set(pid, pgid)
+        }
+        resolve(groups)
       }
-      resolve(groups)
-    })
+    )
   })
 }
 
 async function gone(target, ms) {
-  for (const end = Date.now() + ms; Date.now() < end; ) {
+  for (const end = Date.now() + ms; Date.now() < end;) {
     if (!exists(target)) return true
     await new Promise((r) => setTimeout(r, POLL_MS))
   }

@@ -5,6 +5,7 @@ import { gitToplevel } from '../gitOps.js'
 import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { resolveDotnetPath, dotnetRootEnv } from '../dotnet.js'
 import { spawnStarted, describeSpawnError } from './spawnStarted.js'
+import { childEnv } from '../childEnv.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -247,7 +248,7 @@ export async function launch(config, profile, daClientPath) {
   // even for a hostname-less profile (which sets no DA_HOST and would otherwise drop into the
   // launcher). The client then resolves host from DA_HOST or its saved config, asset from
   // DA_ASSET_PATH, and connects directly.
-  const env = { ...process.env, DA_ASSET_PATH: assetPath, DA_NO_LAUNCHER: '1' }
+  const env = childEnv({ DA_ASSET_PATH: assetPath, DA_NO_LAUNCHER: '1' })
   if (profile?.hostname) {
     env.DA_HOST = profile.hostname
     env.DA_HOST_PORT = String(profile.port)

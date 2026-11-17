@@ -15,6 +15,11 @@ export default defineConfig({
     // renderer ones and have no business paying for a DOM. A renderer test opts
     // itself in with a `// @vitest-environment jsdom` docblock on line 1.
     environment: 'node',
+    // vitest 5 clears every mock before each test by default. The index.js
+    // suites boot main once, in beforeAll, and then read what the boot called
+    // (setPath, setApplicationMenu, the lock check). A clear before each test
+    // erases those calls. This is vitest 4's value (HTOO-694).
+    clearMocks: false,
     include: ['src/**/*.test.{js,jsx,mjs,cjs}', 'scripts/**/*.test.{js,mjs,cjs}'],
     exclude: ['**/node_modules/**', '**/out/**', '**/dist/**']
   }

@@ -140,9 +140,7 @@ return {
     '--config',
     stripXmlExt(instance.configFileName)
   ],
-  env: {
-    /* same HYB_REDIS_* conditional logic as buildBinarySpawn */
-  }
+  env: {/* same HYB_REDIS_* conditional logic as buildBinarySpawn */}
 }
 ```
 

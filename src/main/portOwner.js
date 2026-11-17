@@ -1,4 +1,5 @@
 import { execFile } from 'child_process'
+import { childEnv } from './childEnv.js'
 
 // Which process owns a local listening port? Used only for the "adopted"
 // instances the status monitor discovers by port probe — a server left behind by
@@ -57,7 +58,7 @@ function run(command, args, timeoutMs) {
     execFile(
       command,
       args,
-      { timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+      { env: childEnv(), timeout: timeoutMs, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
       (err, stdout) => resolve(err && !stdout ? '' : stdout)
     )
   })

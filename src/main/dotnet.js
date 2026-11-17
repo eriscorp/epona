@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import { dirname, isAbsolute, join } from 'path'
 import { homedir } from 'os'
 import { promisify } from 'util'
+import { childEnv } from './childEnv.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -93,7 +94,7 @@ export async function dotnetRootEnv() {
     const dotnet = await resolveDotnetPath()
     if (isAbsolute(dotnet)) {
       try {
-        const { stdout } = await execFileAsync(dotnet, ['--list-runtimes'])
+        const { stdout } = await execFileAsync(dotnet, ['--list-runtimes'], { env: childEnv() })
         cachedRoot = runtimeRootFromListRuntimes(stdout)
       } catch {
         /* no runtime list: the apphost reports its own error */

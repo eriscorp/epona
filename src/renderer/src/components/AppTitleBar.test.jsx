@@ -60,17 +60,20 @@ describe('AppTitleBar', () => {
     // mundanes is a plain theme: no keyline on the wordmark. hybrasyl keylines it.
     mount()
     const shadow = () => getComputedStyle(screen.getByText(appIdentity.productName)).textShadow
-    expect(shadow()).toMatch(/#000/)
+    // jsdom 31 serializes the colour (`rgb(0, 0, 0)`); jsdom 29 kept `#000`.
+    expect(shadow()).toMatch(/#000|rgb\(0, 0, 0\) 1px 1px/)
     cleanup()
     useSettings.setState((s) => ({ settings: { ...s.settings, theme: 'mundanes' } }))
     mount()
-    expect(shadow()).not.toMatch(/#000/)
+    expect(shadow()).not.toMatch(/#000|rgb\(0, 0, 0\)/)
   })
 
   it("draws the wordmark at Epona's size, not the house 1.5rem (Sabrael, 2026-10-24)", () => {
     mount()
-    expect(getComputedStyle(screen.getByText(appIdentity.productName)).fontSize).toBe(
-      EPONA_WORDMARK_SIZE
+    // jsdom 31 computes rem to px at the 16px root; jsdom 29 kept rem.
+    const px = `${Number.parseFloat(EPONA_WORDMARK_SIZE) * 16}px`
+    expect([EPONA_WORDMARK_SIZE, px]).toContain(
+      getComputedStyle(screen.getByText(appIdentity.productName)).fontSize
     )
   })
 
