@@ -98,9 +98,11 @@
   },
   "_allowScriptsNote": [
     "npm 12 skips every dependency install script that this block does not approve, with only",
-    "a warning and exit 0. Approvals are by name, not by version (HTOO-542). esbuild selects its",
-    "platform binary. fsevents is the macOS file watcher behind vite and rollup; it is optional",
-    "and absent off macOS, so a Windows npm ci never lists it. electron-winstaller is listed as",
+    "a warning and exit 0. Approvals are by name, not by version (HTOO-542). An approval for a",
+    "package that is gone is removed, because it would approve a new package of that name",
+    "unread: esbuild went with vite 8 (HTOO-694). fsevents is the macOS file watcher behind",
+    "vite; it is optional and absent off macOS, so a Windows npm ci never lists it.",
+    "electron-winstaller is listed as",
     "false only to mark it reviewed: it serves Squirrel installers, which Epona does not ship.",
     "electron is not listed: since Electron 42 it has no install script. The project's OWN",
     "postinstall runs install-electron first (a no-op when the binary is there), because",
@@ -110,7 +112,6 @@
     "install-scripts ls lists nothing), and postinstall rebuilds it in any case."
   ],
   "allowScripts": {
-    "esbuild": true,
     "electron-winstaller": false,
     "fsevents": true
   },
