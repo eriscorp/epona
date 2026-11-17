@@ -13,6 +13,7 @@ import {
 } from '../buildProps.js'
 import { resolveDotnetPath } from '../dotnet.js'
 import { spawnStarted, describeSpawnError } from './spawnStarted.js'
+import { childEnv } from '../childEnv.js'
 
 // The server config the user picked, as a path for `--configFile`. `--config`
 // takes a config's Name attribute, not its file name, and matches it with case:
@@ -262,7 +263,7 @@ async function spawnInPowerShellConsole({ command, args, env, cwd, logFile }) {
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', outerPs],
     {
-      env: { ...process.env, ...env },
+      env: childEnv(env),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     }
@@ -319,7 +320,7 @@ async function spawnDirect(spec, cwd, cleanup) {
   try {
     child = spawn(spec.command, spec.args, {
       cwd,
-      env: { ...process.env, ...spec.env },
+      env: childEnv(spec.env),
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe']
     })

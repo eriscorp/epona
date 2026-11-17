@@ -1,6 +1,7 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { resolveDotnetPath } from './dotnet.js'
+import { childEnv } from './childEnv.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -60,8 +61,8 @@ export async function checkDotnetRuntime() {
   try {
     const dotnet = await resolveDotnetPath()
     const [{ stdout: rtOut }, { stdout: sdkOut }] = await Promise.all([
-      execFileAsync(dotnet, ['--list-runtimes']),
-      execFileAsync(dotnet, ['--list-sdks'])
+      execFileAsync(dotnet, ['--list-runtimes'], { env: childEnv() }),
+      execFileAsync(dotnet, ['--list-sdks'], { env: childEnv() })
     ])
     const runtimes = parseListRuntimesOutput(rtOut)
     const sdks = parseListSdksOutput(sdkOut)

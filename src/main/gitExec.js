@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import { dirname } from 'path'
 import { isCltFailure, CLT_MESSAGE } from './launchEnv/gitFailure.js'
+import { childEnv } from './childEnv.js'
 
 // macOS without the Xcode Command Line Tools (HTOO-512, defect 2). /usr/bin/git
 // there is a shim that always exists, so a spawn never fails with ENOENT. Without
@@ -55,6 +56,7 @@ export function runGit(cwd, args, { allowFail = false } = {}) {
   if (cltMissing) return Promise.reject(cltError())
   return new Promise((resolve, reject) => {
     const child = spawn('git', ['-C', cwd, ...args], {
+      env: childEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     })
