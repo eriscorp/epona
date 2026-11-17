@@ -248,7 +248,7 @@ tr '\0' '\n' < /proc/<child pid>/environ | grep -E '^(APPDIR|APPIMAGE|ARGV0|OWD|
 
 Find the pids with `pgrep -f Hybrasyl` and `pgrep -f Brigid`. **Expected:** no `APPDIR`, `APPIMAGE`, `ARGV0` or `OWD` line, and no line that names `/tmp/.mount_…`. An `LD_LIBRARY_PATH` or `GSETTINGS_SCHEMA_DIR` line is correct only if the session set it before Epona started.
 
-Then quit Epona and run `mount | grep '\.mount_'`. A mount that stays while `VBCSCompiler` runs is the open half of F25 in `docs/plans/01-macos-linux-deep-dive.md`: each child inherits Epona's open files. It is known, and does not fail L5. Record it, and `dotnet build-server shutdown` releases it.
+Then the children's open files (HTOO-661, fault 2). With the server running, run `ls -l /proc/<server pid>/fd | grep '\.mount_'`. **Expected:** no output. Quit Epona while `pgrep VBCSCompiler` still finds the build server, and run `mount | grep '\.mount_'`. **Expected:** no output within a few seconds: the AppImage's mount goes away, and the build server keeps running. A mount that stays is a failure; `fuser -m <mount>` names the process that holds it, and `dotnet build-server shutdown` releases it.
 
 ## Owed elsewhere — not on this page
 
@@ -271,8 +271,9 @@ The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45
 - **A2 and A3:** e2e on Electron 45. The totals in A2 do not change (30 tests in 16 files).
 - **A4 and A5, then B1:** the first packaged build on Electron 45 on each OS. An Electron major is the change that a packaged launch exists to check: the fuses, the asar check, and the window.
 - **`npm run dev` (both OS):** start it, change a line of text in a renderer file, and save. **Expected:** the window starts, and the change shows without a restart. This is the electron-vite 6 and vite 8 dev server, which no check above starts.
-- **B4, B9 and B10 (both OS):** each starts a server, the client, git or dotnet. Every child now gets its environment from `childEnv()` (HTOO-661). Off the AppImage the environment does not change, so these must pass as before.
-- **Part C, after the tag:** C1 with M7, and C2 with L4 and **L5** (HTOO-661, the AppImage's children). L5 is new.
+- **B4, B9 and B10 (both OS):** each starts a server, the client, git or dotnet. Every child now gets its environment from `childEnv()`, and on Linux `/dev/null` in place of each of Epona's open files (`childStdio()`, HTOO-661). Off the AppImage the environment does not change, so these must pass as before.
+- **A1 on Linux:** two tests in `childStdio.test.js` run on Linux only. They spawn real children and read `/proc`. They must pass, not skip.
+- **Part C, after the tag:** C1 with M7, and C2 with L4 and **L5** (HTOO-661, the AppImage's children: their environment, and the mount after Epona quits). L5 is new.
 - **Windows:** the items in "Owed elsewhere". The Signing item now includes the "Fetch and verify CodeSignTool" step (HTOO-686). The first tag run is also the first run of the pinned actions and of the read-only permissions: if a step fails with a 403 or "Resource not accessible by integration", report it on HTOO-686.
 
 ### Checks for this release only

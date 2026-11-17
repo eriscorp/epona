@@ -126,6 +126,7 @@ describe('every spawn in src/main passes childEnv (HTOO-661)', () => {
       )
     ].map((m) => ({
       where: `${relative(MAIN, file)}: ${m[1]}`,
+      kind: m[1],
       text: callText(src, m.index),
       // A call may pass `env` as a shorthand for a variable that childEnv built.
       envIsChildEnv: /\bconst env = childEnv\(/.test(src)
@@ -142,5 +143,19 @@ describe('every spawn in src/main passes childEnv (HTOO-661)', () => {
     const direct = /\benv: childEnv\(/.test(text)
     const shorthand = envIsChildEnv && /^\s*env,?\s*$/m.test(text)
     expect(direct || shorthand, text).toBe(true)
+  })
+
+  // HTOO-661, fault 2: a spawn also gives the child /dev/null in place of each
+  // descriptor of Epona's that would leak (childStdio.js). execFile cannot take
+  // a stdio array, and its calls end before Epona does.
+  const spawns = calls.filter((c) => ['spawn', 'spawnSync', 'fork'].includes(c.kind))
+
+  it('finds the long-lived spawns', () => {
+    // git, the client, both server paths and the Windows kill.
+    expect(spawns.length).toBeGreaterThanOrEqual(5)
+  })
+
+  it.each(spawns.map((c) => [c.where, c.text]))('%s passes childStdio', (_where, text) => {
+    expect(text).toMatch(/\bstdio: childStdio\(/)
   })
 })

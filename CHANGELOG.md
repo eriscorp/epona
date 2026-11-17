@@ -39,6 +39,7 @@ the rules above.
 
 - **Epona no longer takes itself for the portable exe when another app's portable exe started it.** For example, Epona started from a terminal in an editor that Balor's portable exe opened. Epona then logged a portable-cleanup error, and Report Issue showed it. Epona now checks that the portable exe is its own. It also does not pass the portable exe's settings on to the programs it starts.
 - **On Linux, the AppImage does not pass its own folders on to the programs it starts.** The AppImage adds its mounted folder to `PATH`, `LD_LIBRARY_PATH` and other lists. The server, the client, git and dotnet got these lists too, and could load files from a folder that is gone when Epona closes. They now get the lists as they were before the AppImage started.
+- **On Linux, the AppImage closes when Epona closes.** The programs that Epona starts kept some of Epona's own files open. The .NET build server that a repo-mode server starts runs on after Epona closes, so it kept the AppImage mounted. Those programs now get none of Epona's open files.
 
 ### Security
 

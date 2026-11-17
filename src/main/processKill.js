@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'child_process'
 import { childEnv } from './childEnv.js'
+import { childStdio } from './childStdio.js'
 
 // How long a process tree gets to exit after SIGTERM before SIGKILL. The
 // server's own shutdown sleeps 2 s (server hybrasyl/Game.cs), so this leaves it
@@ -13,7 +14,7 @@ function killWindowsTree(pid) {
   return new Promise((resolve) => {
     const tk = spawn('taskkill.exe', ['/F', '/T', '/PID', String(pid)], {
       env: childEnv(),
-      stdio: 'ignore',
+      stdio: childStdio('ignore'),
       windowsHide: true
     })
     tk.once('exit', () => resolve({ ok: true }))

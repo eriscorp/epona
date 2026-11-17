@@ -6,6 +6,7 @@ import { ensureWorktree, releaseWorktree } from '../worktreeManager.js'
 import { resolveDotnetPath, dotnetRootEnv } from '../dotnet.js'
 import { spawnStarted, describeSpawnError } from './spawnStarted.js'
 import { childEnv } from '../childEnv.js'
+import { childStdio } from '../childStdio.js'
 
 // Classify the configured path as either a prebuilt client .exe or a .csproj
 // inside a source checkout. Returns { kind, ... } where kind is 'exe' | 'repo'
@@ -260,7 +261,7 @@ export async function launch(config, profile, daClientPath) {
   try {
     const child = spawn(command, args, {
       cwd,
-      stdio: isRepo ? ['ignore', 'pipe', 'pipe'] : 'ignore',
+      stdio: childStdio(isRepo ? ['ignore', 'pipe', 'pipe'] : 'ignore'),
       // Hide the spawned process's console ONLY for `repo`. There `dotnet run` is a console
       // host whose window-owning client is a separate grandchild, so hiding the host console is
       // safe and the client window still shows. For `exe` (WinExe — no console) and `dll`

@@ -14,6 +14,7 @@ import {
 import { resolveDotnetPath } from '../dotnet.js'
 import { spawnStarted, describeSpawnError } from './spawnStarted.js'
 import { childEnv } from '../childEnv.js'
+import { childStdio } from '../childStdio.js'
 
 // The server config the user picked, as a path for `--configFile`. `--config`
 // takes a config's Name attribute, not its file name, and matches it with case:
@@ -264,7 +265,7 @@ async function spawnInPowerShellConsole({ command, args, env, cwd, logFile }) {
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', outerPs],
     {
       env: childEnv(env),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: childStdio(['ignore', 'pipe', 'pipe']),
       windowsHide: true
     }
   )
@@ -322,7 +323,7 @@ async function spawnDirect(spec, cwd, cleanup) {
       cwd,
       env: childEnv(spec.env),
       detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: childStdio(['ignore', 'pipe', 'pipe'])
     })
     failed = await spawnStarted(child)
   } catch (err) {
