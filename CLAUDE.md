@@ -13,7 +13,7 @@ Plans live in [docs/plans/](docs/plans/): [00-overview.md](docs/plans/00-overvie
 | `npm run dev`            | Run the app with hot reload.                                         |
 | `npm run lint:check`     | ESLint with `--max-warnings 0`. Any warning fails.                   |
 | `npm test`               | Vitest, node environment.                                            |
-| `npm run test:coverage`  | Same with v8 coverage over `src/**`.                                 |
+| `npm run test:coverage`  | Same with v8 coverage over the JS sources in `src/`.                 |
 | `npm run e2e`            | Build, then Playwright against the built app. CI runs it on Windows. |
 | `npm run build`          | electron-vite build into `out/`.                                     |
 | `npm run build:portable` | Build + package the portable Windows exe.                            |

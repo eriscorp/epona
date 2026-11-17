@@ -24,7 +24,7 @@
     "lint": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include=src/**",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.include=src/**/*.{js,jsx}",
     "test:watch": "vitest",
     "e2e": "npm run build && playwright test",
     "e2e:only": "playwright test",
@@ -132,7 +132,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
     "@vitejs/plugin-react": "^6.3.0",
-    "@vitest/coverage-v8": "^4.1.12",
+    "@vitest/coverage-v8": "^5.1.0",
     "electron": "^45.3.4",
     "electron-builder": "^26.17.0",
     "electron-vite": "^6.0.0",
@@ -145,7 +145,7 @@
     "react-dom": "^19.2.7",
     "react-icons": "^5.6.0",
     "vite": "^8.3.8",
-    "vitest": "^4.1.12",
+    "vitest": "^5.1.0",
     "zustand": "^5.0.14"
   }
 }
