@@ -1,6 +1,6 @@
 # CLAUDE.md — Epona
 
-Epona is a desktop launcher for Dark Ages and Hybrasyl: it starts the legacy client (patching its memory on Windows), the Hybrasyl client, and local Hybrasyl server instances from a git checkout. Electron + React 19 + MUI 9 + Zustand, on the house Electron skeleton.
+Epona is a desktop launcher for Dark Ages and Hybrasyl: it starts the legacy client (patching its memory on Windows), the Hybrasyl client, and local Hybrasyl server instances from a git checkout. Electron 45 + React 19 + MUI 9 + Zustand, built with electron-vite 6 on vite 8 and tested with Vitest 5 and jsdom 31, on the house Electron skeleton.
 
 House working rules — branching, commit style, the verify-before-commit gate, PR prep, the security posture, markdown style — live in the document repo's `docs/architecture/dev-practices.md`, and the architecture standard in `electron-app-skeleton.md` beside it. **Prefer those if anything here conflicts; this file is repo-specific facts only.**
 

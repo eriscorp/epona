@@ -31,6 +31,19 @@ the rules above.
 
 ## [Unreleased]
 
+### Changed
+
+- **Epona runs on Electron 45.3.4.** It has Chromium 156 and Node 24.22.3.
+
+### Fixed
+
+- **Epona no longer takes itself for the portable exe when another app's portable exe started it.** For example, Epona started from a terminal in an editor that Balor's portable exe opened. Epona then logged a portable-cleanup error, and Report Issue showed it. Epona now checks that the portable exe is its own. It also does not pass the portable exe's settings on to the programs it starts.
+- **On Linux, the AppImage does not pass its own folders on to the programs it starts.** The AppImage adds its mounted folder to `PATH`, `LD_LIBRARY_PATH` and other lists. The server, the client, git and dotnet got these lists too, and could load files from a folder that is gone when Epona closes. They now get the lists as they were before the AppImage started.
+
+### Security
+
+- **The release build checks the signing tool before it uses it.** The Windows build downloads SSL.com's CodeSignTool. It now compares the download with a known SHA-256 value, and stops if they differ. Each build step can only read the repository; only the step that publishes the release can write to it.
+
 ## [2.10.0] - 2026-11-02
 
 ### Added

@@ -41,7 +41,7 @@ npm run validate && npm run build
 
 If a `dist/` folder from an earlier package exists, the packaged-artifact case in `scripts/verify-fuses.test.mjs` reads it, and a package older than the current `electron-builder.yml` fails it. Delete `dist/` first, or run A4 and then this step again.
 
-### A2 and A3. e2e on Electron 44, and the real settings stay the same (both OS) — HTOO-553, HTOO-543
+### A2 and A3. e2e on Electron 45, and the real settings stay the same (both OS) — HTOO-553, HTOO-543
 
 A2 runs the e2e suite (HTOO-553). A3 proves that the suite does not touch the real settings (HTOO-543): the e2e helper points `LOCALAPPDATA` at a temp folder, and Epona reads `LOCALAPPDATA` on every OS. The helper also stops the run if the app's `userData` is not under the temp folder. One e2e run serves both, and it rebuilds the app first, so do not run it twice.
 
