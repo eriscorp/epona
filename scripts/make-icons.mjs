@@ -3,11 +3,19 @@
 //
 //   build/icon-square.png  (committed, 1024x1024, full-bleed)
 //        ├──> build/icon.icns      824x824 centred on 1024x1024, 10 entries  (macOS)
-//        └──> build/icons/NxN.png  8 sizes, full-bleed                       (Linux)
+//        ├──> build/icons/NxN.png  8 sizes, full-bleed                       (Linux)
+//        └──> resources/epona-icon-linux-256.png  a copy of the 256    (Linux window)
 //
 // build/icon.png is NOT touched: it is the star, and it stays the WINDOWS
-// artwork, the same star as the in-app window icon
+// artwork, the same star as the window icon there
 // (resources/epona-icon-256.png).
+//
+// The Linux window icon is the tile too (Sabrael, 2026-11-17, HTOO-663). A
+// desktop that cannot match the window to the installed .desktop file (an
+// AppImage with no desktop integration, some X11 window lists) draws the
+// window's own icon, so the star showed there beside the tile everywhere
+// else. build/ is never packaged, so the 256 is copied into resources/, which
+// is. src/main/windowIcon.js chooses it on Linux.
 //
 // ── Why one generator and one master ──
 //
@@ -73,7 +81,7 @@
 //   node scripts/make-icons.mjs
 
 import { execFileSync } from 'child_process'
-import { mkdirSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'fs'
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { fileURLToPath } from 'url'
@@ -82,6 +90,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE = join(repoRoot, 'build', 'icon-square.png')
 const ICNS_OUT = join(repoRoot, 'build', 'icon.icns')
 const LINUX_DIR = join(repoRoot, 'build', 'icons')
+const LINUX_WINDOW_ICON = join(repoRoot, 'resources', 'epona-icon-linux-256.png')
 
 // The master must be exactly this, full-bleed. Asserted, not assumed.
 const MASTER_SIZE = 1024
@@ -245,6 +254,10 @@ for (const size of LINUX_SIZES) {
   magick([SOURCE, '-resize', `${size}x${size}`, ...DETERMINISTIC, `PNG32:${out}`])
   console.log(`  icons/${size}x${size}.png  ${String(readFileSync(out).length).padStart(7)} bytes`)
 }
+
+// ── The Linux window icon: the same 256, where the package can reach it ─────
+copyFileSync(join(LINUX_DIR, '256x256.png'), LINUX_WINDOW_ICON)
+console.log('  resources/epona-icon-linux-256.png  (copy of icons/256x256.png)')
 
 // ── Verify what was written, rather than trusting the arguments ─────────────
 //

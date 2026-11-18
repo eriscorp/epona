@@ -250,6 +250,8 @@ Find the pids with `pgrep -f Hybrasyl` and `pgrep -f Brigid`. **Expected:** no `
 
 Then the children's open files (HTOO-661, fault 2). With the server running, run `ls -l /proc/<server pid>/fd | grep '\.mount_'`. **Expected:** no output. Quit Epona while `pgrep VBCSCompiler` still finds the build server, and run `mount | grep '\.mount_'`. **Expected:** no output within a few seconds: the AppImage's mount goes away, and the build server keeps running. A mount that stays is a failure; `fuser -m <mount>` names the process that holds it, and `dotnet build-server shutdown` releases it.
 
+Then L8, the window icon (HTOO-663). Remove the `.deb` first (`sudo apt remove epona`), so no installed `epona.desktop` gives the desktop its icon, and start the AppImage. **Expected:** the taskbar entry and the Alt+Tab switcher show the square tile, the same artwork as the installed icon, not the star. Check this under X11 and, where the box has one, under a Wayland session; say which ran. Install the `.deb` again afterwards.
+
 ## Owed elsewhere — not on this page
 
 These checks are for any OS, or for Windows, and are listed here so that they are not lost. Report each on its card.
@@ -274,14 +276,12 @@ The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45
 - **B4, B9 and B10 (both OS):** each starts a server, the client, git or dotnet. Every child now gets its environment from `childEnv()`, and on Linux `/dev/null` in place of each of Epona's open files (`childStdio()`, HTOO-661). Off the AppImage the environment does not change, so these must pass as before.
 - **A1 on Linux:** two tests in `childStdio.test.js` run on Linux only. They spawn real children and read `/proc`. They must pass, not skip.
 - **Programs you chose (both OS, HTOO-685).** Epona now keeps a record of each program and repository picked with Browse (`grants.json`, see `docs/authority-model.md`). (1) Start this version on the box's existing settings. **Expected:** `grants.json` appears beside settings.json, and the client and a server launch as before, with no new prompt. (2) Pick a different client binary and a server repo with Browse, then launch each. **Expected:** both start. (3) Quit Epona, set `targets.hybrasyl.binaryPath` in settings.json to another program by hand, start Epona and launch the client. **Expected:** the launch fails with "Epona has no record that you chose …", and nothing starts. Browse fixes it. (4) On macOS, set an instance's `logDir` in settings.json to `/System/Applications/Calculator.app` and press the log-folder button. **Expected:** an error, and Calculator does not start. Set it back to a real folder: Finder opens it.
-- **Part C, after the tag:** C1 with M7, and C2 with L4 and **L5** (HTOO-661, the AppImage's children: their environment, and the mount after Epona quits). L5 is new.
+- **Part C, after the tag:** C1 with M7, and C2 with L4, **L5** (HTOO-661, the AppImage's children: their environment, and the mount after Epona quits) and **L8** (HTOO-663, the window icon). L5 and L8 are new.
 - **Windows:** the items in "Owed elsewhere". The Signing item now includes the "Fetch and verify CodeSignTool" step (HTOO-686). The first tag run is also the first run of the pinned actions and of the read-only permissions: if a step fails with a 403 or "Resource not accessible by integration", report it on HTOO-686.
 
 ### Checks for this release only
 
 - **R1. A portable exe that is not Epona's (HTOO-667, Windows).** Done on 2026-11-17 on a `--dir` build of `7e1ff0e`: with Balor's three `PORTABLE_EXECUTABLE_*` values set, Epona ran for 40 s and its session log had no portable line. With `PORTABLE_EXECUTABLE_APP_FILENAME=epona`, the same build logged `unexpected portable layout`, so the log does show a sweep. Not owed on macOS or Linux: the variables come only from the Windows portable stub.
 - **R2. The portable exe still cleans up (HTOO-667 and HTOO-494, Windows).** Start the release's own portable exe. In Task Manager, end the stub's process (`epona-<version>-portable.exe`, not `Epona.exe`), then close Epona. Its `%TEMP%\ns*.tmp` folder stays. Wait 10 minutes, start the portable exe again, and wait 30 s. **Expected:** the old folder is gone, and the session log has no `unexpected portable layout` line. This proves that the stub's own `PORTABLE_EXECUTABLE_APP_FILENAME` matches the package name `epona`.
-
-HTOO-663 (the Linux window icon) stays open.
 
 When the release is published, Sabrael runs `npm run publish:version -- v<version>` on the Windows box. It is not a Mac or Linux step.

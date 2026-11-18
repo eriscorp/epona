@@ -30,6 +30,7 @@ import { pipeChildLines } from './childLines.js'
 import { buildHint } from './buildHints.js'
 import { openFolder } from './openFolder.js'
 import { openInstanceLogDir } from './openLogDir.js'
+import { windowIconFile } from './windowIcon.js'
 import {
   createLaunchGrants,
   hybrasylLaunchPaths,
@@ -365,8 +366,9 @@ function createWindow() {
     // from the exe resource, so this mainly serves dev runs and Linux — but it
     // is decoded at window creation either way, and 256 is the largest size any
     // consumer of this option asks for. electron-builder still points at the
-    // 1024px build/icon.png for the icons it generates at build time.
-    icon: join(__dirname, '../../resources/epona-icon-256.png'),
+    // 1024px build/icon.png for the icons it generates at build time. Linux
+    // takes the square tile, the star elsewhere (windowIcon.js, HTOO-663).
+    icon: join(__dirname, '../../resources', windowIconFile(process.platform)),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       // The scaffold ships `sandbox: false`, which is only needed when the preload

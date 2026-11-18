@@ -34,6 +34,7 @@ the rules above.
 ### Changed
 
 - **Epona runs on Electron 45.3.4.** It has Chromium 156 and Node 24.22.3.
+- **On Linux, the Epona window shows the square Epona icon.** The installed icon was the square tile, but the window itself showed the star. A desktop that cannot match the window to the installed icon, such as an AppImage with no desktop integration, showed the star in the taskbar. The window now uses the same tile.
 
 ### Fixed
 

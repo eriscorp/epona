@@ -97,6 +97,28 @@ describe('committed icon artifacts', () => {
     expect(found).toEqual(SIZES.map((s) => `${s}x${s}.png`).sort())
   })
 
+  it('the Linux window icon is the 256 tile, byte for byte (HTOO-663)', () => {
+    // build/ is never packaged, so make-icons.mjs copies the tile into
+    // resources/. A changed master with no regeneration leaves the window on
+    // the old tile while the installed icon moves on.
+    const copy = readFileSync(join(REPO_ROOT, 'resources', 'epona-icon-linux-256.png'))
+    expect(copy.equals(readFileSync(join(BUILD, 'icons', '256x256.png')))).toBe(true)
+  })
+
+  it('each window names the tile on Linux and the star elsewhere (HTOO-663)', async () => {
+    const { windowIconFile } = await import('../src/main/windowIcon.js')
+    expect(windowIconFile('linux')).toBe('epona-icon-linux-256.png')
+    expect(windowIconFile('win32')).toBe('epona-icon-256.png')
+    expect(windowIconFile('darwin')).toBe('epona-icon-256.png')
+    const main = readFileSync(join(REPO_ROOT, 'src', 'main', 'index.js'), 'utf8')
+    expect(main).toContain(
+      "icon: join(__dirname, '../../resources', windowIconFile(process.platform))"
+    )
+    expect(main).not.toMatch(
+      /icon: join\(__dirname, '\.\.\/\.\.\/resources\/epona-icon-256\.png'\)/
+    )
+  })
+
   it.each(SIZES)('build/icons/%ix%i.png is square, RGBA, and its named size', (size) => {
     // The filename becomes the hicolor path, so a file whose name and contents
     // disagree installs correct-looking artwork at the wrong resolution.

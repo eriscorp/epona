@@ -250,8 +250,9 @@ linux:
   #
   # The eight PNGs come from build/icon-square.png, the same full-bleed master
   # the .icns above is built from — the square tile, NOT the star, which stays
-  # Windows-only: it is the Windows artwork, the same star as the in-app window
-  # icon (resources/epona-icon-256.png). Linux
+  # Windows-only: it is the Windows artwork, the same star as the Windows window
+  # icon (resources/epona-icon-256.png). The Linux window icon is the tile too
+  # (resources/epona-icon-linux-256.png, HTOO-663). Linux
   # desktops that draw square icons (Cinnamon among them) render a star's
   # transparent corners as a smaller icon than its neighbours even when its
   # bounding box is correct. Committed rather than built in CI, exactly as
