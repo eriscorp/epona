@@ -67,11 +67,11 @@ ls -d "$S"     # a folder that did not exist before must not exist now
 
 If `sha256sum` is missing, use `shasum -a 256`. Two empty lists also compare as `UNCHANGED`, so an `EMPTY` line means that A3 checked nothing: fix the hash command, or say that the settings folder did not exist.
 
-Expected for A2 (30 tests in 16 files):
+Expected for A2 (32 tests in 17 files):
 
-- **macOS:** 29 passed and 1 skipped. The five tests in `app-menu.spec.js` run on macOS only; they cover the menu, Go, Check for Updates and About. The skip is the title-bar close in `quit.spec.js`, because a window close does not quit on macOS. `title-bar.spec.js` expects a 78 px left padding on macOS, and 24 px at the right (the house title bar, HTOO-572).
-- **Linux:** 25 passed and 5 skipped. The skips are `app-menu.spec.js`.
-- On Windows the result is also 25 passed and 5 skipped.
+- **macOS:** 31 passed and 1 skipped. The five tests in `app-menu.spec.js` run on macOS only; they cover the menu, Go, Check for Updates and About. The skip is the title-bar close in `quit.spec.js`, because a window close does not quit on macOS. `title-bar.spec.js` expects a 78 px left padding on macOS, and 24 px at the right (the house title bar, HTOO-572).
+- **Linux:** 27 passed and 5 skipped. The skips are `app-menu.spec.js`.
+- On Windows the result is also 27 passed and 5 skipped.
 
 A different total means that a spec was added or was not collected. Say so in the report.
 
@@ -267,12 +267,13 @@ Rewrite this section for each release: what applies, and what is already done. T
 The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45.3.4 (Chromium 156, Node 24.22.3), electron-vite 6 on vite 8, Vitest 5 and jsdom 31. eriscorp/epona#71 also gives each child `/dev/null` in place of Epona's open files on Linux (HTOO-661). No feature changed, so the whole page applies, and the parts below matter most. The 2.10.0 checks for HTOO-627 (N1 to N5, and the box scripts) are done, and are not owed again.
 
 - **"Before you start", step 4:** `npm install-scripts ls` must still print `No packages with unreviewed install scripts.` vite 8 builds with rolldown, which installs a native binding with no install script. esbuild is gone, and so is its approval in `package.json`. On macOS, `fsevents` is still approved.
-- **A1:** the suite is on Vitest 5 and jsdom 31. On Windows it is 2117 passed and 17 skipped in 122 files. Report the count; some tests skip by OS, so the count off Windows can differ.
-- **A2 and A3:** e2e on Electron 45. The totals in A2 do not change (30 tests in 16 files).
+- **A1:** the suite is on Vitest 5 and jsdom 31. On Windows it is 2154 passed and 19 skipped in 126 files. Report the count; some tests skip by OS, so the count off Windows can differ.
+- **A2 and A3:** e2e on Electron 45. `launch-authority.spec.js` (HTOO-685) is new, so A2 has two tests more (32 tests in 17 files).
 - **A4 and A5, then B1:** the first packaged build on Electron 45 on each OS. An Electron major is the change that a packaged launch exists to check: the fuses, the asar check, and the window.
 - **`npm run dev` (both OS):** start it, change a line of text in a renderer file, and save. **Expected:** the window starts, and the change shows without a restart. This is the electron-vite 6 and vite 8 dev server, which no check above starts.
 - **B4, B9 and B10 (both OS):** each starts a server, the client, git or dotnet. Every child now gets its environment from `childEnv()`, and on Linux `/dev/null` in place of each of Epona's open files (`childStdio()`, HTOO-661). Off the AppImage the environment does not change, so these must pass as before.
 - **A1 on Linux:** two tests in `childStdio.test.js` run on Linux only. They spawn real children and read `/proc`. They must pass, not skip.
+- **Programs you chose (both OS, HTOO-685).** Epona now keeps a record of each program and repository picked with Browse (`grants.json`, see `docs/authority-model.md`). (1) Start this version on the box's existing settings. **Expected:** `grants.json` appears beside settings.json, and the client and a server launch as before, with no new prompt. (2) Pick a different client binary and a server repo with Browse, then launch each. **Expected:** both start. (3) Quit Epona, set `targets.hybrasyl.binaryPath` in settings.json to another program by hand, start Epona and launch the client. **Expected:** the launch fails with "Epona has no record that you chose …", and nothing starts. Browse fixes it. (4) On macOS, set an instance's `logDir` in settings.json to `/System/Applications/Calculator.app` and press the log-folder button. **Expected:** an error, and Calculator does not start. Set it back to a real folder: Finder opens it.
 - **Part C, after the tag:** C1 with M7, and C2 with L4 and **L5** (HTOO-661, the AppImage's children: their environment, and the mount after Epona quits). L5 is new.
 - **Windows:** the items in "Owed elsewhere". The Signing item now includes the "Fetch and verify CodeSignTool" step (HTOO-686). The first tag run is also the first run of the pinned actions and of the read-only permissions: if a step fails with a 403 or "Resource not accessible by integration", report it on HTOO-686.
 
