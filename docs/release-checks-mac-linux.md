@@ -264,7 +264,7 @@ These checks are for any OS, or for Windows, and are listed here so that they ar
 
 Rewrite this section for each release: what applies, and what is already done. The owed list for this release is the 2026-11-17 comment on HTOO-242; tick it there as each check passes.
 
-The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45.3.4 (Chromium 156, Node 24.22.3), electron-vite 6 on vite 8, Vitest 5 and jsdom 31. eriscorp/epona#71 also gives each child `/dev/null` in place of Epona's open files on Linux (HTOO-661). No feature changed, so the whole page applies, and the parts below matter most. The 2.10.0 checks for HTOO-627 (N1 to N5, and the box scripts) are done, and are not owed again.
+The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45.3.4 (Chromium 156, Node 24.22.3), electron-vite 6 on vite 8, Vitest 5 and jsdom 31. eriscorp/epona#71 also gives each child `/dev/null` in place of Epona's open files on Linux (HTOO-661), and eriscorp/epona#72 lets Epona run only the programs and repositories that the user chose (HTOO-685, `docs/authority-model.md`). No feature changed, so the whole page applies, and the parts below matter most. The 2.10.0 checks for HTOO-627 (N1 to N5, and the box scripts) are done, and are not owed again.
 
 - **"Before you start", step 4:** `npm install-scripts ls` must still print `No packages with unreviewed install scripts.` vite 8 builds with rolldown, which installs a native binding with no install script. esbuild is gone, and so is its approval in `package.json`. On macOS, `fsevents` is still approved.
 - **A1:** the suite is on Vitest 5 and jsdom 31. On Windows it is 2154 passed and 19 skipped in 126 files. Report the count; some tests skip by OS, so the count off Windows can differ.
@@ -282,6 +282,6 @@ The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45
 - **R1. A portable exe that is not Epona's (HTOO-667, Windows).** Done on 2026-11-17 on a `--dir` build of `7e1ff0e`: with Balor's three `PORTABLE_EXECUTABLE_*` values set, Epona ran for 40 s and its session log had no portable line. With `PORTABLE_EXECUTABLE_APP_FILENAME=epona`, the same build logged `unexpected portable layout`, so the log does show a sweep. Not owed on macOS or Linux: the variables come only from the Windows portable stub.
 - **R2. The portable exe still cleans up (HTOO-667 and HTOO-494, Windows).** Start the release's own portable exe. In Task Manager, end the stub's process (`epona-<version>-portable.exe`, not `Epona.exe`), then close Epona. Its `%TEMP%\ns*.tmp` folder stays. Wait 10 minutes, start the portable exe again, and wait 30 s. **Expected:** the old folder is gone, and the session log has no `unexpected portable layout` line. This proves that the stub's own `PORTABLE_EXECUTABLE_APP_FILENAME` matches the package name `epona`.
 
-HTOO-663 (the Linux window icon) and HTOO-685 (the renderer's launch authority) stay open.
+HTOO-663 (the Linux window icon) stays open.
 
 When the release is published, Sabrael runs `npm run publish:version -- v<version>` on the Windows box. It is not a Mac or Linux step.
