@@ -333,9 +333,10 @@ export default function SettingsPane({
               fullWidth
               size="small"
               value={settings.clientPath}
-              onChange={(e) => onChange({ clientPath: e.target.value })}
               placeholder={isWindows ? 'Path to Darkages.exe' : 'Path to Dark Ages assets folder'}
-              inputProps={{ style: { fontSize: 12 } }}
+              // Read-only: Browse is the only way to set it. A typed path has no
+              // grant, so Launch would refuse it (HTOO-685).
+              inputProps={{ readOnly: true, style: { fontSize: 12 } }}
             />
             <Button
               variant="outlined"

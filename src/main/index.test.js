@@ -305,13 +305,41 @@ describe('the Dark Ages installer handlers', () => {
     })
   })
 
+  // The user's picks, through the real picker handlers: an install takes only
+  // paths that a dialog returned (HTOO-685).
+  async function picked(channel, path) {
+    harness.electron.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [path]
+    })
+    expect(await harness.invoke(channel)).toBe(path)
+    return path
+  }
+  const pickInstall = async (installer, destination) => ({
+    installerPath: await picked('installer:pickInstaller', installer),
+    destinationDir: await picked('installer:pickDestination', destination)
+  })
+
+  it('refuses paths that no picker returned (HTOO-685)', async () => {
+    // An unpack writes files into the folder it is given.
+    await expect(
+      harness.invoke('installer:installFromFile', {
+        installerPath: join(sandbox, 'forged.exe'),
+        destinationDir: join(sandbox, 'forged-out')
+      })
+    ).resolves.toMatchObject({ ok: false, reason: 'bad-request' })
+    await expect(
+      harness.invoke('installer:download', { destinationDir: join(sandbox, 'forged-out') })
+    ).resolves.toMatchObject({ ok: false, reason: 'bad-request' })
+  })
+
   it('turns a failed install into a result rather than an IPC exception', async () => {
     // The renderer branches on `reason`; an exception across IPC arrives as an
     // opaque "Error invoking remote method" string with the reason lost.
-    const result = await harness.invoke('installer:installFromFile', {
-      installerPath: join(sandbox, 'does-not-exist.exe'),
-      destinationDir: join(sandbox, 'out')
-    })
+    const result = await harness.invoke(
+      'installer:installFromFile',
+      await pickInstall(join(sandbox, 'does-not-exist.exe'), join(sandbox, 'out'))
+    )
     expect(result.ok).toBe(false)
     expect(result.reason).toBe('installer-missing')
     expect(typeof result.message).toBe('string')
@@ -320,14 +348,10 @@ describe('the Dark Ages installer handlers', () => {
   it('runs one install at a time', async () => {
     // Two concurrent installs would write the same staging directory and fight
     // over the same cached download.
-    const slow = harness.invoke('installer:installFromFile', {
-      installerPath: join(sandbox, 'also-missing.exe'),
-      destinationDir: join(sandbox, 'out2')
-    })
-    const second = harness.invoke('installer:installFromFile', {
-      installerPath: join(sandbox, 'another.exe'),
-      destinationDir: join(sandbox, 'out3')
-    })
+    const firstPicks = await pickInstall(join(sandbox, 'also-missing.exe'), join(sandbox, 'out2'))
+    const secondPicks = await pickInstall(join(sandbox, 'another.exe'), join(sandbox, 'out3'))
+    const slow = harness.invoke('installer:installFromFile', firstPicks)
+    const second = harness.invoke('installer:installFromFile', secondPicks)
     const [first, blocked] = await Promise.all([slow, second])
     // Whichever lost the race reports busy; both cannot have proceeded.
     const reasons = [first.reason, blocked.reason]
@@ -351,8 +375,14 @@ describe('a few handlers that guard their input', () => {
     await expect(harness.invoke('app:getVersion')).resolves.toBe('2.7.2')
   })
 
-  it('refuses shell:openPath with nothing to open', async () => {
-    await expect(harness.invoke('shell:openPath', '')).resolves.toMatchObject({ ok: false })
+  it('has no generic openPath, and opens a log folder only by instance id (HTOO-685)', async () => {
+    // shell.openPath runs a program when it is given one.
+    expect(harness.handlers.has('shell:openPath')).toBe(false)
+    await expect(harness.invoke('instance:openLogDir', '')).resolves.toMatchObject({ ok: false })
+    await expect(harness.invoke('instance:openLogDir', 'no-such-id')).resolves.toMatchObject({
+      ok: false
+    })
+    expect(harness.electron.shell.openPath).not.toHaveBeenCalled()
   })
 })
 

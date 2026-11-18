@@ -29,6 +29,13 @@ import { checkDotnetRuntime } from './runtimeCheck.js'
 import { pipeChildLines } from './childLines.js'
 import { buildHint } from './buildHints.js'
 import { openFolder } from './openFolder.js'
+import { openInstanceLogDir } from './openLogDir.js'
+import {
+  createLaunchGrants,
+  hybrasylLaunchPaths,
+  instanceLaunchPaths,
+  launchPaths
+} from './launchGrants.js'
 import { tailFile } from './fileTail.js'
 import { listBranches, isGitRepo, diagnoseGitRepo, gitToplevel } from './gitOps.js'
 import { reprobeGit } from './gitExec.js'
@@ -88,6 +95,13 @@ import { menuStateSchema } from './schemas/menuState.js'
 import { INITIAL_MENU_STATE, MENU_COMMAND_CHANNEL, MENU_STATE_CHANNEL } from '../shared/appMenu.js'
 
 let settingsManager
+// What Epona may run (launchGrants.js, HTOO-685). Created beside settingsManager.
+let launchGrants
+
+// The error a launch returns for a path with no grant.
+function deniedMessage(denied) {
+  return `Epona has no record that you chose ${denied.path}. Choose it again with its Browse button.`
+}
 
 // Pin the app-data directory to Local BEFORE the app is ready. Electron binds
 // Chromium's default session/cache to userData at the 'ready' event; if we
@@ -474,6 +488,13 @@ app.whenReady().then(() => {
   removeStrayRoamingData()
   migrateSettingsFromRoaming(dataDir)
   settingsManager = createSettingsManager(dataDir)
+  // Starts loading grants.json now, before any window, so the one-time
+  // migration reads settings.json before the renderer can save.
+  launchGrants = createLaunchGrants({
+    dir: dataDir,
+    loadSettings: () => settingsManager.load(),
+    log: (message) => captureError({ source: 'launch-grants', message })
+  })
 
   if (process.platform === 'win32') {
     // Must equal electron-builder.yml's `appId`. The NSIS installer registers
@@ -706,9 +727,21 @@ app.whenReady().then(() => {
 
   // Settings
   ipc.handle('settings:load', () => settingsManager.load())
+  // A save can keep or remove a launch grant, never add one (HTOO-685): a
+  // launch path with no grant keeps its value from disk, or is emptied.
+  // Saves run one at a time, in order, because each one reads the file that
+  // the one before it wrote.
+  let settingsSaveChain = Promise.resolve()
   ipc.handle('settings:save', (_, settings) => {
     const parsed = settingsSchema.parse(settings)
-    return settingsManager.save(parsed)
+    const run = settingsSaveChain.then(async () => {
+      await launchGrants.ready
+      const prev = await settingsManager.load()
+      const { settings: clean } = await launchGrants.reconcile(parsed, prev)
+      return settingsManager.save(clean)
+    })
+    settingsSaveChain = run.catch(() => {})
+    return run
   })
 
   // Client versions
@@ -754,6 +787,16 @@ app.whenReady().then(() => {
       })
   })
 
+  // The path a dialog returned, recorded as the user's choice (HTOO-685): a
+  // settings save may then name it as a program or a repo, and a launch may
+  // run it. Every picker below returns through this.
+  function blessed(result) {
+    if (result.canceled) return null
+    const path = result.filePaths[0]
+    launchGrants.bless(path)
+    return path
+  }
+
   ipc.handle('dialog:openFile', async (_, title, filters, defaultPath) => {
     const result = await pickerDialog.showOpenDialog(mainWindow, {
       title: title || 'Select File',
@@ -761,7 +804,7 @@ app.whenReady().then(() => {
       defaultPath,
       properties: ['openFile']
     })
-    return result.canceled ? null : result.filePaths[0]
+    return blessed(result)
   })
   ipc.handle('dialog:openDirectory', async (_, title, defaultPath, message) => {
     const result = await pickerDialog.showOpenDialog(mainWindow, {
@@ -773,7 +816,7 @@ app.whenReady().then(() => {
       // macOS: a New Folder button, so a log folder can be made here (HTOO-587).
       properties: ['openDirectory', 'createDirectory']
     })
-    return result.canceled ? null : result.filePaths[0]
+    return blessed(result)
   })
   ipc.handle('dialog:openExe', async (_, defaultPath) => {
     const result = await pickerDialog.showOpenDialog(mainWindow, {
@@ -782,7 +825,7 @@ app.whenReady().then(() => {
       defaultPath,
       properties: ['openFile']
     })
-    return result.canceled ? null : result.filePaths[0]
+    return blessed(result)
   })
 
   // Hybrasyl client validation
@@ -934,11 +977,18 @@ app.whenReady().then(() => {
     // ignored so a compromised renderer can't redirect the spawn target —
     // we only execute paths the user persisted via dialog + save.
     const settings = await settingsManager.load()
+    // Disk is renderer-written, so each path is also checked against the
+    // grants that only main writes (HTOO-685).
+    await launchGrants.ready
     if (targetKind === 'legacy') {
       if (process.platform !== 'win32') return { success: false, error: 'Windows only' }
+      const denied = launchGrants.denied(launchPaths({ clientPath: settings.clientPath }))
+      if (denied) return { success: false, error: deniedMessage(denied) }
       return launchLegacy(settings, profile)
     }
     if (targetKind === 'hybrasyl') {
+      const denied = launchGrants.denied(hybrasylLaunchPaths(settings.targets.hybrasyl))
+      if (denied) return { success: false, error: deniedMessage(denied) }
       const result = await launchHybrasyl(settings.targets.hybrasyl, profile, settings.clientPath)
       if (result.success && result.kind === 'repo' && result.child) {
         // Singleton repo run — stop the previous one so the pane shows a single
@@ -1137,7 +1187,7 @@ app.whenReady().then(() => {
       defaultPath,
       properties: ['openFile']
     })
-    return result.canceled ? null : result.filePaths[0]
+    return blessed(result)
   })
 
   ipc.handle('installer:pickDestination', async (_, defaultPath) => {
@@ -1149,7 +1199,7 @@ app.whenReady().then(() => {
       // the card means by "select or create an application-appropriate destination".
       properties: ['openDirectory', 'createDirectory']
     })
-    return result.canceled ? null : result.filePaths[0]
+    return blessed(result)
   })
 
   // Shared by both install routes. Reports progress to the renderer and maps a
@@ -1165,6 +1215,9 @@ app.whenReady().then(() => {
         signal: controller.signal,
         onProgress: (payload) => safeSend('installer:progress', payload)
       })
+      // Main unpacked these, so the renderer may save them as clientPath.
+      launchGrants.bless(result?.destinationDir)
+      launchGrants.bless(result?.executablePath)
       return { ok: true, ...result }
     } catch (error) {
       if (isCancellation(error)) return { ok: false, reason: 'cancelled', message: 'Cancelled' }
@@ -1182,6 +1235,16 @@ app.whenReady().then(() => {
     const parsed = installRequestSchema.safeParse(payload)
     if (!parsed.success) return { ok: false, reason: 'bad-request', message: 'Invalid request' }
     const { installerPath, destinationDir } = parsed.data
+    // Both must come from the pickers above, or be granted already (HTOO-685):
+    // an unpack writes files into any folder it is given.
+    await launchGrants.ready
+    if (!launchGrants.isGranted(installerPath) || !launchGrants.isGranted(destinationDir)) {
+      return {
+        ok: false,
+        reason: 'bad-request',
+        message: 'Choose the installer and the folder with Browse'
+      }
+    }
     return runInstall(({ signal, onProgress }) =>
       installFromInstaller({ installerPath, destinationDir, signal, onProgress })
     )
@@ -1191,6 +1254,10 @@ app.whenReady().then(() => {
     const parsed = downloadRequestSchema.safeParse(payload)
     if (!parsed.success) return { ok: false, reason: 'bad-request', message: 'Invalid request' }
     const { destinationDir } = parsed.data
+    await launchGrants.ready
+    if (!launchGrants.isGranted(destinationDir)) {
+      return { ok: false, reason: 'bad-request', message: 'Choose the folder with Browse' }
+    }
     await fs.mkdir(installerCacheDir, { recursive: true }).catch(() => {})
     return runInstall(({ signal, onProgress }) =>
       downloadAndInstall({
@@ -1208,15 +1275,11 @@ app.whenReady().then(() => {
     return { ok: true }
   })
 
-  // Open a path in the OS file explorer. Used by the LogDir quick-open button.
-  // shell.openPath returns '' on success, error string on failure.
-  ipc.handle('shell:openPath', async (_, path) => {
-    if (typeof path !== 'string' || path.length === 0) {
-      return { ok: false, error: 'no path' }
-    }
-    const err = await shell.openPath(path)
-    return err ? { ok: false, error: err } : { ok: true }
-  })
+  // The log-folder button. The renderer sends an instance id, not a path:
+  // `shell.openPath` runs a program when it is given one (HTOO-685).
+  ipc.handle('instance:openLogDir', (_, instanceId) =>
+    openInstanceLogDir({ instanceId, loadSettings: () => settingsManager.load(), shell })
+  )
 
   // Git ops for the repo-mode picker — list branches in a chosen repo, and
   // an inline-validation check so the path picker can flag "not a git repo"
@@ -1299,7 +1362,13 @@ app.whenReady().then(() => {
     instanceChildren,
     wireInstanceLogs,
     tailInstanceLog,
-    launchServer
+    launchServer,
+    // Before a start, and before a reset stops anything (HTOO-685).
+    authorize: async (instance) => {
+      await launchGrants.ready
+      const denied = launchGrants.denied(instanceLaunchPaths(instance))
+      return denied ? deniedMessage(denied) : null
+    }
   })
 
   // Authoritative running-state. The renderer used to keep its own Set in React

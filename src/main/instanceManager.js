@@ -66,7 +66,10 @@ export function createInstanceManager({
   instanceChildren,
   wireInstanceLogs,
   tailInstanceLog,
-  launchServer
+  launchServer,
+  // Returns an error string when the instance's programs have no grant
+  // (launchGrants.js, HTOO-685), or null.
+  authorize = async () => null
 }) {
   // Validate the payload, re-resolve the instance from disk by id (spawn-path
   // hardening: the renderer can't supply forged paths), and attach its world
@@ -84,6 +87,8 @@ export function createInstanceManager({
     if (!instance) {
       return { error: 'World directory not selected for this instance — pick one in settings.' }
     }
+    const denied = await authorize(instance)
+    if (denied) return { error: denied }
     return { instance }
   }
 

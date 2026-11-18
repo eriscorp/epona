@@ -107,7 +107,8 @@ contextBridge.exposeInMainWorld('sparkAPI', {
     ipcRenderer.invoke('worktrees:remove', repoPath, branch, force),
   isHybrasylDataDir: (dataDir) => ipcRenderer.invoke('instance:isHybrasylDataDir', dataDir),
   inspectAssetDir: (dirPath) => ipcRenderer.invoke('assets:inspect', dirPath),
-  openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
+  // The log folder of a saved instance. Main reads the path itself (HTOO-685).
+  openInstanceLogDir: (instanceId) => ipcRenderer.invoke('instance:openLogDir', instanceId),
   saveLog: (content, defaultFileName) =>
     ipcRenderer.invoke('log:save', { content, defaultFileName }),
   onInstanceLog: (cb) => {

@@ -325,7 +325,7 @@ export default function ServerInstancePanel({
 
   async function openLogDir() {
     if (!selected?.logDir) return
-    const result = await window.sparkAPI.openPath(selected.logDir)
+    const result = await window.sparkAPI.openInstanceLogDir(selected.id)
     if (!result.ok) {
       setSnack({ severity: 'error', message: `Could not open log dir: ${result.error}` })
     }
