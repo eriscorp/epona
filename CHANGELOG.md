@@ -43,6 +43,7 @@ the rules above.
 
 ### Security
 
+- **Epona runs only programs that you chose.** Epona keeps a record of each client, server and repository that you pick with a Browse button. A settings change that names a program you did not pick is not saved, and a launch refuses a program that is not in the record. The paths in your settings when you first start this version are kept. The Client Executable field in Settings is now set with Browse only. The log-folder button opens only a folder.
 - **The release build checks the signing tool before it uses it.** The Windows build downloads SSL.com's CodeSignTool. It now compares the download with a known SHA-256 value, and stops if they differ. Each build step can only read the repository; only the step that publishes the release can write to it.
 
 ## [2.10.0] - 2026-11-02
