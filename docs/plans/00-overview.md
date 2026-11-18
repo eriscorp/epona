@@ -67,13 +67,14 @@ Two of those four taught the build something the plan could not have known, and 
 
 ### Unreleased
 
-**The November round of 2026-11-17** — eriscorp/epona#70, which closes Epona's rows on HTOO-694 (Electron 45.3.4, vite 8, electron-vite 6, Vitest 5, jsdom 31), HTOO-692 and HTOO-667, and the code of HTOO-686 and HTOO-661: pinned release actions, a read-only token outside the release job and a checked CodeSignTool archive; a portable check that trusts only Epona's own stub; and a child environment without the AppImage's mount. The Mac and Linux checks for it are in `release-checks-mac-linux.md`, "For this release".
+**The November round of 2026-11-17** — eriscorp/epona#70, which closes Epona's rows on HTOO-694 (Electron 45.3.4, vite 8, electron-vite 6, Vitest 5, jsdom 31), HTOO-692 and HTOO-667, and the code of HTOO-686 and HTOO-661: pinned release actions, a read-only token outside the release job and a checked CodeSignTool archive; a portable check that trusts only Epona's own stub; and a child environment without the AppImage's mount. Then eriscorp/epona#71, HTOO-661's second fault: on Linux each spawned child gets `/dev/null` in place of Epona's open files, so a build server that outlives Epona no longer keeps the AppImage mounted. The Mac and Linux checks for both are in `release-checks-mac-linux.md`, "For this release".
 
 What the round taught:
 
 - **A new default can empty a test without failing it, or fail it for the wrong reason.** Vitest 5 clears mocks before each test, so the index.js suites, which boot main once, lost the calls they read. jsdom 31 writes `#000` as `rgb(0, 0, 0)`, so a plain-theme check `not.toMatch(/#000/)` passed with nothing to find. The config keeps `clearMocks: false`, and the check rejects both forms.
 - **A source scan finds what a grep misses.** `childEnv.test.js` fails on any spawn without `childEnv()`. On its first run it found the two dotnet probes in `runtimeCheck.js`, which the grep for HTOO-661 had not listed.
 - **A stale lockfile entry blocks a major, and npm does not name it.** The hoisted esbuild 0.25 from vite 6 failed vite 8's optional peer range, and the ERESOLVE named only vite. Removing the lockfile entries for vite, esbuild and the vite plugins let npm resolve them again.
+- **A test can be unable to make the fault it tests.** A Node child sets close-on-exec on each descriptor it inherits, so a Node process could not hold the leak that #71 fixes, and the first Linux test for it failed for that reason only. `sh` holds the leaked file in the test now. The probe ran on WSL before the Mint box saw it.
 
 ### 2.9.0 — 2026-10-12
 

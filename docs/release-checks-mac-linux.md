@@ -264,7 +264,7 @@ These checks are for any OS, or for Windows, and are listed here so that they ar
 
 Rewrite this section for each release: what applies, and what is already done. The owed list for this release is the 2026-11-17 comment on HTOO-242; tick it there as each check passes.
 
-The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45.3.4 (Chromium 156, Node 24.22.3), electron-vite 6 on vite 8, Vitest 5 and jsdom 31. No feature changed, so the whole page applies, and the parts below matter most. The 2.10.0 checks for HTOO-627 (N1 to N5, and the box scripts) are done, and are not owed again.
+The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45.3.4 (Chromium 156, Node 24.22.3), electron-vite 6 on vite 8, Vitest 5 and jsdom 31. eriscorp/epona#71 also gives each child `/dev/null` in place of Epona's open files on Linux (HTOO-661). No feature changed, so the whole page applies, and the parts below matter most. The 2.10.0 checks for HTOO-627 (N1 to N5, and the box scripts) are done, and are not owed again.
 
 - **"Before you start", step 4:** `npm install-scripts ls` must still print `No packages with unreviewed install scripts.` vite 8 builds with rolldown, which installs a native binding with no install script. esbuild is gone, and so is its approval in `package.json`. On macOS, `fsevents` is still approved.
 - **A1:** the suite is on Vitest 5 and jsdom 31. On Windows it is 2117 passed and 17 skipped in 122 files. Report the count; some tests skip by OS, so the count off Windows can differ.
