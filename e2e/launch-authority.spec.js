@@ -49,4 +49,24 @@ test.describe('Launch authority', () => {
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/no record that you chose/)
   })
+
+  test('a path that the dialog returned is saved', async () => {
+    const picked = join('C:', 'epona-e2e', 'picked', 'Brigid.exe')
+    ;({ electronApp, localAppData } = await launchEpona())
+    const page = await getMainWindow(electronApp)
+    // The user's pick, as the OS dialog would return it.
+    await electronApp.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+    }, picked)
+    const saved = await page.evaluate(async () => {
+      const path = await window.sparkAPI.pickFile('Select Hybrasyl client binary')
+      const s = await window.sparkAPI.loadSettings()
+      s.targets.hybrasyl.binaryPath = path
+      await window.sparkAPI.saveSettings(s)
+      return (await window.sparkAPI.loadSettings()).targets.hybrasyl.binaryPath
+    })
+    expect(saved).toBe(picked)
+    const dir = join(localAppData, 'Erisco', 'Epona')
+    expect(JSON.parse(readFileSync(join(dir, 'grants.json'), 'utf-8')).paths).toContain(picked)
+  })
 })

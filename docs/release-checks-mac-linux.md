@@ -67,11 +67,11 @@ ls -d "$S"     # a folder that did not exist before must not exist now
 
 If `sha256sum` is missing, use `shasum -a 256`. Two empty lists also compare as `UNCHANGED`, so an `EMPTY` line means that A3 checked nothing: fix the hash command, or say that the settings folder did not exist.
 
-Expected for A2 (31 tests in 17 files):
+Expected for A2 (32 tests in 17 files):
 
-- **macOS:** 30 passed and 1 skipped. The five tests in `app-menu.spec.js` run on macOS only; they cover the menu, Go, Check for Updates and About. The skip is the title-bar close in `quit.spec.js`, because a window close does not quit on macOS. `title-bar.spec.js` expects a 78 px left padding on macOS, and 24 px at the right (the house title bar, HTOO-572).
-- **Linux:** 26 passed and 5 skipped. The skips are `app-menu.spec.js`.
-- On Windows the result is also 26 passed and 5 skipped.
+- **macOS:** 31 passed and 1 skipped. The five tests in `app-menu.spec.js` run on macOS only; they cover the menu, Go, Check for Updates and About. The skip is the title-bar close in `quit.spec.js`, because a window close does not quit on macOS. `title-bar.spec.js` expects a 78 px left padding on macOS, and 24 px at the right (the house title bar, HTOO-572).
+- **Linux:** 27 passed and 5 skipped. The skips are `app-menu.spec.js`.
+- On Windows the result is also 27 passed and 5 skipped.
 
 A different total means that a spec was added or was not collected. Say so in the report.
 
@@ -268,7 +268,7 @@ The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45
 
 - **"Before you start", step 4:** `npm install-scripts ls` must still print `No packages with unreviewed install scripts.` vite 8 builds with rolldown, which installs a native binding with no install script. esbuild is gone, and so is its approval in `package.json`. On macOS, `fsevents` is still approved.
 - **A1:** the suite is on Vitest 5 and jsdom 31. On Windows it is 2154 passed and 19 skipped in 126 files. Report the count; some tests skip by OS, so the count off Windows can differ.
-- **A2 and A3:** e2e on Electron 45. `launch-authority.spec.js` (HTOO-685) is new, so A2 has one test more (31 tests in 17 files).
+- **A2 and A3:** e2e on Electron 45. `launch-authority.spec.js` (HTOO-685) is new, so A2 has two tests more (32 tests in 17 files).
 - **A4 and A5, then B1:** the first packaged build on Electron 45 on each OS. An Electron major is the change that a packaged launch exists to check: the fuses, the asar check, and the window.
 - **`npm run dev` (both OS):** start it, change a line of text in a renderer file, and save. **Expected:** the window starts, and the change shows without a restart. This is the electron-vite 6 and vite 8 dev server, which no check above starts.
 - **B4, B9 and B10 (both OS):** each starts a server, the client, git or dotnet. Every child now gets its environment from `childEnv()`, and on Linux `/dev/null` in place of each of Epona's open files (`childStdio()`, HTOO-661). Off the AppImage the environment does not change, so these must pass as before.
