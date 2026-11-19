@@ -31,6 +31,8 @@ the rules above.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-11-19
+
 ### Changed
 
 - **Epona runs on Electron 45.3.4.** It has Chromium 156 and Node 24.22.3.
