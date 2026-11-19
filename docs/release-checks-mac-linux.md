@@ -279,6 +279,23 @@ The release moves Epona to new majors (eriscorp/epona#70, HTOO-694): Electron 45
 - **Part C, after the tag:** C1 with M7, and C2 with L4, **L5** (HTOO-661, the AppImage's children: their environment, and the mount after Epona quits) and **L8** (HTOO-663, the window icon). L5 and L8 are new.
 - **Windows:** the items in "Owed elsewhere". The Signing item now includes the "Fetch and verify CodeSignTool" step (HTOO-686). The first tag run is also the first run of the pinned actions and of the read-only permissions: if a step fails with a 403 or "Resource not accessible by integration", report it on HTOO-686.
 
+Done on macOS, by hand (2026-11-19): Sabrael at the machine, macOS 27.0.1 (Apple Silicon), at `fc99ae6`. The results are on the cards that each check names.
+
+- **Passed:** B1, B2, B3, B4 steps 1 to 8, B9 steps 1 to 3, B10 steps 2, 4 and 5 (the Finder tooltip), the `npm run dev` hot reload, and Programs you chose steps 1 to 4.
+- **Carried from Linux:** B9 step 4 and B10 step 3 passed on Linux Mint 22.3 on the packaged build at `859fb30`. They are the same code path on macOS, so they are not run again (Sabrael, 2026-11-19).
+- **Not run again:** B6 already passed, and it does not recur (Sabrael, 2026-11-19).
+- **Not available:** B5 needs a Mac without the Command Line Tools. It is not owed.
+- **Still owed:** C1 with M7, after the tag.
+
+Done, not owed again on macOS (Sabrael, 2026-11-19). A by-hand check that passed on a platform does not recur until its code changes:
+
+- **B1.** Run it again when Electron or the packaging changes.
+- **B2.** It is a theme and chrome check. Run it again only when a theme or the title bar changes. `e2e/theme-switch.spec.js` and `chromeContrast.test.jsx` cover the themes after that.
+- **B3.** Run it again only when the application menu or its keys change.
+- **B4, B9 and B10.** Run a step again only when the code that it starts or shows changes.
+- **B6.** Run it again only when the Dark Ages installer changes.
+- **The `npm run dev` hot reload and Programs you chose** are for this release only.
+
 ### Checks for this release only
 
 - **R1. A portable exe that is not Epona's (HTOO-667, Windows).** Done on 2026-11-17 on a `--dir` build of `7e1ff0e`: with Balor's three `PORTABLE_EXECUTABLE_*` values set, Epona ran for 40 s and its session log had no portable line. With `PORTABLE_EXECUTABLE_APP_FILENAME=epona`, the same build logged `unexpected portable layout`, so the log does show a sweep. Not owed on macOS or Linux: the variables come only from the Windows portable stub.
