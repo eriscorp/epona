@@ -250,7 +250,7 @@ Find the pids with `pgrep -f Hybrasyl` and `pgrep -f Brigid`. **Expected:** no `
 
 Then the children's open files (HTOO-661, fault 2). With the server running, run `ls -l /proc/<server pid>/fd | grep '\.mount_'`. **Expected:** no output. Quit Epona while `pgrep VBCSCompiler` still finds the build server, and run `mount | grep '\.mount_'`. **Expected:** no output within a few seconds: the AppImage's mount goes away, and the build server keeps running. A mount that stays is a failure; `fuser -m <mount>` names the process that holds it, and `dotnet build-server shutdown` releases it.
 
-Then L8, the window icon (HTOO-663). Remove the `.deb` first (`sudo apt remove epona`), so no installed `epona.desktop` gives the desktop its icon, and start the AppImage. **Expected:** the taskbar entry and the Alt+Tab switcher show the square tile, the same artwork as the installed icon, not the star. Check this under X11 and, where the box has one, under a Wayland session; say which ran. Install the `.deb` again afterwards.
+Then L8, the window icon (HTOO-663). Remove the `.deb` first (`sudo apt remove epona`), so no installed `epona.desktop` gives the desktop its icon, and start the AppImage. **Expected:** the taskbar entry and the Alt+Tab switcher show the square tile, the same artwork as the installed icon, not the star. Check this under X11. Wayland is not supported, so no Wayland run is owed (Sabrael, 2026-11-19). Install the `.deb` again afterwards.
 
 ## Owed elsewhere — not on this page
 
