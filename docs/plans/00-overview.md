@@ -67,6 +67,10 @@ Two of those four taught the build something the plan could not have known, and 
 
 ### Unreleased
 
+Nothing yet.
+
+### 2.11.0 — 2026-11-19
+
 **The November round of 2026-11-17** — eriscorp/epona#70, which closes Epona's rows on HTOO-694 (Electron 45.3.4, vite 8, electron-vite 6, Vitest 5, jsdom 31), HTOO-692 and HTOO-667, and the code of HTOO-686 and HTOO-661: pinned release actions, a read-only token outside the release job and a checked CodeSignTool archive; a portable check that trusts only Epona's own stub; and a child environment without the AppImage's mount. Then eriscorp/epona#71, HTOO-661's second fault: on Linux each spawned child gets `/dev/null` in place of Epona's open files, so a build server that outlives Epona no longer keeps the AppImage mounted. Then eriscorp/epona#72, HTOO-685: main keeps the programs and repositories that Epona may run in `grants.json`, a settings save cannot add one, each launch checks again, and the renderer has no generic `openPath` (`docs/authority-model.md`). The Mac and Linux checks for all three are in `release-checks-mac-linux.md`, "For this release".
 
 What the round taught:
